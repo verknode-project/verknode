@@ -1,4 +1,6 @@
-# verknode
+<p align="center">
+  <img src="verknode_logo.svg" alt="verknode" width="320">
+</p>
 
 JupyterLab environment with a node-based visual programming
 extension for Python (`extension/`, package `jupyterlab_verknode`). Data flows
