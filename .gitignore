@@ -1,5 +1,5 @@
 credentials_norepo.env
-# this machine's deployment (see DEPLOYMENT.md)
+# this machine's deployment (see docs/deployment.md)
 .env
 docker-compose.override.yml
 .ipynb_checkpoints/

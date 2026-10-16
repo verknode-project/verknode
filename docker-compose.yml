@@ -3,7 +3,7 @@
 # This file is the same everywhere. What differs between environments (port,
 # host name, reverse proxy, networks) goes in .env and / or
 # docker-compose.override.yml - both gitignored; docker compose reads them
-# automatically. See DEPLOYMENT.md and the examples in deploy/.
+# automatically. See docs/deployment.md and the examples in deploy/.
 services:
     verknode:
         image: ${VERKNODE_IMAGE:-verknode:latest}
