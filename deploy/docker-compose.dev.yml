@@ -1,0 +1,8 @@
+# Local development: published on all interfaces, restarted only by hand.
+#
+#   cp deploy/docker-compose.dev.yml docker-compose.override.yml
+services:
+    verknode:
+        restart: "no"
+        ports: !override
+            - "0.0.0.0:${VERKNODE_PORT:-8888}:8888"

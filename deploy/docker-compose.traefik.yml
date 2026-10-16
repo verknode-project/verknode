@@ -1,0 +1,28 @@
+# Behind an existing Traefik (v2/v3) on the same Docker host, with HTTPS.
+#
+#   cp deploy/docker-compose.traefik.yml docker-compose.override.yml
+#   cp .env.example .env      # set VERKNODE_HOST and the TRAEFIK_* values
+#   make up
+#
+# The service is then only reachable through Traefik (no published port).
+# Plain HTTP entrypoint instead: set TRAEFIK_ENTRYPOINT=web and delete the two
+# tls lines.
+services:
+    verknode:
+        ports: !reset []
+        labels:
+            - traefik.enable=true
+            - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
+            - traefik.http.routers.verknode.rule=Host(`${VERKNODE_HOST:?set VERKNODE_HOST in .env}`)
+            - traefik.http.routers.verknode.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+            - traefik.http.routers.verknode.tls=true
+            - traefik.http.routers.verknode.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+            - traefik.http.routers.verknode.service=verknode
+            - traefik.http.services.verknode.loadbalancer.server.port=8888
+        networks:
+            - proxy
+
+networks:
+    proxy:
+        name: ${TRAEFIK_NETWORK:-traefik}
+        external: true

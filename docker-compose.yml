@@ -1,0 +1,23 @@
+# JupyterLab with the verknode extension, published on a local port.
+#
+# This file is the same everywhere. What differs between environments (port,
+# host name, reverse proxy, networks) goes in .env and / or
+# docker-compose.override.yml - both gitignored; docker compose reads them
+# automatically. See DEPLOYMENT.md and the examples in deploy/.
+services:
+    verknode:
+        image: ${VERKNODE_IMAGE:-verknode:latest}
+        build:
+            context: .
+            dockerfile: Dockerfile
+        restart: always
+        environment:
+            - SERVICENAME=verknode
+        ports:
+            - "${VERKNODE_BIND:-127.0.0.1}:${VERKNODE_PORT:-8888}:8888"
+        volumes:
+            - ./notebooks:/home/jovyan/notebooks
+            # JupyterLab extension source, dev-installed at container start
+            - ./extension:/home/jovyan/extension
+        env_file:
+            - credentials_norepo.env

@@ -1,0 +1,476 @@
+"""REST API for the workflow editor: /verknode/api/..."""
+from __future__ import annotations
+
+import asyncio
+import base64
+import json
+import os
+import posixpath
+import time
+import uuid
+
+import tornado
+from jupyter_server.base.handlers import APIHandler
+from jupyter_server.utils import ensure_async, url_path_join
+
+from . import nodes  # noqa: F401 - registers the built-in nodes
+from .engine.node import NODE_REGISTRY
+from .engine.persistence import load_workflow, save_workflow
+from .commands import Recorder, open_hint, to_python
+from .engine.workflow import Workflow, WorkflowError
+
+
+class SessionManager:
+    """Open workflows, shared per file path.
+
+    Every editor showing a file and every Python client attached to it
+    (``verknode.open(path)``) use the same session, so edits made in one place
+    appear in the others. Sessions are reference counted.
+    """
+
+    def __init__(self, contents_manager, root_dir: str):
+        self.cm = contents_manager
+        self.root_dir = root_dir
+        self.sessions: dict[str, Workflow] = {}
+        self.by_path: dict[str, str] = {}
+        self.refs: dict[str, int] = {}
+        self.disk_mtime: dict[str, object] = {}
+        self.last_access: dict[str, float] = {}
+
+    IDLE_TIMEOUT = 30 * 60  # unused, unmodified sessions are dropped after this
+
+    def get(self, sid: str) -> Workflow:
+        if sid not in self.sessions:
+            raise tornado.web.HTTPError(404, f"Unknown workflow session: {sid}")
+        self.last_access[sid] = time.time()
+        return self.sessions[sid]
+
+    def _gc(self):
+        now = time.time()
+        for sid, wf in list(self.sessions.items()):
+            if not wf.dirty and not wf.executing and now - self.last_access.get(sid, now) > self.IDLE_TIMEOUT:
+                self.refs[sid] = 1
+                self.close(sid)
+
+    async def _mtime(self, path: str):
+        try:
+            model = await ensure_async(self.cm.get(path, content=False, type="file"))
+            return model.get("last_modified")
+        except tornado.web.HTTPError:
+            return None
+
+    @staticmethod
+    def _norm(path: str) -> str:
+        return posixpath.normpath(path.lstrip("/"))
+
+    def _abs(self, path: str) -> str:
+        return os.path.join(self.root_dir, path.lstrip("/"))
+
+    def _base_dir(self, path: str) -> str:
+        return os.path.join(self.root_dir, posixpath.dirname(path.lstrip("/")))
+
+    def _set_path(self, sid: str, wf: Workflow, path: str):
+        path = self._norm(path)
+        for p, other in list(self.by_path.items()):
+            if other == sid:
+                del self.by_path[p]
+        self.by_path[path] = sid
+        wf.base_dir = self._base_dir(path)
+        wf.path = self._abs(path)
+        wf.rel_path = path
+
+    async def _read(self, path: str, create: bool = False) -> Workflow:
+        try:
+            model = await ensure_async(self.cm.get(path, content=True, type="file", format="base64"))
+        except tornado.web.HTTPError as e:
+            if e.status_code == 404 and create:
+                wf = Workflow()
+                wf.base_dir = self._base_dir(path)
+                return wf
+            raise
+        data = base64.b64decode(model.get("content") or "")
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, load_workflow, data, self._base_dir(path))
+        except ValueError as e:
+            raise tornado.web.HTTPError(400, str(e)) from None
+
+    async def open(self, path: str, create: bool = False) -> str:
+        self._gc()
+        key = self._norm(path)
+        sid = self.by_path.get(key)
+        if sid is not None:
+            wf = self.sessions[sid]
+            # a session left behind (e.g. a closed browser tab) must not hide
+            # changes made to the file since: reload unless it has unsaved edits
+            if not wf.dirty and not wf.executing and await self._mtime(key) != self.disk_mtime.get(sid):
+                if await self._mtime(key) is None and not create:
+                    raise tornado.web.HTTPError(404, f"No such file: {key}")
+                await self.reload(sid, key, create=True)
+        if sid is None:
+            sid = uuid.uuid4().hex
+            wf = await self._read(key, create)
+            self.sessions[sid] = wf
+            self._set_path(sid, wf, key)
+            self.disk_mtime[sid] = await self._mtime(key)
+            wf._log("PY", f"# {open_hint(key)}")
+        self.refs[sid] = self.refs.get(sid, 0) + 1
+        self.last_access[sid] = time.time()
+        return sid
+
+    async def reload(self, sid: str, path: str, create: bool = False):
+        old = self.get(sid)
+        old.cancel()
+        wf = await self._read(path, create)
+        self.disk_mtime[sid] = await self._mtime(path)
+        wf.version = old.version + 1  # keep watchers moving forward
+        self.sessions[sid] = wf
+        self._set_path(sid, wf, path)
+
+    async def save(self, sid: str, path: str):
+        wf = self.get(sid)
+        if wf.executing:
+            raise tornado.web.HTTPError(409, "Cannot save while the workflow is executing")
+        loop = asyncio.get_running_loop()
+        data = await loop.run_in_executor(None, save_workflow, wf)
+        await ensure_async(self.cm.save(
+            {"type": "file", "format": "base64", "content": base64.b64encode(data).decode("ascii")}, path))
+        self._set_path(sid, wf, path)
+        self.disk_mtime[sid] = await self._mtime(path)
+        wf.dirty = False
+        wf.version += 1
+
+    def close(self, sid: str):
+        self.refs[sid] = self.refs.get(sid, 1) - 1
+        if self.refs[sid] > 0:
+            return
+        self.refs.pop(sid, None)
+        self.disk_mtime.pop(sid, None)
+        self.last_access.pop(sid, None)
+        wf = self.sessions.pop(sid, None)
+        for p, other in list(self.by_path.items()):
+            if other == sid:
+                del self.by_path[p]
+        if wf is not None:
+            wf.cancel()
+
+
+class BaseHandler(APIHandler):
+    @property
+    def manager(self) -> SessionManager:
+        return self.settings["verknode_manager"]
+
+    def body(self) -> dict:
+        return json.loads(self.request.body or b"{}")
+
+    def reply(self, obj):
+        self.set_header("Content-Type", "application/json")
+        self.finish(json.dumps(obj, default=str))
+
+    def view(self, sid: str, wf: Workflow):
+        since = int(self.get_argument("log_since", "0"))
+        self.reply(dict(wf.view(log_since=since), session=sid))
+
+
+class NodesHandler(BaseHandler):
+    @tornado.web.authenticated
+    def get(self):
+        self.reply([cls.describe() for cls in NODE_REGISTRY.values()])
+
+
+class SessionsHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def post(self):
+        body = self.body()
+        sid = await self.manager.open(body["path"], create=bool(body.get("create")))
+        self.view(sid, self.manager.get(sid))
+
+
+class SessionHandler(BaseHandler):
+    @tornado.web.authenticated
+    def get(self, sid):
+        self.view(sid, self.manager.get(sid))
+
+    @tornado.web.authenticated
+    def delete(self, sid):
+        self.manager.close(sid)
+        self.set_status(204)
+        self.finish()
+
+
+class SaveHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def post(self, sid):
+        await self.manager.save(sid, self.body()["path"])
+        self.view(sid, self.manager.get(sid))
+
+
+class ReloadHandler(BaseHandler):
+    @tornado.web.authenticated
+    async def post(self, sid):
+        await self.manager.reload(sid, self.body()["path"])
+        self.view(sid, self.manager.get(sid))
+
+
+OPS = {
+    "add_node": lambda wf, a: wf.add_node(a["factory"], a.get("x", 0), a.get("y", 0), a.get("parent")),
+    "remove_nodes": lambda wf, a: wf.remove_nodes(a["ids"]),
+    "connect": lambda wf, a: wf.connect(a["sourceID"], a["sourcePort"], a["destID"], a["destPort"]),
+    "disconnect": lambda wf, a: wf.disconnect(a["sourceID"], a["sourcePort"], a["destID"], a["destPort"]),
+    "move": lambda wf, a: wf.move(a["positions"]),
+    "rewire": lambda wf, a: wf.rewire(a.get("remove", []), a.get("add", []), a.get("positions"), a.get("delete", [])),
+    "set_annotation": lambda wf, a: wf.set_annotation(a["id"], a["text"]),
+    "set_widget_layouts": lambda wf, a: wf.set_widget_layouts(a["layouts"]),
+    "add_group": lambda wf, a: wf.add_group(a["nodes"], a.get("text", ""), a.get("color")),
+    "update_group": lambda wf, a: wf.update_group(a["id"], a.get("text"), a.get("color"), a.get("nodes")),
+    "remove_group": lambda wf, a: wf.remove_group(a["id"]),
+    "set_settings": lambda wf, a: wf.set_settings(a["id"], a.get("settings", {}), a.get("variables", {})),
+    "set_workflow_variables": lambda wf, a: wf.set_workflow_variables(a["variables"]),
+    "reset": lambda wf, a: wf.reset(a.get("ids")),
+    "execute": lambda wf, a: wf.execute(a.get("ids")),
+    "cancel": lambda wf, a: wf.cancel(),
+    "undo": lambda wf, a: wf.undo(),
+    "redo": lambda wf, a: wf.redo(),
+    "clear": lambda wf, a: wf.clear(),
+    "copy": lambda wf, a: wf.copy(a["ids"]),
+    "paste": lambda wf, a: wf.paste(a["fragment"], a.get("dx", 40), a.get("dy", 40), a.get("parent")),
+    "collapse": lambda wf, a: wf.collapse(a["ids"], a.get("name")),
+    "expand": lambda wf, a: wf.expand(a["id"]),
+    "rename_metanode": lambda wf, a: wf.rename_metanode(a["id"], a["name"]),
+    "add_metanode_port": lambda wf, a: wf.add_metanode_port(a["id"], a["side"], a.get("type", "table")),
+    "remove_metanode_port": lambda wf, a: wf.remove_metanode_port(a["id"], a["side"], a["index"]),
+    "set_node_paths": lambda wf, a: wf.set_node_paths(a["paths"], a.get("autoReload")),
+    "reload_nodes": lambda wf, a: wf.reload_nodes(),
+    "create_node_template": lambda wf, a: _create_node_template(wf, a.get("folder") or "nodes"),
+}
+
+
+def _create_node_template(wf: Workflow, folder: str) -> dict:
+    """Create `folder` (relative to the workflow) with an example node file and use it."""
+    from .engine.custom import create_template
+
+    if os.path.isabs(folder) or ".." in folder.split("/"):
+        raise WorkflowError("Use a folder inside the workflow's directory, e.g. 'nodes'")
+    path = create_template(os.path.join(wf.base_dir, folder))
+    if folder not in wf.node_paths:
+        wf.set_node_paths(wf.node_paths + [folder])
+    else:
+        wf.reload_nodes(reason="example created")
+    return {"file": path, "report": wf.custom.report()}
+# how results are returned to the client
+RESULTS = {"add_node": "id", "add_group": "id", "collapse": "id", "add_metanode_port": "index", "paste": "ids", "copy": "fragment", "reload_nodes": "report",
+           "set_node_paths": "report", "create_node_template": "template"}
+
+
+class OpsHandler(BaseHandler):
+    @tornado.web.authenticated
+    def post(self, sid):
+        wf = self.manager.get(sid)
+        args = self.body()
+        op = args.get("op")
+        if op == "set_path":
+            self.manager._set_path(sid, wf, args["path"])
+            return self.view(sid, wf)
+        if op not in OPS:
+            raise tornado.web.HTTPError(400, f"Unknown operation: {op}")
+        recorder = Recorder(wf, op, args)
+        try:
+            result = OPS[op](wf, args)
+        except (WorkflowError, KeyError, ValueError, TypeError) as e:
+            raise tornado.web.HTTPError(400, str(e)) from None
+        # show the equivalent verknode command in the console (learning aid)
+        try:
+            for line in recorder.lines({"id": result} if op in ("add_node", "add_group", "collapse") else result):
+                wf._log("PY", line)
+        except Exception as e:  # noqa: BLE001 - never fail an edit because of the transcript
+            self.log.warning("verknode: could not describe %s: %s", op, e)
+        out = dict(wf.view(log_since=int(args.get("log_since", 0))), session=sid)
+        if op in RESULTS:
+            out["result"] = {RESULTS[op]: result}
+        self.reply(out)
+
+
+class SessionNodesHandler(BaseHandler):
+    """Node repository of a workflow: built-in nodes plus its custom nodes."""
+
+    @tornado.web.authenticated
+    def get(self, sid):
+        self.reply(self.manager.get(sid).node_types())
+
+
+class WaitHandler(BaseHandler):
+    """Long poll: returns the view as soon as the workflow version differs from ?version."""
+
+    @tornado.web.authenticated
+    async def get(self, sid):
+        version = int(self.get_argument("version", "-1"))
+        timeout = min(float(self.get_argument("timeout", "20")), 60.0)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        wf = self.manager.get(sid)
+        checked = 0.0
+        editor = self.get_argument("editor", None) is not None  # an open workflow editor
+        while wf.version == version and loop.time() < deadline:
+            if editor:
+                wf.editor_seen = time.time()
+            if loop.time() - checked > 1.0:
+                # files nodes read (e.g. a notebook saved in JupyterLab): ports, resets
+                checked = loop.time()
+                wf.check_files()
+                if wf.version != version:
+                    break
+            await asyncio.sleep(0.15)
+            wf = self.manager.get(sid)
+        self.view(sid, wf)
+
+
+class FrontendReplyHandler(BaseHandler):
+    """An editor claims / answers a request of the workflow (Workflow.frontend_request)."""
+
+    @tornado.web.authenticated
+    def post(self, sid, rid):
+        a = self.body()
+        self.reply({"ok": self.manager.get(sid).frontend_reply(rid, a["action"], a.get("data"))})
+
+
+class PythonHandler(BaseHandler):
+    @tornado.web.authenticated
+    def get(self, sid):
+        wf = self.manager.get(sid)
+        self.reply({"script": to_python(wf, getattr(wf, "rel_path", None)),
+                    "hint": open_hint(getattr(wf, "rel_path", None) or "workflow.vkf")})
+
+
+class TableHandler(BaseHandler):
+    """Full output table as parquet (used by the Python client: node.table())."""
+
+    @tornado.web.authenticated
+    def get(self, sid, nid, port):
+        import io
+
+        import polars as pl
+
+        wf = self.manager.get(sid)
+        try:
+            nc = wf.node(int(nid))
+        except WorkflowError as e:
+            raise tornado.web.HTTPError(404, str(e)) from None
+        obj = nc.outputs[int(port)] if nc.outputs and int(port) < len(nc.outputs) else None
+        if not isinstance(obj, pl.DataFrame):
+            raise tornado.web.HTTPError(400, f"Port {port} of node {nid} has no table (execute the node first)")
+        buf = io.BytesIO()
+        obj.write_parquet(buf)
+        self.set_header("Content-Type", "application/vnd.apache.parquet")
+        self.finish(buf.getvalue())
+
+
+class DialogHandler(BaseHandler):
+    @tornado.web.authenticated
+    def get(self, sid, nid):
+        try:
+            self.reply(self.manager.get(sid).dialog(int(nid)))
+        except WorkflowError as e:
+            raise tornado.web.HTTPError(400, str(e)) from None
+
+
+class ViewHandler(BaseHandler):
+    @tornado.web.authenticated
+    def get(self, sid, nid):
+        try:
+            self.reply(self.manager.get(sid).node_view(int(nid)))
+        except WorkflowError as e:
+            raise tornado.web.HTTPError(400, str(e)) from None
+
+
+class PortHandler(BaseHandler):
+    @tornado.web.authenticated
+    def get(self, sid, nid, port):
+        offset = int(self.get_argument("offset", "0"))
+        limit = min(int(self.get_argument("limit", "100")), 5000)
+        structures = [c for c in self.get_argument("structures", "").split("\t") if c]
+        try:
+            self.reply(self.manager.get(sid).port_data(int(nid), int(port), offset, limit, structures))
+        except WorkflowError as e:
+            raise tornado.web.HTTPError(400, str(e)) from None
+
+
+KETCHER_DIR = os.environ.get("VERKNODE_KETCHER_DIR", "/opt/ketcher")
+
+
+class DialogActionHandler(BaseHandler):
+    """A node's dialog action (e.g. create its notebook) with the unsaved dialog settings."""
+
+    @tornado.web.authenticated
+    def post(self, sid, nid):
+        a = self.body()
+        try:
+            result = self.manager.get(sid).dialog_action(int(nid), a["name"], a.get("settings"), a.get("args"))
+        except (WorkflowError, ValueError, OSError) as e:
+            raise tornado.web.HTTPError(400, str(e)) from None
+        self.reply(result)
+
+
+class DialogDataHandler(BaseHandler):
+    """Node-specific dialog data for unsaved dialog settings (e.g. another input column)."""
+
+    @tornado.web.authenticated
+    def post(self, sid, nid):
+        self.reply(self.manager.get(sid).dialog_extra(int(nid), self.body().get("settings")))
+
+
+class ChemStructureHandler(BaseHandler):
+    """Structure of SMILES / MolBlock text for the Molecule Sketcher (RDKit)."""
+
+    @tornado.web.authenticated
+    def post(self):
+        from .chem import structure
+
+        a = self.body()
+        self.reply(structure(a.get("text"), bool(a.get("clean")), int(a.get("width", 200)), int(a.get("height", 140))))
+
+
+class KetcherFileHandler(tornado.web.StaticFileHandler):
+    """The Ketcher app: public static files like JupyterLab's own assets (no user data), served
+    from the same origin so the sketcher dialog can use the frame's window.ketcher API."""
+
+    def set_extra_headers(self, path):
+        self.set_header("Cache-Control", "public, max-age=86400" if "/static/" in f"/{path}" else "no-cache")
+
+
+class KetcherStatusHandler(BaseHandler):
+    @tornado.web.authenticated
+    def get(self):
+        self.reply({"available": os.path.isfile(os.path.join(KETCHER_DIR, "index.html"))})
+
+
+def setup_handlers(server_app):
+    web_app = server_app.web_app
+    cm = web_app.settings["contents_manager"]
+    web_app.settings["verknode_manager"] = SessionManager(cm, os.path.abspath(cm.root_dir))
+    base = url_path_join(web_app.settings["base_url"], "verknode", "api")
+    sid = r"(?P<sid>[0-9a-f]+)"
+    handlers = [
+        (url_path_join(base, "nodes"), NodesHandler),
+        (url_path_join(base, "sessions"), SessionsHandler),
+        (url_path_join(base, "sessions", sid), SessionHandler),
+        (url_path_join(base, "sessions", sid, "save"), SaveHandler),
+        (url_path_join(base, "sessions", sid, "reload"), ReloadHandler),
+        (url_path_join(base, "sessions", sid, "ops"), OpsHandler),
+        (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "dialog"), DialogHandler),
+        (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "ports", r"(?P<port>\d+)"), PortHandler),
+        (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "view"), ViewHandler),
+        (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "ports", r"(?P<port>\d+)", "table"),
+         TableHandler),
+        (url_path_join(base, "sessions", sid, "wait"), WaitHandler),
+        (url_path_join(base, "sessions", sid, "frontend", r"(?P<rid>[0-9a-f]+)"), FrontendReplyHandler),
+        (url_path_join(base, "sessions", sid, "nodes"), SessionNodesHandler),
+        (url_path_join(base, "sessions", sid, "python"), PythonHandler),
+        (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "dialog_data"), DialogDataHandler),
+        (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "action"), DialogActionHandler),
+        (url_path_join(base, "chem", "structure"), ChemStructureHandler),
+        (url_path_join(base, "chem", "ketcher"), KetcherStatusHandler),
+        # Ketcher editor app (embedded by the Molecule Sketcher dialog)
+        (url_path_join(web_app.settings["base_url"], "verknode", "ketcher", "(.*)"), KetcherFileHandler,
+         {"path": KETCHER_DIR, "default_filename": "index.html"}),
+    ]
+    web_app.add_handlers(".*$", handlers)

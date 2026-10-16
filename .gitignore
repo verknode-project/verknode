@@ -1,0 +1,17 @@
+credentials_norepo.env
+# this machine's deployment (see DEPLOYMENT.md)
+.env
+docker-compose.override.yml
+.ipynb_checkpoints/
+claude/
+
+# extension build artifacts
+extension/node_modules/
+extension/lib/
+extension/tsconfig.tsbuildinfo
+extension/jupyterlab_verknode/labextension/
+extension/jupyterlab_verknode/_version.py
+extension/.yarn/
+*.egg-info/
+__pycache__/
+notebooks/examples/output/

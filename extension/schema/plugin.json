@@ -1,0 +1,115 @@
+{
+  "jupyter.lab.setting-icon": "verknode:workflow",
+  "jupyter.lab.setting-icon-label": "Verknode Workflow Editor",
+  "title": "Verknode Workflow Editor",
+  "description": "Behaviour of the verknode workflow editor (also editable in the editor: ≡ Settings).",
+  "type": "object",
+  "properties": {
+    "theme": {
+      "title": "Canvas theme",
+      "description": "Colours of the workflow canvas and nodes. verkaround: nodes coloured by what they do (input emerald/cyan, transform indigo/cobalt, chemistry/statistics violet, ML amber/rose, output teal) in light tints on a light slate canvas. knife: the colours of a popular workflow engine, by node type, on the JupyterLab background. butter: those colours a little muted (between knife and haze), on a warm cream canvas. haze: those colours muted, on a soft off-white canvas. knightmare: those colours on a dark canvas. pipeline-cowboy: the look of a classic workflow engine (readers green, writers red, manipulators blue, filters gold, viewers purple; heavy pipes on light grey).",
+      "type": "string",
+      "enum": [
+        "verkaround",
+        "knife",
+        "butter",
+        "haze",
+        "knightmare",
+        "pipeline-cowboy"
+      ],
+      "default": "verkaround"
+    },
+    "statusLight": {
+      "title": "Node status lights",
+      "description": "led: three slanted bars - the middle one red (not configured), the outer two yellow (configured), all three green (executed). led-orange: as led, with reddish orange instead of red. traffic: a traffic light with one red, yellow or green dot.",
+      "type": "string",
+      "enum": [
+        "led",
+        "led-orange",
+        "traffic"
+      ],
+      "default": "led-orange"
+    },
+    "dragBehavior": {
+      "title": "Left-drag on empty canvas",
+      "description": "pan: dragging moves the view and Shift+drag draws a selection rectangle. select: dragging draws a selection rectangle and Ctrl+drag (or middle-drag) moves the view.",
+      "type": "string",
+      "enum": [
+        "pan",
+        "select"
+      ],
+      "default": "pan"
+    },
+    "wheelBehavior": {
+      "title": "Mouse wheel",
+      "description": "zoom: the wheel zooms (pan with Ctrl+drag or middle-drag). pan: the wheel scrolls the canvas and Ctrl+wheel zooms.",
+      "type": "string",
+      "enum": [
+        "zoom",
+        "pan"
+      ],
+      "default": "zoom"
+    },
+    "arrowNavigation": {
+      "title": "Arrow key navigation",
+      "description": "Arrow keys select the nearest node in that direction. Holding Alt (or after a double tap on Alt, until Alt is tapped again or nothing is selected) they follow the connections: left/right upstream/downstream, up/down a sibling. approximate: among several candidates take the closest by position (siblings above/below). strict: follow port order (first parent, first child, sibling order of the first parent). Shift extends the selection.",
+      "type": "string",
+      "enum": [
+        "approximate",
+        "strict"
+      ],
+      "default": "approximate"
+    },
+    "viewTarget": {
+      "title": "Open port and node views in",
+      "description": "window: a separate browser window, tab: a browser tab, dialog: a dialog inside the editor, jupyter: a JupyterLab tab next to the editor (dockable). Holding Ctrl (Cmd) switches window <-> tab (jupyter: browser window). Views stay open when the node is reset and update when it runs again.",
+      "type": "string",
+      "enum": [
+        "window",
+        "tab",
+        "dialog",
+        "jupyter"
+      ],
+      "default": "window"
+    },
+    "showFlowVariablePorts": {
+      "title": "Always show flow variable ports",
+      "description": "Show the implicit flow variable ports of all nodes (otherwise only on hover, selection or when connected).",
+      "type": "boolean",
+      "default": false
+    },
+    "showScopeBlocks": {
+      "title": "Highlight loops and other blocks",
+      "description": "Draw faint bubbles around loops, try/catch, IF/CASE switches and other scopes (dashed while not closed).",
+      "type": "boolean",
+      "default": true
+    },
+    "snapToGrid": {
+      "title": "Snap nodes to grid",
+      "type": "boolean",
+      "default": true
+    },
+    "showMinimap": {
+      "title": "Show minimap",
+      "type": "boolean",
+      "default": true
+    },
+    "showPythonCommands": {
+      "title": "Show Python commands in the console",
+      "description": "Print the equivalent verknode command for every edit.",
+      "type": "boolean",
+      "default": true
+    },
+    "sketcher": {
+      "title": "Molecule Sketcher editor",
+      "description": "Structure editor opened by the Molecule Sketcher: ketcher (EPAM Ketcher) or builtin (hover hotkeys, fixed bond length and 120° geometry). The dialog can switch between them; the last one used is remembered.",
+      "type": "string",
+      "enum": [
+        "builtin",
+        "ketcher"
+      ],
+      "default": "ketcher"
+    }
+  },
+  "additionalProperties": false
+}
