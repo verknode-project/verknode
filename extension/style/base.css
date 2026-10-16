@@ -74,6 +74,23 @@
   flex-wrap: wrap;
 }
 
+.verknode-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 2px 4px;
+  color: var(--jp-ui-font-color0);
+  font-size: var(--jp-ui-font-size1);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.verknode-brand svg {
+  display: block;
+}
+
 .verknode-tb {
   display: inline-flex;
   align-items: center;

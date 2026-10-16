@@ -8,7 +8,7 @@ import { INotebookTracker } from '@jupyterlab/notebook';
 import { ILauncher } from '@jupyterlab/launcher';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 
-import { WorkflowDocument, WorkflowFactory, workflowIcon } from './document';
+import { setFavicon, WorkflowDocument, WorkflowFactory, workflowIcon } from './document';
 import { EditorSettings } from './settings';
 import { setLabHost } from './editor/labViews';
 import { setNotebookFinder } from './liveNotebook';
@@ -33,6 +33,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     settingRegistry: ISettingRegistry | null,
     notebooks: INotebookTracker | null
   ) => {
+    setFavicon();
     // Jupyter Notebook nodes can run in their notebook when it is open (liveNotebook.ts)
     setNotebookFinder(path => notebooks?.find(panel => panel.context.path === path) ?? null);
     let pluginSettings: ISettingRegistry.ISettings | null = null;

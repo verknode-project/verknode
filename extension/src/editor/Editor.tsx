@@ -1801,6 +1801,16 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         Lineage navigation · tap Alt to leave
       </div>
       <div className="verknode-toolbar">
+        <span className="verknode-brand" title="verknode">
+          <svg viewBox="133 399 928 381" height="13" aria-hidden="true">
+            <path d="M133 399H239L375 656L512 399H615L400 780H334Z" fill="#5DA9E9" />
+            <path d="M665 400H762L625 640H527Z" fill="#F52D1A" />
+            <path d="M815 400H912L772 641H675Z" fill="#FFC400" />
+            <path d="M963 400H1061L920 644H823Z" fill="#00B86A" />
+          </svg>
+          Verknode
+        </span>
+        <span className="verknode-tb-sep" />
         <button className="verknode-tb" disabled={!view?.canUndo} onClick={undo} title="Undo (Ctrl+Z)">
           ↶
         </button>
