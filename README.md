@@ -71,3 +71,7 @@ See [docs/](docs/README.md): the [editor](docs/editor.md),
 [custom nodes](docs/custom-nodes.md), [Python API](docs/python-api.md),
 [chemistry](docs/chemistry.md), [deployment](docs/deployment.md) and
 [development](docs/development.md).
+
+## License
+
+verknode is licensed under the [Apache License 2.0](LICENSE).

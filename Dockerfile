@@ -35,7 +35,7 @@ RUN pip install --no-cache-dir \
         lxml \
         jsonpath-ng \
         pyarrow \
-        "hatchling>=1.5.0" \
+        "hatchling>=1.27" \
         editables \
         "hatch-nodejs-version>=0.3.2" \
         "hatch-jupyter-builder>=0.5"
