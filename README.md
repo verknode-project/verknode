@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="verknode_logo.svg" alt="verknode" width="320">
+  <img src="verknode_logo_cropped.svg" alt="verknode" width="360">
 </p>
 
 JupyterLab environment with a node-based visual programming
