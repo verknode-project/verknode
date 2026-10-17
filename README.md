@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/verknode_banner_dark.png">
-    <img src="docs/assets/verknode_banner_light.png" alt="verknode">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/verknode_banner_dark-v2.png">
+    <img src="docs/assets/verknode_banner_light-v2.png" alt="verknode">
   </picture>
 </p>
 
