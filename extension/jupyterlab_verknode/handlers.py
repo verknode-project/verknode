@@ -242,6 +242,8 @@ OPS = {
     "set_node_paths": lambda wf, a: wf.set_node_paths(a["paths"], a.get("autoReload")),
     "reload_nodes": lambda wf, a: wf.reload_nodes(),
     "create_node_template": lambda wf, a: _create_node_template(wf, a.get("folder") or "nodes"),
+    "begin_batch": lambda wf, a: wf.begin_batch(),
+    "end_batch": lambda wf, a: wf.end_batch(),
 }
 
 
@@ -273,6 +275,11 @@ class OpsHandler(BaseHandler):
             return self.view(sid, wf)
         if op not in OPS:
             raise tornado.web.HTTPError(400, f"Unknown operation: {op}")
+        # ("batch": an edit of a script's batch - see Workflow.batch; a batch nobody ends expires)
+        if args.get("batch"):
+            wf.touch_batch()
+        else:
+            wf.expire_batch()
         recorder = Recorder(wf, op, args)
         try:
             result = OPS[op](wf, args)
@@ -284,7 +291,11 @@ class OpsHandler(BaseHandler):
                 wf._log("PY", line)
         except Exception as e:  # noqa: BLE001 - never fail an edit because of the transcript
             self.log.warning("verknode: could not describe %s: %s", op, e)
-        out = dict(wf.view(log_since=int(args.get("log_since", 0))), session=sid)
+        if args.get("quiet"):
+            # (scripts in a batch: no full view after every edit; they ask for one when needed)
+            out = {"session": sid, "version": wf.version}
+        else:
+            out = dict(wf.view(log_since=int(args.get("log_since", 0))), session=sid)
         if op in RESULTS:
             out["result"] = {RESULTS[op]: result}
         self.reply(out)

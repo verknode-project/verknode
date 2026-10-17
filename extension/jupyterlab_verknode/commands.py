@@ -227,8 +227,10 @@ def to_python(wf: Workflow, path: str | None) -> str:
         "import verknode",
         "",
         f"wf = verknode.open({target!r})  # change the path to build a copy",
-        "wf.clear()",
+        "",
     ]
+    header = lines
+    lines = ["wf.clear()"]  # (the rebuild, in a batch below)
     if wf.node_paths:
         lines.append(f"wf.set_node_paths({wf.node_paths!r})  # custom node folders")
     if wf.workflow_variables:
@@ -275,5 +277,7 @@ def to_python(wf: Workflow, path: str | None) -> str:
         lines.append("")
     for g in wf.groups:
         lines.append(f"wf.add_group({', '.join(names[n] for n in g['nodes'])}{_group_kwargs(g['text'], g['color'])})")
-    lines += ["", "# wf.execute()", "# wf.save()", ""]
-    return "\n".join(lines)
+    while lines and not lines[-1]:
+        lines.pop()
+    body = ["with wf.batch():  # one undo step; fast also for big workflows"] + [f"    {l}" if l else "" for l in lines]
+    return "\n".join(header + body + ["", "# wf.execute()", "# wf.save()", ""])

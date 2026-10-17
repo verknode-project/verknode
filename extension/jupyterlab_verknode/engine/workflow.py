@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import collections
+import contextlib
 import copy
 import datetime as dt
 import functools
@@ -186,18 +187,13 @@ def undoable(method):
     def wrapper(self, *args, **kwargs):
         if self._undo_depth:
             return method(self, *args, **kwargs)
-        snapshot = self._snapshot()
-        version = self.version
+        mark = self._undo_mark()
         self._undo_depth += 1
         try:
-            result = method(self, *args, **kwargs)
+            return method(self, *args, **kwargs)
         finally:
             self._undo_depth -= 1
-        if self.version != version:
-            self._undo.append(snapshot)
-            del self._undo[:-UNDO_LIMIT]
-            self._redo.clear()
-        return result
+            self._undo_record(mark)
 
     return wrapper
 
@@ -301,6 +297,7 @@ class Workflow:
         self._analysis_cache = (None, None)
         self._undo: list[dict] = []
         self._redo: list[dict] = []
+        self._batch: dict | None = None  # open batch (Workflow.batch / begin_batch)
         self._frontend: dict[str, dict] = {}  # open requests to editors (frontend_request)
         self.editor_seen = 0.0  # last long poll of an editor (time.time())
 
@@ -1207,8 +1204,72 @@ class Workflow:
     def can_redo(self) -> bool:
         return bool(self._redo)
 
+    def _undo_mark(self) -> tuple:
+        """The state before an undo step: (snapshot, version)."""
+        return self._snapshot(), self.version
+
+    def _undo_record(self, mark: tuple):
+        """End an undo step: keep its snapshot if anything changed."""
+        snapshot, version = mark
+        if self.version != version:
+            self._undo.append(snapshot)
+            del self._undo[:-UNDO_LIMIT]
+            self._redo.clear()
+
+    # -- batches: many edits as one undo step --------------------------------
+    BATCH_IDLE = 120.0  # seconds without batch edits after which an open batch ends by itself
+
+    @contextlib.contextmanager
+    def batch(self):
+        """Edits inside are one undo step, with a single undo snapshot (taken at the start)
+        instead of one per edit: for scripts that build or change big workflows."""
+        self.begin_batch()
+        try:
+            yield self
+        finally:
+            self.end_batch()
+
+    def begin_batch(self):
+        """Start a batch (or nest one in the open batch); end it with end_batch."""
+        with self._lock:
+            if self._batch is None:
+                self._batch = {"mark": None if self._undo_depth else self._undo_mark(), "depth": 0}
+                self._undo_depth += 1
+            self._batch["depth"] += 1
+            self.touch_batch()
+
+    def end_batch(self):
+        with self._lock:
+            if self._batch is not None:
+                self._batch["depth"] -= 1
+                if self._batch["depth"] <= 0:
+                    self._close_batch()
+
+    def touch_batch(self):
+        """A batch edit: the open batch is in use (see BATCH_IDLE)."""
+        if self._batch is not None:
+            self._batch["touched"] = time.time()
+
+    def expire_batch(self):
+        """End a batch nobody ended (e.g. its script stopped) once it is idle for BATCH_IDLE."""
+        with self._lock:
+            if self._batch is not None and time.time() - self._batch["touched"] > self.BATCH_IDLE:
+                self._close_batch()
+
+    @property
+    def in_batch(self) -> bool:
+        return self._batch is not None
+
+    def _close_batch(self):
+        batch, self._batch = self._batch, None
+        self._undo_depth -= 1
+        if batch["mark"] is not None:
+            self._undo_record(batch["mark"])
+
     def undo(self):
         self._require_idle()
+        if self._batch is not None:
+            self._close_batch()  # (undo the batch as a whole)
         if not self._undo:
             raise WorkflowError("Nothing to undo")
         with self._lock:
@@ -1218,6 +1279,8 @@ class Workflow:
 
     def redo(self):
         self._require_idle()
+        if self._batch is not None:
+            self._close_batch()
         if not self._redo:
             raise WorkflowError("Nothing to redo")
         with self._lock:

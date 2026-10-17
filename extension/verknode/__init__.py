@@ -24,6 +24,7 @@ the editor::
 from __future__ import annotations
 
 import atexit
+import contextlib
 import io
 import json
 import os
@@ -249,6 +250,9 @@ class Workflow:
         self._view = view
         self._session = view["session"]
         self._closed = False
+        self._batching = False
+        self._batch_types = None  # (node types, cached while a batch is open)
+        self._last_added = None  # (x, y) of the last node added in a batch (its view is not fetched)
 
     # -- plumbing --------------------------------------------------------
     def _request(self, method: str, path: str, body=None, raw: bool = False):
@@ -264,8 +268,39 @@ class Workflow:
             return _srv().request(method, f"sessions/{self._session}{path}", body, raw=raw)
 
     def _op(self, op: str, **args):
+        if self._batching:
+            # (no full view per edit: readers refresh it)
+            reply = self._request("POST", "/ops", {"op": op, "batch": True, "quiet": True, **args})
+            return reply.get("result") or {}
         self._view = self._request("POST", "/ops", {"op": op, **args})
         return (self._view.get("result") or {})
+
+    @contextlib.contextmanager
+    def batch(self):
+        """Many edits as one undo step, fast also in big workflows::
+
+            with wf.batch():
+                prev = wf.add_node("Table Creator")
+                for i in range(1000):
+                    node = wf.add_node("Math Formula", expression="$a$ + 1")
+                    wf.connect(prev, node)
+                    prev = node
+
+        The server takes one undo snapshot for the whole batch instead of one per edit, and
+        edits do not send the whole workflow back. The editor shows the edits as they happen;
+        an undo there (or wf.undo()) ends the batch and undoes all of it. A batch that is not
+        ended (the script stopped) ends by itself after two minutes without edits.
+        """
+        if self._batching:
+            yield self
+            return
+        self._op("begin_batch")
+        self._batching, self._batch_types, self._last_added = True, None, None
+        try:
+            yield self
+        finally:
+            self._batching, self._batch_types = False, None
+            self._op("end_batch")
 
     def refresh(self) -> "Workflow":
         self._view = self._request("GET", "")
@@ -316,15 +351,24 @@ class Workflow:
         "x" and "y") are passed in the `settings` dict instead.
         """
         settings = {**(settings or {}), **kwargs}
-        t = _resolve_type(node_type, self._request("GET", "/nodes"))
+        if self._batching:
+            if self._batch_types is None:
+                self._batch_types = self._request("GET", "/nodes")
+            types = self._batch_types
+        else:
+            types = self._request("GET", "/nodes")
+        t = _resolve_type(node_type, types)
         if x is None or y is None:
-            existing = self._view["nodes"]
-            if existing:
-                last = max(existing, key=lambda n: n["id"])
-                x = last["x"] + 150 if x is None else x
-                y = last["y"] if y is None else y
+            last = self._last_added if self._batching else None
+            if last is None and self._view["nodes"]:
+                n = max(self._view["nodes"], key=lambda n: n["id"])
+                last = (n["x"], n["y"])
+            if last is not None:
+                x = last[0] + 150 if x is None else x
+                y = last[1] if y is None else y
             else:
                 x, y = 40 if x is None else x, 40 if y is None else y
+        self._last_added = (x, y)
         parent = self._id(metanode) if metanode is not None else None
         nid = self._op("add_node", factory=t["factory"], x=x, y=y, parent=parent)["id"]
         node = Node(self, nid)
@@ -410,6 +454,8 @@ class Workflow:
         Returns {node id: state}; nodes that failed are reported with a warning.
         """
         ids = [self._id(n) for n in nodes] or None
+        if self._batching:
+            self.refresh()  # (the version to wait from)
         self._op("execute", **({"ids": ids} if ids else {}))
         if not wait:
             return {}

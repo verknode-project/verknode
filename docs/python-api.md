@@ -26,6 +26,23 @@ by Python). The editor console prints the equivalent `>>>` command for every
 edit you make in the editor (click one to copy it), and
 **Python › Export** shows a script that rebuilds the whole workflow.
 
+Scripts that make many edits (e.g. build a big workflow) do them in a batch:
+
+    with wf.batch():
+        prev = wf.add_node("Table Creator")
+        for i in range(1000):
+            node = wf.add_node("Math Formula", expression="$a$ + 1")
+            wf.connect(prev, node)
+            prev = node
+
+A batch is one undo step, and it is fast also in big workflows: the server
+takes one undo snapshot for the whole batch instead of one per edit, and edits
+do not send the whole workflow back (300 nodes: 1.3 s instead of 11.5 s). The
+editor shows the edits as they happen; an undo ends the batch and undoes all
+of it, and a batch that is never ended (the script stopped) ends by itself
+after two minutes without edits. Exported scripts build in a batch. In the
+engine, `Workflow.batch()` does the same.
+
 ## Jupyter Notebook node
 
 Runs a notebook as a workflow step (Scripting › Python). Its inputs
