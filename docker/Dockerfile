@@ -22,7 +22,7 @@ RUN curl -fsSL -o /tmp/ketcher.zip \
 ENV VERKNODE_KETCHER_DIR=/opt/ketcher
 
 # dev-installs the bind-mounted extension source on every container start
-COPY docker/before-notebook.d/ /usr/local/bin/before-notebook.d/
+COPY before-notebook.d/ /usr/local/bin/before-notebook.d/
 
 USER ${NB_UID}
 

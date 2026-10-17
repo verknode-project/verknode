@@ -1,6 +1,6 @@
 # Local development: published on all interfaces, restarted only by hand.
 #
-#   cp deploy/docker-compose.dev.yml docker-compose.override.yml
+#   cd docker && cp deploy/dev.yml compose.override.yml
 services:
     verknode:
         restart: "no"

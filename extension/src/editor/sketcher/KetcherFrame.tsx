@@ -69,7 +69,7 @@ export const KetcherFrame = forwardRef<KetcherHandle, { initial: string; version
   if (state === 'missing') {
     return (
       <div className="verknode-ketcher-missing">
-        Ketcher is not installed on the server. Rebuild the image (<code>make build</code>) - the Dockerfile
+        Ketcher is not installed on the server. Rebuild the image (<code>make -C docker build</code>) - docker/Dockerfile
         downloads it to <code>/opt/ketcher</code> - or use the built-in sketcher.
       </div>
     );

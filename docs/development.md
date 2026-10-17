@@ -14,6 +14,8 @@ start `docker/before-notebook.d/10-verknode-extension.sh` runs `jlpm install` /
 
 ## Make targets
 
+In `docker/` (or from the repository root as `make -C docker <target>`):
+
     make build      # build the image (creates credentials_norepo.env from the example if missing)
     make up         # start            make down     # stop
     make logs       # follow the logs  make config   # the compose configuration in effect
@@ -32,4 +34,6 @@ start `docker/before-notebook.d/10-verknode-extension.sh` runs `jlpm install` /
       jupyterlab_verknode/handlers.py   REST API of the editor
       verknode/                     public Python API (verknode.open, verknode.node)
     notebooks/examples/             example workflows and custom node folders
-    docker/, Dockerfile, docker-compose.yml, deploy/   the container (see deployment.md)
+    docker/                         the container: Dockerfile, compose.yml, Makefile,
+                                    deploy/ examples, start-up script (see deployment.md)
+    docs/                           documentation; assets/ logos, images/ screenshots

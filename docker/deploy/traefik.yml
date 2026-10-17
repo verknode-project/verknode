@@ -1,6 +1,7 @@
 # Behind an existing Traefik (v2/v3) on the same Docker host, with HTTPS.
 #
-#   cp deploy/docker-compose.traefik.yml docker-compose.override.yml
+#   cd docker
+#   cp deploy/traefik.yml compose.override.yml
 #   cp .env.example .env      # set VERKNODE_HOST and the TRAEFIK_* values
 #   make up
 #

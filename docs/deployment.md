@@ -1,19 +1,21 @@
 # Deploying verknode
 
-verknode runs as a JupyterLab container (`Dockerfile`, based on
+verknode runs as a JupyterLab container (`docker/Dockerfile`, based on
 `quay.io/jupyter/scipy-notebook`) with the extension in `extension/`.
-`docker-compose.yml` is the same for every environment; everything specific
-to a machine lives in gitignored files next to it.
+Everything for the container is in `docker/`: `compose.yml` is the same for
+every environment, and everything specific to a machine lives in gitignored
+files next to it.
 
-| File (gitignored)             | What it holds                                         | Start from              |
-| ----------------------------- | ----------------------------------------------------- | ----------------------- |
-| `credentials_norepo.env`      | `JUPYTER_TOKEN` (the login token), other secrets      | `credentials_norepo.env.example` |
-| `.env`                        | values for `docker-compose*.yml` (port, host name ...) | `.env.example`          |
-| `docker-compose.override.yml` | changes to the service (proxy, networks, labels ...)  | `deploy/*.yml`          |
+| File in `docker/` (gitignored) | What it holds                                         | Start from                       |
+| ------------------------------ | ----------------------------------------------------- | -------------------------------- |
+| `credentials_norepo.env`       | `JUPYTER_TOKEN` (the login token), other secrets      | `credentials_norepo.env.example` |
+| `.env`                         | values for `compose*.yml` (port, host name ...)       | `.env.example`                   |
+| `compose.override.yml`         | changes to the service (proxy, networks, labels ...)  | `deploy/*.yml`                   |
 
-`docker compose` reads `.env` and `docker-compose.override.yml`
-automatically, so `make build`, `make up` etc. work the same everywhere.
-`make config` prints the resulting configuration. The override examples use
+`docker compose` reads `.env` and `compose.override.yml` automatically, so
+`make build`, `make up` etc. work the same everywhere. Run the commands
+below in `docker/`, or from the repository root as `make -C docker up` and
+so on. `make config` prints the resulting configuration. The override examples use
 `!reset` / `!override`, which need Docker Compose 2.24 or later.
 
 ## Requirements
@@ -24,6 +26,7 @@ automatically, so `make build`, `make up` etc. work the same everywhere.
 
 ## Local (default)
 
+    cd docker
     make build          # creates credentials_norepo.env from the example if missing
     # set JUPYTER_TOKEN in credentials_norepo.env
     make up
@@ -34,7 +37,7 @@ another port, set `VERKNODE_PORT` in `.env`.
 ## On the local network
 
 Set `VERKNODE_BIND=0.0.0.0` in `.env` (or use
-`deploy/docker-compose.dev.yml` as the override). The connection is plain
+`deploy/dev.yml` as the override). The connection is plain
 HTTP: keep a strong token, and prefer a reverse proxy with HTTPS beyond a
 trusted network.
 
@@ -42,7 +45,8 @@ trusted network.
 
 For a Traefik instance already running on the same Docker host:
 
-    cp deploy/docker-compose.traefik.yml docker-compose.override.yml
+    cd docker
+    cp deploy/traefik.yml compose.override.yml
     cp .env.example .env    # set VERKNODE_HOST, TRAEFIK_NETWORK, TRAEFIK_ENTRYPOINT, TRAEFIK_CERTRESOLVER
     make up
 
@@ -76,7 +80,7 @@ and proxy that path without stripping it.
 
 ## Without Docker
 
-The `Dockerfile` is the reference for a manual install: Python 3.11+, Node.js
+`docker/Dockerfile` is the reference for a manual install: Python 3.11+, Node.js
 (to build the extension), then
 
     pip install polars rdkit fastexcel xlsxwriter lxml jsonpath-ng pyarrow jupyterlab
@@ -94,8 +98,8 @@ sketcher works without it).
 - The extension source is mounted too and dev-installed at every container
   start (`docker/before-notebook.d/10-verknode-extension.sh`), so an update
   is `git pull`, then `make ext-build` (frontend) and `make restart`
-  (Python side). Rebuild the image (`make build && make up`) when the
-  `Dockerfile` changes.
+  (Python side). Rebuild the image (`make build && make up`) when
+  `docker/Dockerfile` changes.
 - User settings (themes, editor options) are kept in the container's home
   directory: they survive restarts but not a re-created container.
 

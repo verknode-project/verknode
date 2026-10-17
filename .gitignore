@@ -1,7 +1,9 @@
 credentials_norepo.env
-# this machine's deployment (see docs/deployment.md)
+# this machine's deployment, in docker/ (see docs/deployment.md)
 .env
+compose.override.yml
 docker-compose.override.yml
+.user-settings-backup/
 .ipynb_checkpoints/
 claude/
 

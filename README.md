@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="verknode_logo_cropped.svg" alt="verknode" width="360">
+  <img src="docs/assets/verknode_logo_cropped.svg" alt="verknode" width="360">
 </p>
 
 <p align="center">
@@ -53,8 +53,8 @@ should be done; loops count their iterations:
 With Docker:
 
     git clone https://github.com/verknode-project/verknode.git
-    cd verknode
-    make build      # creates credentials_norepo.env - set JUPYTER_TOKEN there
+    cd verknode/docker
+    make build      # creates docker/credentials_norepo.env - set JUPYTER_TOKEN there
     make up         # http://127.0.0.1:8888/lab?token=<JUPYTER_TOKEN>
 
 Open `notebooks/examples/demo.vkf` (more examples next to it:

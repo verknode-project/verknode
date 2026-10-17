@@ -1,3 +1,5 @@
+# Container tasks; run them here or from the repository root with `make -C docker <target>`.
+
 build:
 	test -f credentials_norepo.env || cp credentials_norepo.env.example credentials_norepo.env
 	docker compose build
@@ -15,7 +17,7 @@ restart:
 logs:
 	docker compose logs -f
 
-# the configuration in effect here (docker-compose.yml + .env + docker-compose.override.yml)
+# the configuration in effect here (compose.yml + .env + compose.override.yml)
 config:
 	docker compose config
 
