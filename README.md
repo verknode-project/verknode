@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="docs/assets/verknode_logo_cropped.svg" alt="verknode" width="360">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/verknode_banner_dark.png">
+    <img src="docs/assets/verknode_banner_light.png" alt="verknode">
+  </picture>
 </p>
 
 <p align="center">
