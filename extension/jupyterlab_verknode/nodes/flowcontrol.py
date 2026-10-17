@@ -92,13 +92,7 @@ class ChunkLoopStart(NodeModel):
 
     def execute(self, inputs, s, ctx):
         df = inputs[0]
-        h = df.height
-        if s["mode"] == "Rows per chunk":
-            size = max(1, s["rows_per_chunk"])
-            total = max(1, math.ceil(h / size))
-        else:
-            total = max(1, min(s["chunks"], h) if h else 1)
-            size = math.ceil(h / total) if h else 0
+        total, size = _chunk_sizes(s, df.height)
         it = ctx.loop["iteration"]
         ctx.loop["last"] = it >= total - 1
         ctx.loop["total"] = total  # (the canvas shows "iteration / total")
@@ -163,6 +157,87 @@ class LoopEnd(NodeModel):
         if not parts:
             parts = [ctx.loop["collected"][0].clear()]
         ctx.log(f"Loop finished after {ctx.loop['iteration'] + 1} iterations")
+        return [pl.concat(parts, how="diagonal_relaxed")]
+
+
+def _chunk_sizes(s, h) -> tuple:
+    """(number of chunks, rows per chunk) of a table of h rows."""
+    if s["mode"] == "Rows per chunk":
+        size = max(1, s["rows_per_chunk"])
+        return max(1, math.ceil(h / size)), size
+    total = max(1, min(s["chunks"], h) if h else 1)
+    return total, (math.ceil(h / total) if h else 0)
+
+
+PARALLEL_HELP = (
+    " The nodes between <i>Parallel Chunk Start</i> and <i>Parallel Chunk End</i> run on every chunk at the "
+    "same time: the visible nodes process the first chunk (inspect them as usual), the other chunks run in "
+    "worker threads through copies of them. Each chunk gets the flow variables <code>currentIteration</code> "
+    "(the chunk index, from 0) and <code>maxIterations</code> (the number of chunks). Work in polars and "
+    "waiting nodes run in parallel; plain Python code (e.g. a Python Script) still takes turns. Loops "
+    "inside the parallel part are not supported."
+)
+
+
+class ParallelChunkStart(NodeModel):
+    factory = "verknode.flow.ParallelChunkStart"
+    closed_by = ["verknode.flow.ParallelChunkEnd"]
+    name = "Parallel Chunk Start"
+    category = "Flow Control/Loop Support"
+    node_type = "LoopStart"
+    icon = "‖▤"
+    loop_role = "start"
+    short_description = "Splits the table into chunks that the nodes after it process in parallel."
+    description = "Splits the input table into consecutive chunks of rows." + PARALLEL_HELP
+    in_ports = [Port(TABLE, "Table to split")]
+    out_ports = [Port(TABLE, "A chunk")]
+    fields = [
+        F("mode", "enum", "Chunking", "Number of chunks", options=["Number of chunks", "Rows per chunk"]),
+        F("chunks", "int", "Number of chunks", 4, show_if={"mode": "Number of chunks"}),
+        F("rows_per_chunk", "int", "Rows per chunk", 100, show_if={"mode": "Rows per chunk"}),
+        F("workers", "int", "Parallel chunks at most", 8, "How many chunks run at the same time."),
+    ]
+
+    def configure(self, in_specs, s, ctx):
+        return [in_specs[0]]
+
+    def execute(self, inputs, s, ctx):
+        if ctx.loop is None:
+            raise InvalidSettingsError("Needs a Parallel Chunk End after it")
+        df = inputs[0]
+        total, size = _chunk_sizes(s, df.height)
+        ctx.loop["chunks"] = [df.slice(i * size, size) for i in range(total)]
+        ctx.loop["workers"] = max(1, s["workers"])
+        ctx.loop["total"] = total
+        _push_loop_vars(ctx, 0, total)
+        return [ctx.loop["chunks"][0]]
+
+
+class ParallelChunkEnd(NodeModel):
+    factory = "verknode.flow.ParallelChunkEnd"
+    name = "Parallel Chunk End"
+    category = "Flow Control/Loop Support"
+    node_type = "LoopEnd"
+    icon = "‖⟲"
+    loop_role = "end"
+    parallel = True  # the workflow runs the chunks at the same time (Workflow._run_parallel)
+    short_description = "Joins the results of the chunks processed in parallel."
+    description = ("Concatenates the results of all chunks, in chunk order. Executing this node runs the "
+                   "whole parallel part." + PARALLEL_HELP)
+    in_ports = [Port(TABLE, "Result of a chunk")]
+    out_ports = [Port(TABLE, "All results")]
+    fields = [F("add_chunk_column", "bool", "Add chunk index column", False)]
+
+    def configure(self, in_specs, s, ctx):
+        return [None]
+
+    def execute(self, inputs, s, ctx):
+        if ctx.loop is None:
+            raise InvalidSettingsError("No matching Parallel Chunk Start node found")
+        parts = [inputs[0]] + list(ctx.loop.get("results", []))
+        if s["add_chunk_column"]:
+            parts = [d.with_columns(pl.lit(i, pl.Int32).alias("Chunk")) for i, d in enumerate(parts)]
+        ctx.log(f"Joined {len(parts)} chunks processed in parallel")
         return [pl.concat(parts, how="diagonal_relaxed")]
 
 

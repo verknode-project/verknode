@@ -1,12 +1,11 @@
 """Scripting nodes."""
 from __future__ import annotations
 
-import contextlib
 import io
 
 import polars as pl
 
-from verknode.node import infer_type
+from verknode.node import capture_stdout, infer_type
 from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE
 
 DEFAULT_SCRIPT = '''\
@@ -63,7 +62,7 @@ class PythonScript(NodeModel):
         except ImportError:
             pass
         out = io.StringIO()
-        with contextlib.redirect_stdout(out):
+        with capture_stdout(out):
             exec(compile(s["script"], "<Python Script>", "exec"), ns)  # noqa: S102
         for line in out.getvalue().splitlines():
             ctx.log(line)
@@ -128,7 +127,7 @@ class WorkflowScript(PythonScript):
             "workflow": ctx.script_workflow() if ctx.script_workflow else None,
         }
         out = io.StringIO()
-        with contextlib.redirect_stdout(out):
+        with capture_stdout(out):
             exec(compile(s["script"], "<Workflow Script>", "exec"), ns)  # noqa: S102
         for line in out.getvalue().splitlines():
             ctx.log(line)

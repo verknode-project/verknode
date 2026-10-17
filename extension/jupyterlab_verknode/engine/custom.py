@@ -274,12 +274,52 @@ def create_template(folder: str, filename: str = "example_nodes.py") -> str:
     return path
 
 
+class _ThreadStdout:
+    """sys.stdout that each thread can send elsewhere (capture_stdout): nodes running at the same
+    time (parallel chunks) capture their own print() output without swapping the process's stdout,
+    which interleaved swaps would leave pointing at one node's buffer."""
+
+    def __init__(self, base):
+        import threading
+
+        self._base = base
+        self._local = threading.local()
+
+    def _target(self):
+        return getattr(self._local, "buf", None) or self._base
+
+    def write(self, text):
+        return self._target().write(text)
+
+    def flush(self):
+        return self._target().flush()
+
+    def __getattr__(self, name):
+        return getattr(self._target(), name)
+
+
+@contextlib.contextmanager
+def capture_stdout(buf):
+    """Send this thread's print() output (and other writes to sys.stdout) to `buf` meanwhile."""
+    import sys
+
+    if not isinstance(sys.stdout, _ThreadStdout):
+        sys.stdout = _ThreadStdout(sys.stdout)
+    proxy = sys.stdout
+    previous = getattr(proxy._local, "buf", None)
+    proxy._local.buf = buf
+    try:
+        yield buf
+    finally:
+        proxy._local.buf = previous
+
+
 @contextlib.contextmanager
 def discard_print():
     """Silence print() of custom node code during configure dry runs."""
     import io
 
-    with contextlib.redirect_stdout(io.StringIO()):
+    with capture_stdout(io.StringIO()):
         yield
 
 
@@ -290,7 +330,7 @@ def capture_print(ctx):
 
     buf = io.StringIO()
     try:
-        with contextlib.redirect_stdout(buf):
+        with capture_stdout(buf):
             yield
     finally:
         for line in buf.getvalue().splitlines():

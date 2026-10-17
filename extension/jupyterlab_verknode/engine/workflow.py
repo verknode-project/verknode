@@ -122,6 +122,9 @@ class NodeContainer:
         self.last_rows: int | None = None
         self.last_iterations: int | None = None  # loop ends: iterations of the last run (loop progress)
         self.loop_state: dict | None = None  # loop ends while their loop runs (iteration, total, start)
+        # input port -> (object, flow variables) it gets instead of what is connected (a parallel
+        # chunk copy: its chunk, while the port it is connected to carries the whole table)
+        self.fed: dict | None = None
         self.view: str | None = None  # node view HTML
         self.display: dict | None = None  # shown on the canvas (widget nodes, ExecContext.set_display)
         self.traceback: str | None = None  # of the last execution failure
@@ -1470,7 +1473,10 @@ class Workflow:
                         self.nodes[n].runtime = None
                     continue
                 inner = {e: v for e, v in loops.items() if e in body}
-                self._run_loop(start, body, nid, inner)
+                if getattr(nc.model, "parallel", False):
+                    self._run_parallel(start, body, nid, inner)
+                else:
+                    self._run_loop(start, body, nid, inner)
             elif self._inputs_ready(nid):
                 self._execute_single(nid)
             elif nc.model.scope_role == "catch" and (caught := self._caught_error(nid)) is not None:
@@ -1530,12 +1536,186 @@ class Workflow:
             if total:
                 end_nc.progress = min(loop["iteration"] / total, 1.0)
 
+    # ------------------------------------------------------------------
+    # parallel chunks (Parallel Chunk Start / End)
+    # ------------------------------------------------------------------
+    def _run_parallel(self, start, body, end, inner_loops):
+        """The start splits its table into chunks; the visible body runs the first one, and a
+        temporary metanode next to it holds a copy of the body for every other chunk (inspect it
+        while it runs). All chunks run at the same time; the end joins the results and the
+        temporary metanode goes away."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        end_nc = self.nodes[end]
+        # ("iteration" + 1 is what the canvas pill shows: the chunks done)
+        loop = {"iteration": -1, "last": True, "collected": [], "state": {}, "started": time.time(), "start": start}
+        end_nc.started, end_nc.progress, end_nc.loop_state = loop["started"], None, loop
+        temp = None
+        try:
+            if inner_loops:
+                end_nc.message = ("ERROR", "Loops inside a parallel chunk loop are not supported")
+                return
+            for b in body | {start}:
+                self.nodes[b].clear()
+                self.nodes[b].runtime = "QUEUED"
+            end_nc.runtime = "EXECUTING"
+            if not self._execute_single(start, loop):
+                end_nc.message = ("ERROR", "Parallel Chunk Start failed")
+                return
+            chunks = loop.get("chunks") or []
+            temp, copies = self._parallel_copies(start, body, chunks) if len(chunks) > 1 else (None, [])
+            done, errors = [0], []
+            lock = threading.Lock()
+
+            def finished():
+                with lock:
+                    done[0] += 1
+                    loop["iteration"] = done[0] - 1
+                    end_nc.progress = done[0] / len(chunks)
+                    self.version += 1
+
+            def work(k, mapping):
+                try:
+                    for cid in self.topo_order(set(mapping.values())):
+                        if self._cancel.is_set():
+                            raise CanceledExecutionError()
+                        if self._inputs_ready(cid) and not self._execute_single(cid):
+                            raise WorkflowError(self.nodes[cid].message[1] if self.nodes[cid].message else "failed")
+                except CanceledExecutionError:
+                    raise
+                except Exception as e:  # noqa: BLE001 - reported on the end node
+                    errors.append((k, e))
+                finally:
+                    finished()
+
+            with ThreadPoolExecutor(max_workers=max(1, min(loop.get("workers", 8), len(chunks)))) as pool:
+                futures = [pool.submit(work, k, m) for k, m in enumerate(copies, start=1)]
+                try:
+                    self._run(set(body), {})  # the first chunk, through the visible nodes
+                finally:
+                    for f in futures:
+                        f.result()
+            finished()
+            if errors:
+                k, e = min(errors, key=lambda x: x[0])
+                end_nc.message = ("ERROR", f"Chunk {k + 1} of {len(chunks)}: {e}")
+                self._log("ERROR", f"{end_nc.name} {_label(end_nc)}: chunk {k + 1}: {e}", end)
+                return
+            if not self._inputs_ready(end):
+                end_nc.message = ("ERROR", "The first chunk failed")
+                return
+            c = self.in_conns(end).get(1)
+            results = []
+            for mapping in copies:
+                src = self.nodes[mapping.get(c.source_id, c.source_id)]
+                results.append(src.outputs[c.source_port])
+            loop["results"] = results
+            loop["iteration"] = len(chunks) - 1
+            self._execute_single(end, loop)
+        finally:
+            end_nc.loop_state = None
+            if temp is not None:
+                self._drop_temporary(temp)
+
+    def _parallel_copies(self, start, body, chunks) -> tuple:
+        """A temporary metanode below the loop with a copy of the body for chunks 2..n. One port
+        per output of the start carries the whole table into it and branches out to the copies,
+        each of which gets its own chunk (and chunk flow variables); other inputs of the body come
+        in through ports of their own. Returns (metanode id, [{body node:
+        copy}] per chunk). Built aside and swapped in at once: views read while this runs."""
+        with self._lock:
+            start_nc = self.nodes[start]
+            order = self.topo_order(set(body))
+            ys = [self.nodes[n].y for n in order] or [start_nc.y]
+            xs = [self.nodes[n].x for n in order] or [start_nc.x]
+            top = min(ys)
+            mid = self.next_id
+            self.next_id += 1
+            meta = {"id": mid, "name": f"Parallel chunks 2-{len(chunks)} (temporary)", "parent": start_nc.parent,
+                    "x": sum(xs) / len(xs), "y": max(ys) + 150, "inputs": [], "outputs": [], "temporary": True}
+            nodes, conns = {}, []
+            row = max(ys) - top + 130  # each copy one row below the other inside the metanode
+
+            def port(source, source_port, outputs, stack):
+                nonlocal nodes
+                factory = boundary_factory("in", self.nodes[source].out_port(source_port).type)
+                b = self.next_id
+                self.next_id += 1
+                nc = NodeContainer(b, factory, model=boundary_class(factory)())
+                nc.parent = mid
+                nc.outputs, nc.out_stack = outputs, stack  # (already "executed": it passes its table on)
+                nodes[b] = nc
+                meta["inputs"].append(b)
+                conns.append(Connection(source, source_port, b, 1))
+                return b
+
+            shared = {}
+            whole = self._collect_inputs(start)[0][0]  # the table the start splits
+            for c in self.connections:
+                if c.source_id == start and c.dest_id in body and (start, c.source_port) not in shared:
+                    shared[(start, c.source_port)] = port(start, c.source_port,
+                                                          [FLOWVAR, whole if c.source_port == 1 else FLOWVAR], start_nc.out_stack)
+            copies = []
+            for k in range(1, len(chunks)):
+                stack = dict(start_nc.out_stack or {})
+                stack["currentIteration"] = make("currentIteration", k, "INTEGER")
+                stack["maxIterations"] = make("maxIterations", len(chunks), "INTEGER")
+                mapping = {}
+                for orig in order:
+                    onc = self.nodes[orig]
+                    cid = self.next_id
+                    self.next_id += 1
+                    nc = NodeContainer(cid, onc.factory, onc.x, onc.y - top + 60 + row * (k - 1), model=copy.copy(onc.model))
+                    nc.settings = copy.deepcopy(onc.settings)
+                    nc.var_settings = copy.deepcopy(onc.var_settings)
+                    nc.parent = mid
+                    nc.annotation = f"{onc.annotation} \u00b7 chunk {k + 1}"
+                    nc.runtime = "QUEUED"
+                    nodes[cid] = nc
+                    mapping[orig] = cid
+                for c in self.connections:
+                    if c.dest_id not in mapping:
+                        continue
+                    if c.source_id in mapping:
+                        conns.append(Connection(mapping[c.source_id], c.source_port, mapping[c.dest_id], c.dest_port))
+                        continue
+                    if c.source_id == start:
+                        dest = nodes[mapping[c.dest_id]]
+                        dest.fed = {**(dest.fed or {}), c.dest_port: (chunks[k] if c.source_port == 1 else FLOWVAR, stack)}
+                    key = (c.source_id, c.source_port)
+                    if key not in shared:
+                        o = self.nodes[c.source_id]
+                        shared[key] = port(c.source_id, c.source_port,
+                                           [FLOWVAR, o.outputs[c.source_port]] if o.outputs else None, o.out_stack)
+                    conns.append(Connection(shared[key], 1, mapping[c.dest_id], c.dest_port))
+                copies.append(mapping)
+            self.nodes = {**self.nodes, **nodes}
+            self.connections = self.connections + conns
+            self.metanodes = {**self.metanodes, mid: meta}
+            self._changed(dirty=False)
+            return mid, copies
+
+    def _drop_temporary(self, mid):
+        """Remove a temporary metanode with everything in it (also swapped in at once)."""
+        with self._lock:
+            gone = {nid for nid, nc in self.nodes.items() if nc.parent == mid}
+            self.connections = [c for c in self.connections if c.source_id not in gone and c.dest_id not in gone]
+            self.nodes = {nid: nc for nid, nc in self.nodes.items() if nid not in gone}
+            self.metanodes = {m: v for m, v in self.metanodes.items() if m != mid}
+            self._changed(dirty=False)
+
     def _collect_inputs(self, nid):
         nc = self.nodes[nid]
         conns = self.in_conns(nid)
         inputs, port_stacks, any_inactive = [], [], False
         for idx in range(len(nc.model.in_ports) + 1):
             c = conns.get(idx)
+            if c is not None and nc.fed and idx in nc.fed:
+                obj, fed_stack = nc.fed[idx]
+                port_stacks.append((idx, fed_stack))
+                if idx > 0:
+                    inputs.append(obj)
+                continue
             if c is None:
                 if idx > 0:
                     inputs.append(None)

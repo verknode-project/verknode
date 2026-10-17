@@ -47,6 +47,7 @@ Reference
 """
 from jupyterlab_verknode.engine import views  # noqa: F401 - chart/table helpers for node views
 from jupyterlab_verknode.engine.flowvars import VAR_TYPES, FlowVariable, coerce, infer_type, make  # noqa: F401
+from jupyterlab_verknode.engine.custom import capture_stdout  # noqa: F401 - this thread's print() into a buffer
 from jupyterlab_verknode.engine.helpers import selected_columns, substitute_variables  # noqa: F401
 from jupyterlab_verknode.engine.node import (  # noqa: F401
     DB_DATA,

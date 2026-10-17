@@ -25,7 +25,11 @@ About 250 nodes, by category:
   selector, in-database row filter/GroupBy/joiner/sorter/query, reader,
   writer, insert/update/delete, SQL executor.
 - **Flow Control** – counting, chunk, group, interval, column list, window,
-  generic and recursive loops; IF/CASE/empty-table switches; Try/Catch error
+  generic and recursive loops; parallel chunk loops (Parallel Chunk Start /
+  End: the chunks go through the nodes between them at the same time, the
+  visible nodes showing the first chunk, and a temporary metanode the others
+  while it runs: one port brings the table in and branches out to a copy of the
+  nodes per chunk); IF/CASE/empty-table switches; Try/Catch error
   handling, breakpoint, wait; flow variable creation and conversion.
 - **Scripting** – Python Script (polars; `chem` helpers when RDKit is present),
   Workflow Script (changes the workflow it is in), Jupyter Notebook (see [Python API and notebooks](python-api.md#jupyter-notebook-node)).

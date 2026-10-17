@@ -83,5 +83,7 @@ after them, so a checkbox or drop-down can rebuild part of the workflow.
 
 Example: `notebooks/examples/workflow_scripts.vkf` - a filter reconfigured
 from the data, a checkbox that switches the source for testing, a drop-down
-that changes a widget and adds a chart, and a number of parallel variants
-built from a template.
+that changes a widget and adds a chart, and a parallel chunk loop next to
+the same parallel structure built by a script (one branch per chunk, joined
+by Concatenate nodes; the engine runs such branches one after another, while
+the Parallel Chunk Start / End nodes run their chunks at the same time).

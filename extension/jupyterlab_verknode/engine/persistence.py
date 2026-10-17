@@ -39,7 +39,12 @@ def save_workflow(wf: Workflow) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         nodes = []
+        # (a parallel chunk loop's temporary metanode is not saved)
+        temporary = {m for m, v in wf.metanodes.items() if v.get("temporary")}
+        kept = {nid for nid, nc in wf.nodes.items() if nc.parent not in temporary}
         for nc in wf.nodes.values():
+            if nc.id not in kept:
+                continue
             folder = _folder(nc)
             ports = []
             if nc.executed:
@@ -99,10 +104,10 @@ def save_workflow(wf: Workflow) -> bytes:
             "workflow_variables": [v.to_json() for v in wf.workflow_variables],
             "custom_nodes": {"paths": wf.node_paths, "auto_reload": wf.auto_reload},
             "nodes": nodes,
-            "connections": [c.to_json() for c in wf.connections],
+            "connections": [c.to_json() for c in wf.connections if c.source_id in kept and c.dest_id in kept],
             "annotations": [{"type": "group", **g} for g in wf.groups],
             # metanodes: their nodes carry "parent"; inputs/outputs are the port pass-through nodes
-            "metanodes": list(wf.metanodes.values()),
+            "metanodes": [m for m in wf.metanodes.values() if m["id"] not in temporary],
         }
         z.writestr("workflow.json", _dump(workflow))
         z.writestr("workflowset.meta.json", _dump(wf.meta))
