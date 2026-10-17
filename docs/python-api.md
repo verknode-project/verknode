@@ -54,3 +54,34 @@ kernel the node's inputs and runs all cells, so you watch them execute and
 keep the variables to explore afterwards; outputs go back to the workflow,
 a failing cell fails the node, Cancel interrupts the kernel. When the
 notebook is not open, the node runs headless as usual.
+
+## Workflow Script node
+
+**Workflow Script** (Scripting › Python) runs Python with `workflow`: the
+workflow the node is in. The script reads it right away - nodes by label
+(`workflow.find("Sales")`, `workflow.find_all("Variant ")`, `workflow.me`),
+their settings, positions, widget layouts and connections - and changes it:
+
+    f = workflow.add_node("Row Filter", 300, 200, label="Big", column="units", operator=">", value="100")
+    workflow.connect(workflow.find("Sales"), f)          # replaces what fed that input
+    copies = workflow.copy([a, b], dy=150, labels={"A": "A copy"})
+    workflow.configure(workflow.find("Report"), title="Report - TEST DATA")
+    workflow.widget(chart, side="free", x=600, y=300, w=300, h=170)
+    workflow.group(*copies, text="built by a script")
+    workflow.remove(old); workflow.move(n, x, y); workflow.label(n, "...")
+    workflow.execute(f)                                  # run after the edits
+
+Edits are applied when the run ends - in order, as one undo step, stopping at
+the first that fails (the console says which) - so the running workflow never
+changes under its nodes; nodes added by the script can be used in later edits
+of the same script. A run that a Workflow Script started does not apply
+further script edits, so scripts cannot loop. Changing a node upstream of the
+script node resets it too. Like Python Script it has `input_table_1`,
+`flow_variables` (changes are passed on) and `output_table_1` (default: the
+input table). Input widgets with *Run on change* run the Workflow Scripts
+after them, so a checkbox or drop-down can rebuild part of the workflow.
+
+Example: `notebooks/examples/workflow_scripts.vkf` - a filter reconfigured
+from the data, a checkbox that switches the source for testing, a drop-down
+that changes a widget and adds a chart, and a number of parallel variants
+built from a template.

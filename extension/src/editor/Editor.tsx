@@ -1316,7 +1316,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   const [sketch, setSketch] = useState<number | null>(null);
   const widgetRef = useRef<(id: number, value: any) => void>();
   const selectRef = useRef<(id: number, selection: any) => void>();
-  /** Output widgets after a node (and the node itself when there are none, or it is one). */
+  /** Output widgets and Workflow Scripts after a node (and the node itself when there are none, or it is an output widget). */
   const widgetsAfter = (id: number): number[] => {
     const next = new Map<number, number[]>();
     for (const c of rawView?.connections ?? []) {
@@ -1332,7 +1332,10 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         }
       }
     }
-    const outputs = (rawView?.nodes ?? []).filter(n => after.has(n.id) && n.widget?.type === 'output').map(n => n.id);
+    // (Workflow Script nodes after an input run too: e.g. a checkbox that switches a path)
+    const outputs = (rawView?.nodes ?? [])
+      .filter(n => after.has(n.id) && (n.widget?.type === 'output' || n.factory === 'verknode.scripting.WorkflowScript'))
+      .map(n => n.id);
     const self = rawView?.nodes.find(n => n.id === id)?.widget?.type === 'output';
     return self || !outputs.length ? [id, ...outputs] : outputs;
   };

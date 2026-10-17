@@ -28,7 +28,7 @@ About 250 nodes, by category:
   generic and recursive loops; IF/CASE/empty-table switches; Try/Catch error
   handling, breakpoint, wait; flow variable creation and conversion.
 - **Scripting** – Python Script (polars; `chem` helpers when RDKit is present),
-  Jupyter Notebook (see [Python API and notebooks](python-api.md#jupyter-notebook-node)).
+  Workflow Script (changes the workflow it is in), Jupyter Notebook (see [Python API and notebooks](python-api.md#jupyter-notebook-node)).
 
 Port types: black triangle = table, red circle = flow variables, blue
 square = model, green square = image, dark red square = DB session, brown
@@ -36,7 +36,7 @@ square = DB data. Non-table port objects (models etc.) are pickled inside
 the `.vkf`, so only open workflow files you trust.
 
 Examples: `notebooks/examples/demo.vkf`, `chemistry.vkf`, `analytics.vkf`,
-`custom_nodes.vkf`, `widgets.vkf`, `timing.vkf`.
+`custom_nodes.vkf`, `widgets.vkf`, `timing.vkf`, `workflow_scripts.vkf`.
 
 ## Workflow files (.vkf)
 

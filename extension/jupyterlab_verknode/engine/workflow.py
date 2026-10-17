@@ -1371,6 +1371,8 @@ class Workflow:
 
     def _run_plan(self, plan, loops):
         t0 = time.time()
+        depth, self._next_run_depth = self._next_run_depth, 0
+        self._run_depth = depth
         try:
             self._run(plan, loops)
         except CanceledExecutionError:
@@ -1382,6 +1384,73 @@ class Workflow:
                 nc.runtime = None
             self._changed()
             self._log("INFO", f"Execution finished in {time.time() - t0:.2f}s")
+            # Workflow Script edits wait for the end of the run (in a thread of their own: this
+            # one still counts as executing)
+            edits, self._after_run = self._after_run, []
+            if edits:
+                threading.Thread(target=self._apply_after_run, args=(edits, threading.current_thread()), daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # Workflow Script nodes: edits of the workflow when the run ends
+    # ------------------------------------------------------------------
+    _after_run: list = []
+    _run_depth = 0
+    _next_run_depth = 0
+
+    def _script_workflow(self, nid):
+        from .workflow_edits import ScriptWorkflow
+
+        def record(fn, what):
+            if self._run_depth:
+                self._log("WARN", f"Workflow Script {_label(self.nodes[nid])}: edits of a run that a Workflow Script "
+                                  f"started are ignored (no loops) - {what}", nid)
+                return
+            if not self._after_run:
+                self._after_run = []
+            self._after_run.append((fn, what, nid))
+        return ScriptWorkflow(self, nid, record)
+
+    def _apply_after_run(self, edits, run_thread):
+        run_thread.join()
+        try:
+            request = self._apply_script_edits(edits)
+        except Exception as e:  # noqa: BLE001
+            self._log("ERROR", f"Workflow Script edits failed: {e}")
+            return
+        if request is not None:
+            ids, nid = request
+            try:
+                self._next_run_depth = 1
+                self.execute(ids)
+            except Exception as e:  # noqa: BLE001
+                self._next_run_depth = 0
+                self._log("ERROR", f"Workflow Script: execute: {e}", nid)
+
+    @undoable
+    def _apply_script_edits(self, edits):
+        """Apply the recorded edits in order (one undo step); stops at the first that fails.
+        Returns the run asked for afterwards: (node ids or None for all, script node), or None."""
+        request = None
+        for fn, what, nid in edits:
+            try:
+                if isinstance(fn, tuple):  # ("execute", node refs)
+                    refs = fn[1]
+                    ids = [r._sw._id(r) for r in refs] if refs else None  # (None: everything)
+                    if request is None:
+                        request = (ids, nid)
+                    elif request[0] is None or ids is None:
+                        request = (None, nid)
+                    else:
+                        request = (request[0] + ids, nid)
+                    continue
+                fn(self)
+            except Exception as e:  # noqa: BLE001
+                self._log("ERROR", f"Workflow Script {_label(self.nodes[nid]) if nid in self.nodes else nid}: {what}: {e}", nid)
+                break
+        n = sum(1 for fn, _, _ in edits if not isinstance(fn, tuple))
+        if n:
+            self._log("INFO", f"Workflow Script: applied {n} edit(s)")
+        return request
 
     def _run(self, subset, loops):
         deferred = set()
@@ -1511,6 +1580,7 @@ class Workflow:
                               logger=lambda level, text: self._log(level, text, nid))
             ctx.caught_error = caught
             ctx.on_progress = lambda f, _nc=nc: setattr(_nc, "progress", f)
+            ctx.script_workflow = lambda _nid=nid: self._script_workflow(_nid)
             ctx.workflow_path = self.path
             ctx.workflow_context = self.dialog_context(nid)
             ctx.frontend_request = lambda payload, timeout=4.0, _ctx=ctx: self.frontend_request(

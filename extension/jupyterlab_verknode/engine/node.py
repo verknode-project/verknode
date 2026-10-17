@@ -259,6 +259,8 @@ class ExecContext:
         self._cancel = cancel_event
         self._logger = logger
         self.on_progress = None  # set by the workflow: shows set_progress on the canvas
+        # set by the workflow: the workflow as a Workflow Script sees it (engine.workflow_edits)
+        self.script_workflow = None
 
     # -- flow variables -------------------------------------------------
     def variables(self) -> dict:
