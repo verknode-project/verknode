@@ -12,7 +12,7 @@ molecules - and see every intermediate result. Tables flow between nodes as
 [polars](https://pola.rs) DataFrames, workflows are saved with their data,
 and everything stays scriptable from Python.
 
-![Canvas widgets: a what-if with a price slider and a bar chart you can click, and a signal generator driven by number inputs](docs/images/widgets-v2.png)
+![Canvas widgets: a what-if with a price slider and a bar chart you can click, and a signal generator driven by number inputs](docs/images/widgets-v3.png)
 
 ## Highlights
 
@@ -37,16 +37,16 @@ and everything stays scriptable from Python.
 **Build workflows** from the node repository, with loops, switches and
 groups outlined on the canvas:
 
-![The workflow editor with the node repository and a workflow with a loop and an IF switch](docs/images/editor-v2.png)
+![The workflow editor with the node repository and a workflow with a loop and an IF switch](docs/images/editor-v3.png)
 
 **Watch them run**: every node shows its run time, progress and when it
 should be done; loops count their iterations:
 
-![A running workflow: time bars, a loop at iteration 3 of 6, queued nodes with their expected end](docs/images/timing-v2.png)
+![A running workflow: time bars, a loop at iteration 4 of 6, queued nodes with their expected end](docs/images/timing-v3.png)
 
 **Look at any result**, including molecules drawn as structures:
 
-![A table of molecules with their structures](docs/images/chemistry-v2.png)
+![A table of molecules with their structures](docs/images/chemistry-v3.png)
 
 ## Quick start
 
