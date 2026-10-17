@@ -3,6 +3,7 @@ import React, { memo } from 'react';
 
 import { NodeInfo, NodeState, NodeTiming, PortInfo, WidgetLayout } from '../types';
 import { iconBackground } from './themes';
+import { WidgetSelection } from './widgets/selection';
 import { TailStore } from './widgets/tails';
 import { WidgetPanel } from './widgets/WidgetPanel';
 
@@ -41,6 +42,13 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   busy?: boolean;
   /** speech-bubble tails of the widgets (drawn by the editor) */
   tails?: TailStore;
+  /** selected widgets, moving them as a group, anchoring */
+  widgetSelection?: WidgetSelection;
+  widgetStarts?: () => Map<number, { x: number; y: number }>;
+  onWidgetsMoved?: (moved: Map<number, { x: number; y: number }>) => void;
+  onAnchor?: (node: number, anchored: boolean) => void;
+  dockEnv?: () => { rects: Map<number, { x: number; y: number; w: number; h: number }>; members: Set<number> };
+  onWidgetDropped?: (node: number, layout: WidgetLayout) => Promise<unknown>;
 }
 
 export type WorkflowNodeType = Node<WorkflowNodeData, 'node' | 'metabar'>;
@@ -434,6 +442,12 @@ export const WorkflowNode = memo(({ data, selected, positionAbsoluteX, positionA
           id={n.id}
           at={{ x: positionAbsoluteX, y: positionAbsoluteY }}
           tails={data.tails}
+          selection={data.widgetSelection}
+          groupStarts={data.widgetStarts}
+          onGroupMoved={data.onWidgetsMoved}
+          onAnchor={value => data.onAnchor?.(n.id, value)}
+          dockEnv={data.dockEnv}
+          onDropped={data.onWidgetDropped && (layout => data.onWidgetDropped!(n.id, layout))}
           name={n.name}
           executing={n.state === 'EXECUTING' || n.state === 'QUEUED'}
           busy={!!data.busy}

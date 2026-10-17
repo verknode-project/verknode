@@ -217,7 +217,7 @@ OPS = {
     "remove_nodes": lambda wf, a: wf.remove_nodes(a["ids"]),
     "connect": lambda wf, a: wf.connect(a["sourceID"], a["sourcePort"], a["destID"], a["destPort"]),
     "disconnect": lambda wf, a: wf.disconnect(a["sourceID"], a["sourcePort"], a["destID"], a["destPort"]),
-    "move": lambda wf, a: wf.move(a["positions"]),
+    "move": lambda wf, a: wf.move(a["positions"], a.get("layouts")),
     "rewire": lambda wf, a: wf.rewire(a.get("remove", []), a.get("add", []), a.get("positions"), a.get("delete", [])),
     "set_annotation": lambda wf, a: wf.set_annotation(a["id"], a["text"]),
     "set_widget_layouts": lambda wf, a: wf.set_widget_layouts(a["layouts"]),

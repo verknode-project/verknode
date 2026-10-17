@@ -174,6 +174,8 @@ export interface WidgetLayout {
   w?: number;
   h?: number;
   minimized?: boolean;
+  /** kept where it is: not dragged, not moved along with its node (or a selection) */
+  anchored?: boolean;
 }
 
 export interface ConnectionInfo {

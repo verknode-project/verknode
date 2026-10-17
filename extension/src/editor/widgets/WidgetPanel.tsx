@@ -4,6 +4,8 @@ import { InputWidgetInfo, OutputWidgetInfo, WidgetInfo, WidgetLayout } from '../
 import { BarChart, formatValue, LineChart, ScatterChart } from './charts';
 import { BUILTIN_CONTROLS } from './controls';
 import { HtmlFrame } from './HtmlFrame';
+import { useWidgetSelection, WidgetSelection } from './selection';
+import { dockGroup, groupTop, Rect as DockRect, snapGroup, snapResize } from './snap';
 import { TailStore } from './tails';
 import { INPUT_CONTROLS, OUTPUT_RENDERERS, OutputRendererProps, registerInputControl, registerOutputRenderer } from './registry';
 
@@ -153,6 +155,9 @@ function track(
 }
 
 type Point = { x: number; y: number };
+
+/** Widgets snap to each other within this many screen pixels. */
+const SNAP = 10;
 type Rect = { x: number; y: number; w: number; h: number };
 
 /**
@@ -224,7 +229,19 @@ export function WidgetPanel(props: {
   onSelect: (selection: any) => void;
   onLayout: (layout: WidgetLayout) => Promise<unknown>;
   onSketch: () => void;
+  /** the editor's widget selection; canvas positions of the selected widgets that move with a group */
+  selection?: WidgetSelection;
+  groupStarts?: () => Map<number, Point>;
+  /** a group of selected widgets was dragged (their new canvas positions) */
+  onGroupMoved?: (moved: Map<number, Point>) => void;
+  /** the anchor button: this widget, or all selected ones when it is selected */
+  onAnchor?: (anchored: boolean) => void;
+  /** dropped somewhere new (the editor stores it, with the widgets it docked to) */
+  onDropped?: (layout: WidgetLayout) => Promise<unknown>;
+  /** every widget's box on the canvas, and which can be docked to each other (not anchored) */
+  dockEnv?: () => { rects: Map<number, DockRect>; members: Set<number> };
 }) {
+  useWidgetSelection(props.selection);
   const { widget, layout } = props;
   const side = layout.side ?? (widget.type === 'input' ? 'left' : 'right');
   const dock = useRef<HTMLDivElement>(null);
@@ -246,7 +263,12 @@ export function WidgetPanel(props: {
   // over its node while dragged: dropping it there docks it at the default place
   const [overNode, setOverNode] = useState(false);
   // (positions inside the node's box)
-  const free = drag ?? (side === 'free' ? { x: (layout.x ?? 0) - props.at.x, y: (layout.y ?? 0) - props.at.y } : null);
+  const grouped = props.selection?.movingPosition(props.id);
+  const free = grouped
+    ? { x: grouped.x - props.at.x, y: grouped.y - props.at.y }
+    : (drag ?? (side === 'free' ? { x: (layout.x ?? 0) - props.at.x, y: (layout.y ?? 0) - props.at.y } : null));
+  const selected = !!props.selection?.has(props.id);
+  const anchored = !!layout.anchored;
   const w = size?.w ?? layout.w ?? (widget.type === 'output' ? widget.width : undefined);
   const h = size?.h ?? layout.h ?? (widget.type === 'output' ? widget.height : undefined);
   const minimized = !!layout.minimized;
@@ -285,13 +307,91 @@ export function WidgetPanel(props: {
     };
   }, []);
 
+  /**
+   * What dragging this title bar moves: the widget's docked group when this is the group's top
+   * widget (its handle; any other member leaves the group), and the other selected widgets.
+   */
+  const movePlan = (selectedNow: boolean) => {
+    const env = props.dockEnv?.();
+    const moving = new Set([props.id]);
+    let group = [props.id];
+    let top: number | null = null;
+    if (env) {
+      group = dockGroup(props.id, env.rects, env.members);
+      top = group.length > 1 ? groupTop(group, env.rects) : null;
+      if (top === props.id) {
+        group.forEach(g => moving.add(g));
+      }
+    }
+    if (selectedNow) {
+      props.groupStarts?.().forEach((_, id) => moving.add(id));
+    }
+    return { env, moving, group, top };
+  };
+  // hovering the title bar outlines what a drag would move (and, in a group, what would stay)
+  const [hint, setHintText] = useState('');
+  const showHint = () => {
+    if (anchored) {
+      setHintText('Anchored: stays where it is (unanchor it to move it)');
+      return;
+    }
+    const { moving, group, top } = movePlan(selected);
+    const staying = group.filter(id => !moving.has(id));
+    props.selection?.setHint({ moving: [...moving], main: top === props.id ? props.id : null, staying });
+    const others = moving.size - 1;
+    setHintText(
+      top === props.id
+        ? `Drag to move the group (${group.length} widgets${moving.size > group.length ? ` and ${moving.size - group.length} more selected` : ''})`
+        : top !== null
+          ? `Drag to take this widget out of its group${others ? ` (with ${others} selected)` : ''}; the top widget's title bar moves the whole group`
+          : `Drag to move${others ? ` (with ${others} selected widget${others > 1 ? 's' : ''})` : ''} · near another widget it snaps to it`
+    );
+  };
+  const hideHint = () => props.selection?.setHint(null);
+
   const startMove = (e: React.PointerEvent) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest('button')) {
       return;
     }
+    const sel = props.selection;
+    // Ctrl / Shift + click adds or removes the widget from the selection
+    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+      e.stopPropagation();
+      sel?.toggleExplicit(props.id);
+      return;
+    }
+    if (!selected) {
+      sel?.setExplicit([props.id]);
+    }
+    if (anchored) {
+      return; // kept where it is
+    }
+    sel?.setHint(null);
     const el = dock.current!;
     const root = el.closest('.verknode-node') as HTMLElement;
     const zoom = zoomOf(root);
+    const { env, moving } = movePlan(selected);
+    // snapping to the widgets that stay: next to one, or in line with its edges - any of the moving
+    // widgets can dock (e.g. the bottom one of a group next to another widget)
+    const movingRects = env ? [...moving].map(id => env.rects.get(id)).filter((r): r is DockRect => !!r) : [];
+    const others = env ? [...env.rects].filter(([id]) => !moving.has(id)).map(([, r]) => r) : [];
+    const snapped = (dx: number, dy: number) => {
+      const s = snapGroup(movingRects.map(r => ({ ...r, x: r.x + dx, y: r.y + dy })), others, SNAP / zoom);
+      return { dx: Math.round(dx + s.dx), dy: Math.round(dy + s.dy) };
+    };
+    if (sel && env && moving.size > 1) {
+      sel.startMove(new Map([...moving].filter(id => env.rects.has(id)).map(id => [id, { x: env.rects.get(id)!.x, y: env.rects.get(id)!.y }])));
+      track(
+        e,
+        zoom,
+        (dx, dy) => {
+          const s = snapped(dx, dy);
+          sel.moveBy(s.dx, s.dy);
+        },
+        moved => (moved ? props.onGroupMoved?.(sel.moved) : sel.endMove())
+      );
+      return;
+    }
     const r = el.getBoundingClientRect();
     const rr = root.getBoundingClientRect();
     const start = { x: (r.left - rr.left) / zoom - root.clientLeft, y: (r.top - rr.top) / zoom - root.clientTop };
@@ -304,7 +404,8 @@ export function WidgetPanel(props: {
       e,
       zoom,
       (dx, dy, ev) => {
-        setDrag((last = { x: Math.round(start.x + dx), y: Math.round(start.y + dy) }));
+        const s = snapped(dx, dy);
+        setDrag((last = { x: Math.round(start.x + s.dx), y: Math.round(start.y + s.dy) }));
         setOverNode(onNode(ev));
       },
       (moved, ev) => {
@@ -312,7 +413,9 @@ export function WidgetPanel(props: {
         if (moved && onNode(ev)) {
           void commit({ ...layout, side: undefined, x: undefined, y: undefined });
         } else if (moved) {
-          void commit({ ...layout, side: 'free', x: props.at.x + last.x, y: props.at.y + last.y });
+          const next: WidgetLayout = { ...layout, side: 'free', x: props.at.x + last.x, y: props.at.y + last.y };
+          // (the editor also pins the widgets it docked to that still sit beside their nodes)
+          void (props.onDropped ? props.onDropped(next).catch(() => setDrag(null)) : commit(next));
         }
       }
     );
@@ -326,11 +429,26 @@ export function WidgetPanel(props: {
     const start = { w: el.offsetWidth, h: el.offsetHeight };
     const sx = side === 'left' ? -1 : side === 'above' || side === 'below' ? 2 : 1;
     const sy = side === 'above' ? -1 : 1;
+    // growing to the right / down (free or right of its node): the edges snap to the other widgets' edges
+    const env = props.dockEnv?.();
+    const own = side === 'free' || side === 'right' ? env?.rects.get(props.id) : undefined;
+    const others = env ? [...env.rects].filter(([id]) => id !== props.id).map(([, r]) => r) : [];
+    const extraW = dock.current!.offsetWidth - el.offsetWidth;
+    const extraH = dock.current!.offsetHeight - el.offsetHeight;
     let last = start;
     track(
       e,
       zoom,
-      (dx, dy) => setSize((last = { w: Math.round(Math.max(80, start.w + sx * dx)), h: Math.round(Math.max(30, start.h + sy * dy)) })),
+      (dx, dy) => {
+        let w = Math.max(80, start.w + sx * dx);
+        let h = Math.max(30, start.h + sy * dy);
+        if (own) {
+          const s = snapResize({ x: own.x, y: own.y, w: w + extraW, h: h + extraH }, others, SNAP / zoom);
+          w += s.dw;
+          h += s.dh;
+        }
+        setSize((last = { w: Math.round(w), h: Math.round(h) }));
+      },
       moved => moved && void commit({ ...layout, w: last.w, h: last.h })
     );
   };
@@ -343,7 +461,8 @@ export function WidgetPanel(props: {
       <div
         ref={dock}
         // (nodrag / nopan: dragging in the widget neither moves the node nor pans the canvas; the title bar moves the widget)
-        className={`verknode-widget-dock nodrag nopan verknode-dock-${free ? 'free' : side}${drag ? ' verknode-dragging' : ''}`}
+        className={`verknode-widget-dock nodrag nopan verknode-dock-${free ? 'free' : side}${drag || grouped ? ' verknode-dragging' : ''}${selected ? ' verknode-widget-selected' : ''}${anchored ? ' verknode-widget-anchored' : ''}`}
+        data-widget={props.id}
         style={free ? { left: free.x, top: free.y } : undefined}
         // double-clicks stay inside (on the node they open its dialog)
         onDoubleClick={e => e.stopPropagation()}
@@ -351,7 +470,9 @@ export function WidgetPanel(props: {
         <div className={`verknode-widget verknode-widget-${widget.type === 'input' ? 'in' : 'out'}${widget.type === 'input' ? ` verknode-control-${widget.control}` : ''}${minimized ? ' verknode-widget-minimized' : ''}`}>
           <div
             className="verknode-widget-head nodrag nopan"
-            title="Drag to move · double-click to minimize or restore"
+            title={`${hint || 'Drag to move'} · Ctrl+click to select · double-click to minimize or restore`}
+            onPointerEnter={showHint}
+            onPointerLeave={hideHint}
             onPointerDown={startMove}
             onDoubleClick={e => !(e.target as HTMLElement).closest('button') && void commit({ ...layout, minimized: !minimized })}
           >
@@ -366,6 +487,19 @@ export function WidgetPanel(props: {
                 ↺
               </button>
             )}
+            <button
+              className={`verknode-widget-mini verknode-widget-anchor${anchored ? ' verknode-active' : ''}`}
+              title={
+                (anchored ? 'Anchored: stays where it is. Click to free it' : 'Free: click to anchor it where it is') +
+                (selected && (props.selection?.ids.length ?? 0) > 1 ? ' (all selected widgets)' : '')
+              }
+              onClick={() => props.onAnchor?.(!anchored)}
+            >
+              <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+                <circle cx="8" cy="3.2" r="1.7" />
+                <path d="M8 4.9V14.2M5 7.6h6M2.6 9.6c0 2.6 2.4 4.6 5.4 4.6s5.4-2 5.4-4.6" />
+              </svg>
+            </button>
             <button
               className="verknode-widget-mini verknode-widget-min"
               title={minimized ? 'Restore' : 'Minimize'}

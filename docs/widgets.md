@@ -29,6 +29,27 @@ Widgets):
   default place). Drag its corner to resize it; the title bar button (or
   a double-click on it) minimizes it. The node's context menu docks it
   left, right, above or below, and resets its size.
+- **Selecting and anchoring** - the marquee (Shift+drag on the canvas)
+  selects widgets as well as nodes; Ctrl/Shift+click on a title bar adds or
+  removes one; selecting nodes selects their widgets too. Dragging a selected
+  widget moves all selected widgets, and dragging selected nodes takes their
+  moved widgets along. The anchor button on the title bar (grey while free)
+  pins a widget where it is: it is no longer dragged, moved with its node or
+  selected with it. With several widgets selected, the anchor button sets
+  them all to the same state.
+- **Docking widgets together** - a dragged widget snaps to the others when
+  it comes close: next to one (touching) or with an edge in line with one;
+  a widget being resized snaps its right / bottom edge to the other widgets'
+  edges (e.g. to the width of the one above). Widgets that touch form a
+  group: dragging the group's top widget moves the whole group, dragging any
+  other member takes it out of the group. Hovering a title bar shows what a
+  drag would do: one outline around everything that would move (a whole
+  group when it is the top widget's, that widget alone otherwise) and a
+  dotted one around the rest of its group, which would stay; the tooltip
+  says so too. When a group moves, whichever of its widgets comes close to
+  another widget docks it. A widget still beside its node joins a group
+  when one docks to it: it is pinned where it is, so it stays with the group
+  when its node moves. Anchored widgets are snapped to but never move.
 - The dialog sets the kind-specific options: label, output name and default
   value of inputs (choices, slider bounds, table columns ...), title and
   columns of displays.

@@ -38,6 +38,8 @@ import { NodeViewDialog } from './NodeViewDialog';
 import { PortView } from './PortView';
 import { Description, NODE_DRAG_MIME, Repository } from './Repository';
 import { SketcherDialog } from './sketcher/SketcherDialog';
+import { useWidgetSelection, WidgetSelection } from './widgets/selection';
+import { dockGroup, outlinePath, Rect as WidgetRect } from './widgets/snap';
 import { TailStore, useTails } from './widgets/tails';
 
 const nodeTypes = { node: WorkflowNode, metabar: MetanodeBar };
@@ -78,6 +80,27 @@ function WidgetTails({ store }: { store: TailStore }) {
       ))}
     </svg>
   ) : null;
+}
+
+/**
+ * What dragging the hovered widget title bar would move: one outline around
+ * those widgets (a docked group as a whole), and a dotted one around the
+ * widgets of its group that would stay.
+ */
+function WidgetHints({ selection, rects }: { selection: WidgetSelection; rects: () => Map<number, WidgetRect> }) {
+  useWidgetSelection(selection);
+  const hint = selection.hint;
+  if (!hint) {
+    return null;
+  }
+  const all = rects();
+  const pick = (ids: number[]) => ids.map(id => all.get(id)).filter((r): r is WidgetRect => !!r);
+  return (
+    <svg className="verknode-widget-hints" width="1" height="1">
+      <path className="verknode-hint-staying" d={outlinePath(pick(hint.staying), 4)} />
+      <path className="verknode-hint-moving" d={outlinePath(pick(hint.moving), 4)} />
+    </svg>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -356,6 +379,15 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   }, [rawView, level]);
   const flow = useReactFlow();
   const tails = useMemo(() => new TailStore(), []);
+  // selected canvas widgets (marquee, Ctrl+click, or with their nodes unless anchored)
+  const widgetSel = useMemo(() => new WidgetSelection(), []);
+  const widgetOps = useRef({
+    starts: () => new Map<number, { x: number; y: number }>(),
+    moved: (_: Map<number, { x: number; y: number }>) => undefined as void,
+    anchor: (_: number, __: boolean) => undefined as void,
+    env: () => ({ rects: new Map<number, { x: number; y: number; w: number; h: number }>(), members: new Set<number>() }),
+    dropped: (_: number, __: WidgetLayout) => Promise.resolve() as Promise<unknown>
+  });
   const wrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -423,6 +455,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       }
       setNodes(ns => ns.map(n => ({ ...n, selected: hit.has(n.id) })));
       setEdges(es => es.map(x => ({ ...x, selected: false })));
+      widgetSel.setExplicit(widgetsIn(start.x, start.y, ev.clientX, ev.clientY), keep.size > 0 || e.ctrlKey || e.metaKey);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -608,6 +641,8 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
           id: String(n.id),
           type: (bar ? 'metabar' : 'node') as 'metabar' | 'node',
           ...(bar ? { draggable: false, deletable: false, selectable: false } : {}),
+          // widgets float above plain nodes (a widget moved over a node stays visible)
+          ...(n.widget ? { zIndex: 1 } : {}),
           position: old?.dragging ? old.position : { x: n.x, y: n.y },
           // keep the measured size: React Flow hides nodes it thinks are unmeasured, and a
           // hidden editor tab (e.g. while its notebook runs) cannot measure them again
@@ -625,6 +660,12 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
             onWidgetLayout: (id: number, layout: WidgetLayout) => controller.op('set_widget_layouts', { layouts: [{ id, layout }] }),
             onSketch: setSketch,
             tails,
+            widgetSelection: widgetSel,
+            widgetStarts: () => widgetOps.current.starts(),
+            onWidgetsMoved: (moved: Map<number, { x: number; y: number }>) => widgetOps.current.moved(moved),
+            onAnchor: (id: number, anchored: boolean) => widgetOps.current.anchor(id, anchored),
+            dockEnv: () => widgetOps.current.env(),
+            onWidgetDropped: (id: number, layout: WidgetLayout) => widgetOps.current.dropped(id, layout),
             busy: view.executing,
             navHints: hintsRef.current.get(n.id),
             barHeight
@@ -1055,7 +1096,26 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       }
     }
     dragProbe.current = { samples, icons };
+    const movable = widgetSel.ids
+      .map(id => byId.get(id))
+      .filter((n): n is NodeInfo => !!n?.widget && n.widgetLayout?.side === 'free' && !n.widgetLayout.anchored);
+    if (movable.length && dragged.length) {
+      widgetSel.startMove(new Map(movable.map(n => [n.id, { x: n.widgetLayout!.x ?? 0, y: n.widgetLayout!.y ?? 0 }])));
+      dragOrigin.current = { id: dragged[0].id, x: dragged[0].position.x, y: dragged[0].position.y };
+    }
   };
+  const dragOrigin = useRef<{ id: string; x: number; y: number } | null>(null);
+  const followDrag = (dragged: { id: string; position: { x: number; y: number } }[]) => {
+    const o = dragOrigin.current;
+    const n = o && dragged.find(d => d.id === o.id);
+    if (o && n) {
+      widgetSel.moveBy(Math.round(n.position.x - o.x), Math.round(n.position.y - o.y));
+    }
+  };
+  /** Layouts of the widgets that moved with a selection (and the end of that move, once shown). */
+  const movedLayouts = () =>
+    [...widgetSel.moved].map(([id, p]) => ({ id, layout: { ...(byId.get(id)?.widgetLayout ?? {}), side: 'free' as const, x: p.x, y: p.y } }));
+  const endWidgetMove = () => window.requestAnimationFrame(() => window.requestAnimationFrame(() => widgetSel.endMove()));
   /** Connection under the dragged nodes' icons that they can be inserted into. */
   const edgeUnder = (dragged: { id: string; position: { x: number; y: number } }[]): string | null => {
     const probe = dragProbe.current;
@@ -1088,12 +1148,132 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     const edge = id ? view?.connections.find(x => edgeId(x) === id) : undefined;
     const draggedInfo = dragged.map(n => byId.get(Number(n.id))).filter((n): n is NodeInfo => !!n);
     const links = edge ? planInsert(draggedInfo, edge, view?.connections ?? []) : null;
-    void run(() =>
-      edge && links
-        ? controller.op('rewire', { positions, remove: [edge.flat ?? edge], add: flatLinks(links) })
-        : controller.op('move', { positions })
-    );
+    const layouts = dragOrigin.current ? movedLayouts() : [];
+    dragOrigin.current = null;
+    void run(async () => {
+      if (edge && links) {
+        await controller.op('rewire', { positions, remove: [edge.flat ?? edge], add: flatLinks(links) });
+        if (layouts.length) {
+          await controller.op('set_widget_layouts', { layouts });
+        }
+      } else {
+        await controller.op('move', { positions, layouts });
+      }
+    }).finally(endWidgetMove);
   };
+  /** Where a widget is on the canvas (its top left, as a free layout's x / y). */
+  const widgetPosition = (id: number): { x: number; y: number } | null => {
+    const node = wrapper.current?.querySelector(`.react-flow__node[data-id="${id}"]`);
+    const dock = node?.querySelector('.verknode-widget-dock');
+    const root = node?.querySelector<HTMLElement>('.verknode-node');
+    if (!dock || !root) {
+      return null;
+    }
+    const r = dock.getBoundingClientRect();
+    const p = flow.screenToFlowPosition({ x: r.left, y: r.top }, { snapToGrid: false });
+    return { x: Math.round(p.x - root.clientLeft), y: Math.round(p.y - root.clientTop) };
+  };
+  widgetOps.current = {
+    // a selected widget dragged: every selected one that is not anchored comes along
+    starts: () => {
+      const out = new Map<number, { x: number; y: number }>();
+      for (const id of widgetSel.ids) {
+        const n = byId.get(id);
+        if (!n?.widget || n.widgetLayout?.anchored) {
+          continue;
+        }
+        const l = n.widgetLayout ?? {};
+        const p = l.side === 'free' ? { x: l.x ?? 0, y: l.y ?? 0 } : widgetPosition(id);
+        if (p) {
+          out.set(id, p);
+        }
+      }
+      return out;
+    },
+    moved: () => {
+      const layouts = movedLayouts();
+      const moved = new Map(layouts.map(l => [l.id, { x: l.layout.x, y: l.layout.y }]));
+      void run(() => controller.op('set_widget_layouts', { layouts: [...layouts, ...pinsAfter(moved)] })).finally(endWidgetMove);
+    },
+    // one widget dropped somewhere new
+    dropped: (id, layout) =>
+      run(() => controller.op('set_widget_layouts', { layouts: [{ id, layout }, ...pinsAfter(new Map([[id, { x: layout.x ?? 0, y: layout.y ?? 0 }]]))] })),
+    // every widget's box (canvas coordinates, x / y as a free layout's); free, unanchored ones dock to each other
+    env: () => {
+      const rects = new Map<number, { x: number; y: number; w: number; h: number }>();
+      const members = new Set<number>();
+      const zoom = flow.getZoom();
+      for (const el of Array.from(wrapper.current?.querySelectorAll<HTMLElement>('.verknode-widget-dock[data-widget]') ?? [])) {
+        const id = Number(el.dataset.widget);
+        const root = el.closest('.verknode-node') as HTMLElement | null;
+        const r = el.getBoundingClientRect();
+        const p = flow.screenToFlowPosition({ x: r.left, y: r.top }, { snapToGrid: false });
+        rects.set(id, { x: p.x - (root?.clientLeft ?? 0), y: p.y - (root?.clientTop ?? 0), w: r.width / zoom, h: r.height / zoom });
+        const l = byId.get(id)?.widgetLayout;
+        // (widgets still beside their nodes count too: docking to one pins it, see pinsAfter)
+        if (!l?.anchored) {
+          members.add(id);
+        }
+      }
+      return { rects, members };
+    },
+    // the anchor button: this widget, or all selected ones (set to the same state)
+    anchor: (id, anchored) => {
+      const ids = widgetSel.has(id) && widgetSel.ids.length > 1 ? widgetSel.ids : [id];
+      const layouts = ids
+        .map(i => byId.get(i))
+        .filter((n): n is NodeInfo => !!n?.widget)
+        .map(n => {
+          const l = n.widgetLayout ?? {};
+          // a docked widget is pinned where it is now
+          const p = anchored && l.side !== 'free' ? widgetPosition(n.id) : null;
+          return { id: n.id, layout: { ...l, ...(p ? { side: 'free' as const, x: p.x, y: p.y } : {}), anchored: anchored || undefined } };
+        });
+      void run(() => controller.op('set_widget_layouts', { layouts }));
+    }
+  };
+  /**
+   * Widgets that moved widgets docked to and that still sit beside their nodes: pinned as free
+   * widgets where they are, so the group stays together when those nodes move.
+   */
+  const pinsAfter = (moved: Map<number, { x: number; y: number }>) => {
+    const { rects, members } = widgetOps.current.env();
+    for (const [id, p] of moved) {
+      const r = rects.get(id);
+      if (r) {
+        rects.set(id, { ...r, x: p.x, y: p.y });
+      }
+    }
+    const pins = new Map<number, { x: number; y: number }>();
+    for (const id of moved.keys()) {
+      for (const g of dockGroup(id, rects, members)) {
+        const l = byId.get(g)?.widgetLayout;
+        if (!moved.has(g) && l?.side !== 'free') {
+          pins.set(g, { x: Math.round(rects.get(g)!.x), y: Math.round(rects.get(g)!.y) });
+        }
+      }
+    }
+    return [...pins].map(([g, p]) => ({ id: g, layout: { ...(byId.get(g)?.widgetLayout ?? {}), side: 'free' as const, x: p.x, y: p.y } }));
+  };
+  // the widgets of the selected nodes are selected too, unless anchored
+  useEffect(() => {
+    widgetSel.setDerived(
+      nodes
+        .filter(n => n.selected)
+        .map(n => byId.get(Number(n.id)))
+        .filter((n): n is NodeInfo => !!n?.widget && !n.widgetLayout?.anchored)
+        .map(n => n.id)
+    );
+  }, [nodes, byId]);
+  /** Widgets inside a marquee (client coordinates). */
+  const widgetsIn = (x0: number, y0: number, x1: number, y1: number): number[] =>
+    Array.from(wrapper.current?.querySelectorAll<HTMLElement>('.verknode-widget-dock[data-widget]') ?? [])
+      .filter(el => {
+        const r = el.getBoundingClientRect();
+        return r.left < Math.max(x0, x1) && r.right > Math.min(x0, x1) && r.top < Math.max(y0, y1) && r.bottom > Math.min(y0, y1);
+      })
+      .map(el => Number(el.dataset.widget));
+  const selectionStart = useRef<{ x: number; y: number } | null>(null);
 
   const enterLevel = (id: number | null) => {
     setLevel(id);
@@ -1675,7 +1855,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       void run(() => controller.op('set_widget_layouts', { layouts: targets.map(x => ({ id: x.id, layout: change(x.widgetLayout ?? {}, x) })) }));
     const dock = (to: 'left' | 'right' | 'above' | 'below') => ({
       label: `${side === to ? '✓ ' : ''}Widget ${to === 'left' || to === 'right' ? 'on the ' : ''}${to[0].toUpperCase()}${to.slice(1)}`,
-      action: () => update(l => ({ ...l, side: to, x: undefined, y: undefined }))
+      action: () => update(l => ({ ...l, side: to, x: undefined, y: undefined, anchored: undefined }))
     });
     return [
       dock('left'),
@@ -1970,10 +2150,25 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
             onNodesDelete={ns => void remove(ns.map(n => Number(n.id)))}
             onEdgesDelete={onEdgesDelete}
             onNodeDragStart={(_, __, dragged) => onDragStart(dragged)}
-            onNodeDrag={(_, __, dragged) => setInsertEdge(edgeUnder(dragged))}
+            onNodeDrag={(_, __, dragged) => {
+              setInsertEdge(edgeUnder(dragged));
+              followDrag(dragged);
+            }}
+            onSelectionStart={e => (selectionStart.current = { x: e.clientX, y: e.clientY })}
+            onSelectionEnd={e => {
+              const s = selectionStart.current;
+              selectionStart.current = null;
+              if (s) {
+                widgetSel.setExplicit(widgetsIn(s.x, s.y, e.clientX, e.clientY));
+              }
+            }}
             onNodeDragStop={(_, __, dragged) => onDragStop(dragged)}
             onNodeClick={(e, n) => {
               setCursor(Number(n.id));
+              // a plain click on a node (not on its widget) replaces the widget selection
+              if (!(e.ctrlKey || e.metaKey || e.shiftKey) && !(e.target as HTMLElement).closest('.verknode-widget-dock')) {
+                widgetSel.setExplicit([]);
+              }
               setDescribed(repoByFactory.get((n.data as any).node.factory) ?? null);
               // Ctrl/Cmd/Shift + click toggles the node in the selection
               if (e.ctrlKey || e.metaKey || e.shiftKey) {
@@ -2014,6 +2209,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
             onPaneClick={() => {
               setMenu(null);
               setCursor(null);
+              widgetSel.setExplicit([]);
             }}
             deleteKeyCode={['Delete', 'Backspace']}
             // left-drag pans by default (Shift+drag selects, see startBand);
@@ -2073,6 +2269,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
                 );
               })}
               <WidgetTails store={tails} />
+              <WidgetHints selection={widgetSel} rects={() => widgetOps.current.env().rects} />
             </ViewportPortal>
             <Controls showInteractive={false} />
             {prefs.showMinimap && (

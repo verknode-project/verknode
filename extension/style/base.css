@@ -1988,6 +1988,62 @@
   max-width: 220px;
 }
 
+/* selected widgets (marquee, Ctrl+click, or with their node) */
+.verknode-widget-selected > .verknode-widget {
+  border-color: var(--vk-selection, var(--jp-brand-color1));
+  box-shadow: 0 0 0 1.5px var(--vk-selection, var(--jp-brand-color1));
+}
+
+/* hovering a title bar: one outline around what a drag moves, a dotted one around what stays */
+.verknode-widget-hints {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.verknode-widget-hints path {
+  fill: none;
+  stroke-linecap: square;
+}
+
+.verknode-hint-moving {
+  stroke: color-mix(in srgb, var(--vk-selection, var(--jp-brand-color1)) 75%, transparent);
+  stroke-width: 2;
+}
+
+.verknode-hint-staying {
+  stroke: color-mix(in srgb, var(--vk-node-subtext, var(--jp-ui-font-color2)) 60%, transparent);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 3;
+}
+
+/* the anchor button: grey while the widget is free, in colour when anchored */
+.verknode-widget-anchor {
+  display: inline-flex;
+  align-items: center;
+  min-width: 18px;
+  justify-content: center;
+  border-color: transparent;
+  background: transparent;
+  color: var(--vk-node-subtext, var(--jp-ui-font-color2));
+  opacity: 0.55;
+}
+
+.verknode-widget-anchor:hover {
+  opacity: 1;
+}
+
+.verknode-widget-anchor.verknode-active {
+  color: var(--vk-selection, var(--jp-brand-color1));
+  opacity: 1;
+}
+
+.verknode-widget-anchored .verknode-widget-head {
+  cursor: default;
+}
+
 .verknode-widget-min {
   min-width: 18px;
   border-color: transparent;

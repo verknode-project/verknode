@@ -104,7 +104,8 @@ class NodeContainer:
         self.parent: int | None = None  # metanode containing this node
         self.annotation = f"Node {nid}"
         self.custom_description = ""
-        # canvas widget placement: {"side": left|right|above|below|free, "x", "y", "w", "h", "minimized"}
+        # canvas widget placement: {"side": left|right|above|below|free, "x", "y", "w", "h", "minimized",
+        # "anchored"} (anchored: kept where it is - not dragged, not moved along with nodes)
         # (a "free" widget is at x, y on the canvas: it stays there when the node moves)
         self.widget_layout: dict | None = None
         self.outputs: list | None = None  # index 0 = implicit flow variable port
@@ -571,7 +572,10 @@ class Workflow:
                 raise
 
     @undoable
-    def move(self, positions: list):
+    def move(self, positions: list, layouts: list | None = None):
+        """Move nodes (and metanodes); ``layouts``: widgets moved along (set_widget_layouts items)."""
+        if layouts:
+            self.set_widget_layouts(layouts)
         for p in positions:
             x, y = float(p["x"]), float(p["y"])
             if int(p["id"]) in self.metanodes:
@@ -1911,6 +1915,8 @@ def clean_widget_layout(layout, node_at=(0, 0), shift=(0, 0)) -> dict | None:
         out.pop("side")
     if layout.get("minimized"):
         out["minimized"] = True
+    if layout.get("anchored"):
+        out["anchored"] = True
     return out or None
 
 
