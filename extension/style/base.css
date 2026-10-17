@@ -387,6 +387,13 @@
   color: #000;
 }
 
+/* a note (e.g. a faster way to run it) */
+.verknode-badge-INFO {
+  background: #3d7fc4;
+  font-style: italic;
+  font-family: Georgia, serif;
+}
+
 /* iteration of a running loop, on its start and end nodes */
 .verknode-loop-pill {
   position: absolute;

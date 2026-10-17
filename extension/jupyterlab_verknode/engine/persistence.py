@@ -76,7 +76,8 @@ def save_workflow(wf: Workflow) -> bytes:
                 # run time and rows of this run, and of the last one (kept across resets, for estimates)
                 "timing": {"time": nc.exec_time if nc.executed else None, "rows": nc.rows if nc.executed else None,
                            "last_time": nc.last_time, "last_rows": nc.last_rows,
-                           **({"last_iterations": nc.last_iterations} if nc.last_iterations else {})},
+                           **({"last_iterations": nc.last_iterations} if nc.last_iterations else {}),
+                           **({"last_parallel": nc.last_parallel} if nc.last_parallel else {})},
                 "implementation": getattr(type(nc.model), "_verknode_hash", None),
                 "port_types": {
                     "in": [p.type for p in nc.model.in_ports],
@@ -174,6 +175,7 @@ def load_workflow(data: bytes, base_dir: str | None = None) -> Workflow:
             timing = s.get("timing") or {}
             nc.last_time, nc.last_rows = timing.get("last_time"), timing.get("last_rows")
             nc.last_iterations = timing.get("last_iterations")
+            nc.last_parallel = timing.get("last_parallel")
             if nc.executed:
                 nc.exec_time, nc.rows = timing.get("time"), timing.get("rows")
             wf.nodes[nid] = nc

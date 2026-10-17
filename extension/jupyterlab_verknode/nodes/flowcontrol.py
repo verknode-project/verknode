@@ -171,11 +171,15 @@ def _chunk_sizes(s, h) -> tuple:
 
 PARALLEL_HELP = (
     " The nodes between <i>Parallel Chunk Start</i> and <i>Parallel Chunk End</i> run on every chunk at the "
-    "same time: the visible nodes process the first chunk (inspect them as usual), the other chunks run in "
-    "worker threads through copies of them. Each chunk gets the flow variables <code>currentIteration</code> "
-    "(the chunk index, from 0) and <code>maxIterations</code> (the number of chunks). Work in polars and "
-    "waiting nodes run in parallel; plain Python code (e.g. a Python Script) still takes turns. Loops "
-    "inside the parallel part are not supported."
+    "same time: the visible nodes process the first chunk (inspect them as usual), the other chunks run "
+    "through copies of them in a temporary metanode. Each chunk gets the flow variables "
+    "<code>currentIteration</code> (the chunk index, from 0) and <code>maxIterations</code> (the number of "
+    "chunks). <i>Threads</i>: polars work and waiting nodes run in parallel, plain Python code (e.g. a "
+    "Python Script) takes turns. <i>Processes</i>: also plain Python code runs on several cores; each chunk "
+    "and its results are copied to and from a worker process (worth it for heavy chunks; the first run "
+    "starts the workers). <i>Auto</i>: starts with threads, measures how much of the chunks' time is plain "
+    "Python code, and uses processes for the next runs when that pays off. With threads, Parallel Chunk End "
+    "also tells when processes would be faster. Loops inside the parallel part are not supported."
 )
 
 
@@ -196,6 +200,9 @@ class ParallelChunkStart(NodeModel):
         F("chunks", "int", "Number of chunks", 4, show_if={"mode": "Number of chunks"}),
         F("rows_per_chunk", "int", "Rows per chunk", 100, show_if={"mode": "Rows per chunk"}),
         F("workers", "int", "Parallel chunks at most", 8, "How many chunks run at the same time."),
+        F("executor", "enum", "Run chunks in", "Threads", "Threads share the server's Python (no copying); "
+          "processes run Python code on several cores; Auto measures each run and picks for the next one.",
+          options=["Threads", "Processes", "Auto"]),
     ]
 
     def configure(self, in_specs, s, ctx):
@@ -208,6 +215,7 @@ class ParallelChunkStart(NodeModel):
         total, size = _chunk_sizes(s, df.height)
         ctx.loop["chunks"] = [df.slice(i * size, size) for i in range(total)]
         ctx.loop["workers"] = max(1, s["workers"])
+        ctx.loop["executor"] = s.get("executor") or "Threads"
         ctx.loop["total"] = total
         _push_loop_vars(ctx, 0, total)
         return [ctx.loop["chunks"][0]]

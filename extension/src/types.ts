@@ -56,7 +56,7 @@ export interface CustomReport {
 }
 
 export interface NodeMessage {
-  level: 'ERROR' | 'WARNING';
+  level: 'ERROR' | 'WARNING' | 'INFO';
   text: string;
 }
 

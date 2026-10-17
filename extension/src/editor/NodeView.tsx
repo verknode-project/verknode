@@ -415,7 +415,7 @@ export const WorkflowNode = memo(({ data, selected, positionAbsoluteX, positionA
         })}
         {n.message && (
           <span className={`verknode-node-badge verknode-badge-${n.message.level}`} title={n.message.text}>
-            {n.message.level === 'ERROR' ? '✖' : '!'}
+            {n.message.level === 'ERROR' ? '✖' : n.message.level === 'INFO' ? 'i' : '!'}
           </span>
         )}
         {n.loopIteration && (

@@ -16,6 +16,7 @@ import uuid
 import time
 import traceback
 
+import numpy as np
 import polars as pl
 
 from .custom import CustomNodes, capture_print, discard_print
@@ -121,6 +122,12 @@ class NodeContainer:
         self.last_time: float | None = None
         self.last_rows: int | None = None
         self.last_iterations: int | None = None  # loop ends: iterations of the last run (loop progress)
+        # parallel chunk ends: what the last run measured ({"mode", "python", "speedup", "use_processes"})
+        self.last_parallel: dict | None = None
+        # copies of the settings, variable settings and widget layout, and the configuration JSON,
+        # for undo snapshots (Workflow._config): kept while those objects stay the same - edits
+        # replace them, they are not changed in place
+        self._config_cache: tuple | None = None
         self.loop_state: dict | None = None  # loop ends while their loop runs (iteration, total, start)
         # input port -> (object, flow variables) it gets instead of what is connected (a parallel
         # chunk copy: its chunk, while the port it is connected to carries the whole table)
@@ -195,12 +202,78 @@ def undoable(method):
     return wrapper
 
 
+class _Connections(list):
+    """The connection list; counts its changes so the by-node index (Workflow._conn_index) knows
+    when to rebuild. (Connections themselves are never changed: they are replaced.)"""
+
+    rev = 0
+
+
+def _counting(name):
+    method = getattr(list, name)
+
+    def wrapper(self, *args, **kwargs):
+        self.rev += 1
+        return method(self, *args, **kwargs)
+    wrapper.__name__ = name
+    return wrapper
+
+
+for _name in ("append", "extend", "insert", "remove", "pop", "clear", "sort", "reverse",
+              "__setitem__", "__delitem__", "__iadd__", "__imul__"):
+    setattr(_Connections, _name, _counting(_name))
+
+
+class _Totals:
+    """Run times summed over the nodes before / after a node (Workflow._timings), with the
+    ancestor bits of Workflow._closure: whole-workflow sums stay fast in big workflows."""
+
+    def __init__(self, wf, members: dict):
+        self.order, self.pos, self.anc = wf._closure()
+        n = len(self.order)
+        est = [wf._estimate(nid) for nid in self.order]
+        self.est = np.array([np.nan if e is None else e for e in est], float)
+        self.executed = np.array([wf.nodes[nid].executed for nid in self.order], bool)
+        pairs = [(self.pos[m], self.pos[e]) for m, e in members.items() if m in self.pos and e in self.pos]
+        self.member = np.array([m for m, _ in pairs], int)
+        self.member_end = np.array([e for _, e in pairs], int)
+        self.n = n
+
+    def sum(self, nid, side: str, unexecuted: bool = False) -> tuple[float, bool, bool]:
+        """(total, estimated: not all executed, partial: some without any time) of the node and
+        those before / after it (unexecuted: only those not executed; the node itself counts)."""
+        i = self.pos.get(nid)
+        if i is None:
+            return 0.0, False, True
+        if side == "before":
+            mask = np.unpackbits(self.anc[i], count=self.n).astype(bool)
+        else:
+            mask = (self.anc[:, i >> 3] & (128 >> (i & 7))) != 0
+        if unexecuted:
+            mask &= ~self.executed
+        mask[i] = True
+        if len(self.member):
+            # inside a loop whose end is counted too: counted with its end
+            mask[self.member[mask[self.member] & mask[self.member_end] & (self.member != self.member_end)]] = False
+        vals = self.est[mask]
+        return float(np.nansum(vals)), bool((~self.executed[mask]).any()), bool(np.isnan(vals).any())
+
+
 class Workflow:
     _undo_depth = 0
 
+    @property
+    def connections(self) -> list:
+        return self._connections
+
+    @connections.setter
+    def connections(self, value):
+        self._connections = value if isinstance(value, _Connections) else _Connections(value)
+
     def __init__(self):
         self.nodes: dict[int, NodeContainer] = {}
-        self.connections: list[Connection] = []
+        self.connections = []
+        self._index = (None, -1, {}, {})  # (connection list, its rev, dest -> {port: c}, source -> [c])
         # metanodes: id -> {"id", "name", "parent", "x", "y", "inputs", "outputs"}; ids share
         # the node id space, "inputs"/"outputs" are the pass-through nodes of its ports
         self.metanodes: dict[int, dict] = {}
@@ -267,11 +340,21 @@ class Workflow:
     # ------------------------------------------------------------------
     # graph queries
     # ------------------------------------------------------------------
+    def _conn_index(self) -> tuple:
+        conns = self._connections
+        if self._index[0] is not conns or self._index[1] != conns.rev:
+            into, out = collections.defaultdict(dict), collections.defaultdict(list)
+            for c in list(conns):
+                into[c.dest_id][c.dest_port] = c
+                out[c.source_id].append(c)
+            self._index = (conns, conns.rev, into, out)
+        return self._index[2], self._index[3]
+
     def in_conns(self, nid) -> dict[int, Connection]:
-        return {c.dest_port: c for c in self.connections if c.dest_id == nid}
+        return dict(self._conn_index()[0].get(nid, {}))
 
     def out_conns(self, nid) -> list[Connection]:
-        return [c for c in self.connections if c.source_id == nid]
+        return list(self._conn_index()[1].get(nid, []))
 
     def descendants(self, nid) -> set:
         seen, todo = set(), [nid]
@@ -296,15 +379,18 @@ class Workflow:
     def topo_order(self, subset=None) -> list:
         ids = set(self.nodes) if subset is None else set(subset)
         indeg = {n: 0 for n in ids}
+        out = collections.defaultdict(list)
         for c in self.connections:
             if c.source_id in ids and c.dest_id in ids:
                 indeg[c.dest_id] += 1
-        ready = sorted((n for n, d in indeg.items() if d == 0), key=lambda n: (self.nodes[n].y, self.nodes[n].x, n))
+                out[c.source_id].append(c)
+        ready = collections.deque(sorted((n for n, d in indeg.items() if d == 0),
+                                         key=lambda n: (self.nodes[n].y, self.nodes[n].x, n)))
         order = []
         while ready:
-            n = ready.pop(0)
+            n = ready.popleft()
             order.append(n)
-            for c in self.out_conns(n):
+            for c in out[n]:
                 if c.dest_id in indeg:
                     indeg[c.dest_id] -= 1
                     if indeg[c.dest_id] == 0:
@@ -1145,37 +1231,70 @@ class Workflow:
         Equal fingerprints mean equal results, so undo/redo can keep
         executed outputs of nodes that are not affected.
         """
-        wf_vars = [v.to_json() for v in self.workflow_variables]
+        return self._fingerprints_of({nid: self._config(nc)[2] for nid, nc in self.nodes.items()},
+                                     [c.key() for c in self.connections], self._wf_vars_json())
+
+    def _wf_vars_json(self) -> str:
+        return json.dumps([v.to_json() for v in self.workflow_variables], sort_keys=True, default=str)
+
+    @staticmethod
+    def _fingerprints_of(configs: dict, connections: list, wf_vars: str) -> dict:
+        """Fingerprints from node id -> configuration JSON and (source, port, dest, port) connections
+        (of the workflow, or of an undo snapshot)."""
+        into = collections.defaultdict(list)
+        out = collections.defaultdict(list)
+        for src, sp, dst, dp in connections:
+            if src in configs and dst in configs:
+                into[dst].append((dp, sp, src))
+                out[src].append(dst)
+        indeg = {nid: len(into[nid]) for nid in configs}
+        ready = collections.deque(nid for nid, d in indeg.items() if d == 0)
         fps = {}
-        for nid in self.topo_order():
-            nc = self.nodes[nid]
-            inputs = sorted((p, c.source_port, fps[c.source_id]) for p, c in self.in_conns(nid).items())
-            impl = getattr(type(nc.model), "_verknode_hash", "")
-            payload = json.dumps([nc.factory, impl, nc.settings, nc.var_settings, inputs, wf_vars],
-                                 sort_keys=True, default=str)
-            fps[nid] = hashlib.sha1(payload.encode()).hexdigest()
+        while ready:
+            nid = ready.popleft()
+            inputs = sorted((dp, sp, fps[src]) for dp, sp, src in into[nid])
+            fps[nid] = hashlib.sha1(json.dumps([configs[nid], inputs, wf_vars]).encode()).hexdigest()
+            for dst in out[nid]:
+                indeg[dst] -= 1
+                if indeg[dst] == 0:
+                    ready.append(dst)
         return fps
+
+    @staticmethod
+    def _config(nc) -> tuple:
+        """(copy of the settings, copy of the variable settings, JSON of the configuration, copy of
+        the widget layout)."""
+        impl = getattr(type(nc.model), "_verknode_hash", "")
+        c = nc._config_cache
+        if c is None or c[0] is not nc.settings or c[1] is not nc.var_settings or c[2] != (nc.factory, impl) \
+                or c[3] is not nc.widget_layout:
+            config = json.dumps([nc.factory, impl, nc.settings, nc.var_settings], sort_keys=True, default=str)
+            c = (nc.settings, nc.var_settings, (nc.factory, impl), nc.widget_layout,
+                 (copy.deepcopy(nc.settings), copy.deepcopy(nc.var_settings), config, copy.deepcopy(nc.widget_layout)))
+            nc._config_cache = c
+        return c[4]
 
     _STATE = ("outputs", "out_stack", "inactive", "message", "view", "display", "exec_time", "rows", "traceback")
 
     def _snapshot(self) -> dict:
-        fps = self._fingerprints()
+        # (the settings copies are shared between snapshots: restoring copies them again; the
+        # fingerprints of the snapshot are worked out when it is restored, from "config")
         return {
             "nodes": [
                 {
                     "id": nid,
                     "factory": nc.factory,
                     "model": nc.model,
-                    "settings": copy.deepcopy(nc.settings),
-                    "var_settings": copy.deepcopy(nc.var_settings),
+                    "settings": (config := self._config(nc))[0],
+                    "var_settings": config[1],
                     "x": nc.x,
                     "y": nc.y,
                     "parent": nc.parent,
                     "annotation": nc.annotation,
                     "custom_description": nc.custom_description,
-                    "widget_layout": copy.deepcopy(nc.widget_layout),
+                    "widget_layout": config[3],
                     "last": (nc.last_time, nc.last_rows),
-                    "fingerprint": fps[nid],
+                    "config": config[2],
                     "state": {k: getattr(nc, k) for k in self._STATE},
                 }
                 for nid, nc in self.nodes.items()
@@ -1185,6 +1304,7 @@ class Workflow:
             "next_group_id": self.next_group_id,
             "metanodes": copy.deepcopy(self.metanodes),
             "workflow_variables": [v.to_json() for v in self.workflow_variables],
+            "workflow_variables_json": self._wf_vars_json(),
             "next_id": self.next_id,
         }
 
@@ -1213,11 +1333,13 @@ class Workflow:
         self.next_id = max(self.next_id, snap["next_id"])
         fps = self._fingerprints()
         by_id = {ns["id"]: ns for ns in snap["nodes"]}
+        snap_fps = self._fingerprints_of({ns["id"]: ns["config"] for ns in snap["nodes"]}, snap["connections"],
+                                         snap["workflow_variables_json"])
         for nid, nc in self.nodes.items():
             cur = current.get(nid)
             if cur is not None and current_fps.get(nid) == fps[nid]:
                 state = {k: getattr(cur, k) for k in self._STATE}
-            elif by_id[nid]["fingerprint"] == fps[nid]:
+            elif snap_fps.get(nid) == fps[nid]:
                 state = by_id[nid]["state"]
             else:
                 continue
@@ -1574,13 +1696,33 @@ class Workflow:
                     end_nc.progress = done[0] / len(chunks)
                     self.version += 1
 
+            from . import parallel
+
+            executor = loop.get("executor") or "Threads"
+            processes = executor == "Processes" or (executor == "Auto" and (end_nc.last_parallel or {}).get("use_processes"))
+            size = max(1, min(loop.get("workers", 8), len(chunks)))
+            # per chunk: (CPU time of the thread that ran it, wall time, CPU time of the worker process)
+            cpu, local = {}, []
+
             def work(k, mapping):
+                t0, c0 = time.time(), time.thread_time()
                 try:
+                    if processes:
+                        try:
+                            cpu[k] = self._run_chunk_process(start, body, chunks, k, mapping,
+                                                             max(1, min(size, len(chunks) - 1)))
+                            return
+                        except parallel.ChunkTransferError as e:
+                            if executor != "Auto":
+                                raise
+                            local.append(k)
+                            self._log("INFO", f"{end_nc.name} {_label(end_nc)}: chunk {k + 1}: {e}; it runs in a thread", end)
                     for cid in self.topo_order(set(mapping.values())):
                         if self._cancel.is_set():
                             raise CanceledExecutionError()
                         if self._inputs_ready(cid) and not self._execute_single(cid):
                             raise WorkflowError(self.nodes[cid].message[1] if self.nodes[cid].message else "failed")
+                    cpu[k] = (time.thread_time() - c0, time.time() - t0, None)
                 except CanceledExecutionError:
                     raise
                 except Exception as e:  # noqa: BLE001 - reported on the end node
@@ -1588,13 +1730,17 @@ class Workflow:
                 finally:
                     finished()
 
-            with ThreadPoolExecutor(max_workers=max(1, min(loop.get("workers", 8), len(chunks)))) as pool:
+            t_all, p_all = time.time(), time.process_time()
+            with ThreadPoolExecutor(max_workers=size) as pool:
                 futures = [pool.submit(work, k, m) for k, m in enumerate(copies, start=1)]
                 try:
+                    t0, c0 = time.time(), time.thread_time()
                     self._run(set(body), {})  # the first chunk, through the visible nodes
+                    cpu[0] = (time.thread_time() - c0, time.time() - t0, None)
                 finally:
                     for f in futures:
                         f.result()
+            wall, proc = time.time() - t_all, time.process_time() - p_all
             finished()
             if errors:
                 k, e = min(errors, key=lambda x: x[0])
@@ -1611,7 +1757,9 @@ class Workflow:
                 results.append(src.outputs[c.source_port])
             loop["results"] = results
             loop["iteration"] = len(chunks) - 1
-            self._execute_single(end, loop)
+            if self._execute_single(end, loop):
+                self._parallel_advice(end, chunks, size, cpu, wall, proc,
+                                      bool(processes) and len(local) < len(copies), executor, local)
         finally:
             end_nc.loop_state = None
             if temp is not None:
@@ -1657,9 +1805,7 @@ class Workflow:
                                                           [FLOWVAR, whole if c.source_port == 1 else FLOWVAR], start_nc.out_stack)
             copies = []
             for k in range(1, len(chunks)):
-                stack = dict(start_nc.out_stack or {})
-                stack["currentIteration"] = make("currentIteration", k, "INTEGER")
-                stack["maxIterations"] = make("maxIterations", len(chunks), "INTEGER")
+                stack = self._chunk_stack(start, k, len(chunks))
                 mapping = {}
                 for orig in order:
                     onc = self.nodes[orig]
@@ -1694,6 +1840,127 @@ class Workflow:
             self.metanodes = {**self.metanodes, mid: meta}
             self._changed(dirty=False)
             return mid, copies
+
+    def _parallel_advice(self, end, chunks, size, cpu, wall, proc, processes, executor, local):
+        """What the run measured, for Auto's next run (end node's last_parallel), and a note on the
+        end node when the other way of running the chunks would do better.
+
+        Threads: plain Python code holds the GIL, so while the chunks took turns their threads'
+        CPU time adds up to about the wall time, and the process used about one core (waiting
+        hardly uses CPU; native code like polars or numpy also uses CPU in the chunk threads, but
+        it runs on many cores at once). Processes: each chunk had a worker, so the worker thread's
+        CPU time over its wall time is the share of Python code (unless the worker used many cores:
+        native code). Not counted: starting the workers (once; they are kept)."""
+        end_nc = self.nodes[end]
+        py = sum(c for c, _, _ in cpu.values())
+        speedup = None
+        if not processes:
+            cores = proc / wall if wall > 0 else 0.0
+            share = min(1.0, py / wall) if wall > 0 else 0.0
+            if cores > 1.5:
+                share /= cores  # native code on many cores
+            p = max(1, min(len(chunks), size, os.cpu_count() or 1))
+            mb = 2 * sum(c.estimated_size() for c in chunks[1:] if isinstance(c, pl.DataFrame)) / 1e6  # in and out, about
+            t_proc = max(py / p, wall - py) + mb / 300
+            speedup = wall / t_proc if t_proc > 0 else 1.0
+            use = share >= 0.6 and speedup >= 1.5 and wall - t_proc >= 1.0
+        else:
+            shares = []
+            for k, (c, w, pc) in cpu.items():
+                if w > 0:
+                    cores = pc / w if pc is not None else 1.0  # (the first chunk ran here: not measured)
+                    shares.append(min(1.0, c / w) / (cores if cores > 1.5 else 1.0))
+            share = sum(shares) / len(shares) if shares else 0.0
+            use = share >= 0.3
+        if local:
+            use = False  # (a chunk could not be copied to a worker process)
+        end_nc.last_parallel = {"mode": "processes" if processes else "threads", "python": round(share, 2),
+                                "speedup": round(speedup, 1) if speedup else None, "use_processes": use}
+        text = None
+        if executor == "Auto":
+            if local:
+                text = (f"Auto: chunk {', '.join(str(k + 1) for k in sorted(local))} could not be copied to a worker "
+                        "process and ran in a thread; the next run uses threads.")
+            elif not processes:
+                text = (f"Auto: the chunks ran in threads; plain Python code held them back, so the next run uses "
+                        f"processes (about x{speedup:.1f} faster expected)." if use else
+                        "Auto: the chunks ran in threads (they wait or run native code like polars, which threads "
+                        "run in parallel).")
+            else:
+                text = (f"Auto: the chunks ran in processes (plain Python code: {share:.0%} of their time)." if use else
+                        "Auto: the chunks ran in processes, but they hardly run plain Python code, so the next run "
+                        "uses threads (no copying).")
+        elif executor == "Threads" and use:
+            text = (f"The chunks took turns: plain Python code ({py:.1f} s of it) runs on one core at a time in "
+                    f"threads. 'Run chunks in: Processes' (on Parallel Chunk Start) could make this part about "
+                    f"x{speedup:.1f} faster.")
+        elif executor == "Processes" and not use and wall >= 2:
+            text = ("The chunks hardly run plain Python code (they wait, or run native code like polars): 'Run chunks "
+                    "in: Threads' does as well without copying them to worker processes.")
+        if text and end_nc.message is None:
+            end_nc.message = ("INFO", text)
+            self._log("INFO", f"{end_nc.name} {_label(end_nc)}: {text}", end)
+
+    def _chunk_stack(self, start, k, n) -> dict:
+        """Flow variables of chunk k (from 0) of n."""
+        stack = dict(self.nodes[start].out_stack or {})
+        stack["currentIteration"] = make("currentIteration", k, "INTEGER")
+        stack["maxIterations"] = make("maxIterations", n, "INTEGER")
+        return stack
+
+    def _run_chunk_process(self, start, body, chunks, k, mapping, size):
+        """Run chunk k in a worker process (engine.parallel); its copies in the temporary
+        metanode show what runs there and get the results. Returns the worker's (thread CPU, wall,
+        process CPU) time."""
+        from . import parallel
+
+        order = self.topo_order(set(body))
+        nodes = [{"id": n, "factory": self.nodes[n].factory, "settings": copy.deepcopy(self.nodes[n].settings),
+                  "var_settings": copy.deepcopy(self.nodes[n].var_settings), "annotation": self.nodes[n].annotation}
+                 for n in order]
+        sources, conns, keys = [], [], {}
+        free = max(self.nodes) + 1
+        stack = self._chunk_stack(start, k, len(chunks))
+        for c in self.connections:
+            if c.dest_id not in mapping:
+                continue
+            if c.source_id in mapping:
+                conns.append((c.source_id, c.source_port, c.dest_id, c.dest_port))
+                continue
+            key = (c.source_id, c.source_port)
+            if key not in keys:
+                src = self.nodes[c.source_id]
+                if c.source_id == start:
+                    outputs = [FLOWVAR, chunks[k] if c.source_port == 1 else FLOWVAR]
+                    src_stack = stack
+                else:
+                    outputs = [FLOWVAR, src.outputs[c.source_port]] if src.outputs else None
+                    src_stack = src.out_stack
+                keys[key] = free + len(sources)
+                sources.append({"id": keys[key], "type": src.out_port(c.source_port).type, "outputs": outputs,
+                                "stack": src_stack})
+            conns.append((keys[key], 1, c.dest_id, c.dest_port))
+        payload = {"base_dir": self.base_dir, "path": self.path, "node_paths": self.resolved_node_paths(),
+                   "nodes": nodes, "sources": sources, "connections": conns}
+
+        def on_status(orig, runtime, progress, started, executed):
+            nc = self.nodes.get(mapping.get(orig))
+            if nc is not None:
+                nc.runtime, nc.progress, nc.started = runtime or (None if executed else "QUEUED"), progress, started
+                self.version += 1
+
+        result = parallel.run_chunk(payload, size, on_status, self._cancel)
+        for orig, state in result["nodes"].items():
+            nc = self.nodes[mapping[orig]]
+            for key, value in state.items():
+                setattr(nc, key, value)
+            nc.runtime = None
+        for level, text, node in result["log"]:
+            self._log(level, f"chunk {k + 1}: {text}", mapping.get(node, node))
+        self._changed(dirty=False)
+        if result["error"]:
+            raise WorkflowError(result["error"])
+        return result["cpu"], result["wall"], result["process_cpu"]
 
     def _drop_temporary(self, mid):
         """Remove a temporary metanode with everything in it (also swapped in at once)."""
@@ -1882,19 +2149,27 @@ class Workflow:
                         out.setdefault(b, nid)
         return out
 
-    def _sum_times(self, ids, members) -> tuple[float, bool, bool]:
-        """(total, estimated: not all executed, partial: some without any time)."""
-        total, estimated, partial = 0.0, False, False
-        for i in ids:
-            if members.get(i) in ids:
-                continue  # inside a loop: counted with its end
-            t = self._estimate(i)
-            estimated |= not self.nodes[i].executed
-            if t is None:
-                partial = True
-            else:
-                total += t
-        return total, estimated, partial
+    def _closure(self) -> tuple:
+        """(topological order, node id -> position, ancestors): row i holds the ancestors of the
+        node at position i as packed bits (numpy.packbits order). Kept while the nodes and
+        connections stay the same (views ask for it every time the workflow changes)."""
+        key = (tuple(self.nodes), self._connections, self._connections.rev)
+        cached = getattr(self, "_closure_cache", None)
+        if cached is not None and cached[0][0] == key[0] and cached[0][1] is key[1] and cached[0][2] == key[2]:
+            return cached[1]
+        order = self.topo_order()
+        pos = {nid: i for i, nid in enumerate(order)}
+        anc = np.zeros((len(order), (len(order) + 7) // 8), np.uint8)
+        into = self._conn_index()[0]
+        for i, nid in enumerate(order):
+            for c in into.get(nid, {}).values():
+                j = pos.get(c.source_id)
+                if j is not None:
+                    anc[i] |= anc[j]
+                    anc[i, j >> 3] |= 128 >> (j & 7)
+        result = (order, pos, anc)
+        self._closure_cache = (key, result)
+        return result
 
     def _timings(self, analysis) -> dict:
         """Per node: its run time and time per row, an ETA (configured: running it with the
@@ -1933,6 +2208,7 @@ class Workflow:
                 else:
                     acc += rem
                 running[nid] = (acc, partial, info)
+        totals = _Totals(self, members)
         for nid, nc in self.nodes.items():
             if is_boundary(nc.model):
                 continue
@@ -1946,16 +2222,16 @@ class Workflow:
                 t["eta"], t["etaPartial"], info = running[nid]
                 t.update(info)
             elif not nc.runtime and not nc.executed and self.node_state(nc, analysis.get(nid)) == "CONFIGURED":
-                ids = {nid} | {a for a in self.ancestors(nid) if not self.nodes[a].executed}
-                total, _, partial = self._sum_times(ids, members)
+                total, _, partial = totals.sum(nid, "before", unexecuted=True)
                 t["eta"], t["etaPartial"] = total, partial
-            before, after = self.ancestors(nid), self.descendants(nid)
+            # (anything before / after it: any connection in / out)
+            before, after = bool(self._conn_index()[0].get(nid)), bool(self._conn_index()[1].get(nid))
             if not before and after:
                 t["totalKind"] = "workflow"
-                t["total"], t["totalEstimated"], t["totalPartial"] = self._sum_times({nid} | after, members)
+                t["total"], t["totalEstimated"], t["totalPartial"] = totals.sum(nid, "after")
             elif before and not after:
                 t["totalKind"] = "branch"
-                t["total"], t["totalEstimated"], t["totalPartial"] = self._sum_times({nid} | before, members)
+                t["total"], t["totalEstimated"], t["totalPartial"] = totals.sum(nid, "before")
             out[nid] = t
         return out
 

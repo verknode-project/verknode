@@ -29,7 +29,9 @@ About 250 nodes, by category:
   End: the chunks go through the nodes between them at the same time, the
   visible nodes showing the first chunk, and a temporary metanode the others
   while it runs: one port brings the table in and branches out to a copy of the
-  nodes per chunk); IF/CASE/empty-table switches; Try/Catch error
+  nodes per chunk; chunks run in threads, or in worker processes so that plain
+  Python code also uses several cores, or Auto: measured on each run, with a note
+  on Parallel Chunk End when the other way would be faster); IF/CASE/empty-table switches; Try/Catch error
   handling, breakpoint, wait; flow variable creation and conversion.
 - **Scripting** – Python Script (polars; `chem` helpers when RDKit is present),
   Workflow Script (changes the workflow it is in), Jupyter Notebook (see [Python API and notebooks](python-api.md#jupyter-notebook-node)).

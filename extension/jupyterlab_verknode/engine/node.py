@@ -23,17 +23,21 @@ DB_DATA = "dbdata"  # database connection + SQL query (brown square port)
 
 
 class _Marker:
-    def __init__(self, name):
+    def __init__(self, name, global_name):
         self._name = name
+        self._global = global_name
 
     def __repr__(self):
         return self._name
 
+    def __reduce__(self):
+        return self._global  # unpickled as the same object (compared with `is`; worker processes)
+
 
 # Output object of a flow variable port (the variables travel in the stack).
-FLOWVAR = _Marker("FlowVariablePortObject")
+FLOWVAR = _Marker("FlowVariablePortObject", "FLOWVAR")
 # Output object / spec of a port on an inactive branch (IF Switch, ...).
-INACTIVE = _Marker("InactiveBranch")
+INACTIVE = _Marker("InactiveBranch", "INACTIVE")
 
 
 class PortObject:
