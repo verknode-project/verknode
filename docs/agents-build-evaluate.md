@@ -128,8 +128,9 @@ is worth:
 Run each variant more than once (*Repeats*): models vary from run to run.
 
 `notebooks/examples/agent_improvement.vkf` puts it together on the sales
-data, with an evaluation set of 8 questions with reference answers. These
-are the results of one run with gemma4:26b on Ollama.
+data, with an evaluation set of 8 questions with reference answers.
+`notebooks/examples/agent_improvement.ipynb` reruns it from Python and documents each stage. The numbers
+below come from that run, with gemma4:26b on Ollama.
 
 1. **Rubric evaluation of the baseline.** The baseline has the default
    instructions. It scores **0.75**, but only 41% of the reference numbers
@@ -138,34 +139,40 @@ are the results of one run with gemma4:26b on Ollama.
    year. The LLM judge rated every answer as grounded: it checks the answer
    against the SQL results, not whether the SQL was the right SQL. The
    reference checks catch what the judge misses.
-2. **Hill climbing.** In step 1, the proposer's investigation found that
-   revenue is amount × quantity and that the data is from 2026. Its rewrite
-   added a *Data notes* section and scored **0.99** (97% of the reference
-   numbers right), so it was accepted. The four proposals of steps 2 and 3
-   were rules about dates. None scored higher, so they were not kept.
+2. **Hill climbing.** In step 1, the investigation found that revenue is
+   amount × quantity. The rewrite added a *Data notes* section and scored
+   **0.98** (97% of the reference numbers right), so it was accepted. In
+   steps 2 and 3, with nearly every answer right, the investigation got it
+   backwards: it called the amount the revenue. Those proposals scored
+   0.71-0.75 and were rejected. The investigation proposes; the evaluation
+   decides.
 
-![Rubric evaluation of the baseline agent (score 0.7455), and hill climbing: each candidate's score and the best so far, rising to 0.9866 at the first step; the table of proposed changes, the first adding a Data notes section on revenue as amount times quantity](images/agent-improvement-v1.png)
+![Rubric evaluation of the baseline agent (score 0.7455), and hill climbing: each candidate's score and the best so far, rising to 0.9777 at the first step; the table of proposed changes, the first adding a Data notes section on revenue as amount times quantity](images/agent-improvement-v1.png)
 
 3. **Multi-arm evaluation** of the climbed agent, all arms on every question:
 
-   | Arm | Mean score |
+   | Arm | Mean score (95% interval) |
    |---|---|
-   | gemma4:26b | 0.99 |
-   | gemma4:26b at temperature 0.8 | 0.99 |
-   | qwen2.5-coder:32b | 0.24 |
-   | Qwen2.5-1.5B in-process (llama.cpp) | 0.13 |
+   | gemma4:26b | 0.92 (0.78-1.00) |
+   | gemma4:26b at temperature 0.8 | 0.91 (0.74-1.00) |
+   | Qwen2.5-1.5B in-process (llama.cpp) | 0.50 (0.13-0.87) |
+   | qwen2.5-coder:32b | 0.26 (0.19-0.34) |
 
-   The Thompson-sampling bandit, with 16 pulls over the two gemma arms and
-   the 1.5B model, gave the 1.5B model a single pull after its first answer
-   failed.
-4. **Ablation study** of the climbed agent. Without the sql tool, the score
-   drops to 0. Without the new *Data notes* section, it drops by 0.05 (84%
-   of the reference numbers right instead of 97%). Every other part (the
-   other sections, the other tools, the table overview, the SQL check)
-   changes nothing on this set. A leaner prompt would do here; the SQL check
-   matters for models that answer from memory.
+   The Thompson-sampling bandit spent 13 of its 16 pulls on gemma4 at
+   temperature 0, 2 on temperature 0.8, and 1 on the 1.5B model.
+4. **Ablation study** of the climbed agent:
+   - **Without the sql tool**, the score drops to 0.
+   - **Without the new *Data notes***, it drops by 0.28, back to the
+     baseline's 41% of numbers right.
+   - **Without the Role section, or without the examples**, it drops by 0.06
+     each: one question fails.
+   - **Every other part** changes nothing on this set.
 
-![Multi-arm evaluation (mean rubric score per model: two gemma4 arms near 1.0, qwen2.5-coder and the local 1.5B model far lower), the arms with 95% intervals, Thompson sampling's running means and pulls per arm, and the ablation study's change of score without each part (the sql tool: -0.99)](images/agent-arms-ablation-v1.png)
+![Multi-arm evaluation (mean rubric score per model: two gemma4 arms above 0.9, the local 1.5B model at 0.5, qwen2.5-coder at 0.26), the arms with 95% intervals, Thompson sampling's running means and pulls per arm, and the ablation study's change of score without each part (the sql tool: -0.99; Data notes: -0.28)](images/agent-arms-ablation-v1.png)
+
+The same climbed agent scored 0.98 in the climb, 0.99 in the ablation and 0.92
+as a multi-arm arm. With 8 questions and a model that varies, read
+differences under about 0.1 as noise, unless repeats confirm them.
 
 ## Caveats
 

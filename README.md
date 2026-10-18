@@ -138,12 +138,12 @@ it; draw tables and LLM answers as Mermaid diagrams
 
 **Build agents, then measure and improve them**: a data query agent as
 nodes (verknode's tool loop, LangGraph or Deep Agents), scored with a
-rubric. In this run, hill climbing took it from 0.75 to 0.99: the proposer
+rubric. In this run, hill climbing took it from 0.75 to 0.98: the proposer
 found, with SQL, that revenue is amount × quantity. Multi-arm evaluation
 compares models, and an ablation study shows what each part of the agent
 is worth ([agents](docs/agents-build-evaluate.md)):
 
-![Rubric evaluation of a baseline data query agent (0.7455) and hill climbing on its instructions, rising to 0.9866; the table of proposed changes](docs/images/agent-improvement-v1.png)
+![Rubric evaluation of a baseline data query agent (0.7455) and hill climbing on its instructions, rising to 0.9777; the table of proposed changes](docs/images/agent-improvement-v1.png)
 
 **Chat with a model** right on the canvas: a Chat Loop Start waits for your
 message, a local LLM answers (here with Ollama), and the conversation goes

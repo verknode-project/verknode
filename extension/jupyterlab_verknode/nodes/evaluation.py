@@ -514,7 +514,7 @@ class HillClimbing(NodeModel):
         best = agent
         best_ev = evaluate(best, train, s, jsrv, ctx, "baseline")
         tick()
-        history.append({"step": 0, "candidate": 0, "change": "baseline", "score": best_ev["score"], "holdout_score": held_score(best),
+        history.append({"step": 0, "candidate": 0, "change": "baseline", "findings": "", "score": best_ev["score"], "holdout_score": held_score(best),
                         **best_ev["criteria"], "accepted": True, "best_score": best_ev["score"], "instructions": best.instructions,
                         "examples": best.examples})
         tried: list[str] = []
@@ -544,6 +544,7 @@ class HillClimbing(NodeModel):
                     ctx.warn(f"Step {step}.{k + 1}: the proposal wrote reference numbers ({', '.join(leaked[:3])}) into the "
                              "instructions - left out")
                     history.append({"step": step, "candidate": k + 1, "change": f"(left out: it copied reference numbers) {p['change']}",
+                                    "findings": findings,
                                     "score": None, "accepted": False, "best_score": best_ev["score"],
                                     "instructions": p["instructions"], "examples": p["examples"]})
                     tried.append(p["change"])
@@ -560,7 +561,7 @@ class HillClimbing(NodeModel):
             accept = top[0] >= best_ev["score"] + float(s.get("min_gain") or 0.0)
             for sc, k, cand, ev, change in cands:
                 win = accept and k == top[1]
-                history.append({"step": step, "candidate": k + 1, "change": change, "score": sc,
+                history.append({"step": step, "candidate": k + 1, "change": change, "findings": findings, "score": sc,
                                 "holdout_score": held_score(cand) if win else None, **ev["criteria"], "accepted": win,
                                 "best_score": top[0] if accept else best_ev["score"], "instructions": cand.instructions,
                                 "examples": cand.examples})
