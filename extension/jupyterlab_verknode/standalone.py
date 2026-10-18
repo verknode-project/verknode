@@ -84,6 +84,7 @@ class Workflow:
     def __init__(self, base_dir: str = ".", node_paths=(), variables: dict | None = None, engine: _Engine | None = None):
         _register()
         self.engine = engine or _Engine()
+        self.engine.headless = True  # (no canvas to wait for)
         if engine is None:
             self.engine.base_dir = os.path.abspath(base_dir)
             if node_paths:
@@ -214,6 +215,21 @@ class Workflow:
         return cls(engine=engine)
 
 
+def plain(df: pl.DataFrame) -> pl.DataFrame:
+    """The table with molecules as SMILES (for CSV, JSON and printing)."""
+    from .engine.types import dtype_kind
+
+    if any(dtype_kind(t) == "molecule" for t in df.schema.values()):
+        try:
+            from verknode.node import chem
+
+            if chem is not None:
+                return chem.molecules_to_smiles(df)
+        except ImportError:
+            pass
+    return df
+
+
 def _register():
     import jupyterlab_verknode.nodes  # noqa: F401 - registers the node types
 
@@ -285,6 +301,10 @@ def _finish(wf: Workflow, a, results: dict[str, Node], rerun: bool = False) -> i
         results = {label: wf.find(label) for label in a.result}
     if not results:
         results = wf.results()
+    if os.environ.get("VERKNODE_TEST_SANDBOX"):  # (a test run: files are read, nothing real is written)
+        from .engine.sandbox import Sandbox
+
+        wf.engine.sandbox = Sandbox(allow_unsafe=True)
     t0 = time.time()
     try:
         report = wf.run(*results.values(), rerun=rerun)
@@ -300,11 +320,13 @@ def _finish(wf: Workflow, a, results: dict[str, Node], rerun: bool = False) -> i
         out = node.output()
         if not isinstance(out, pl.DataFrame):
             continue
-        if a.out:
+        if a.out:  # (molecules: kept in Parquet, as SMILES in CSV and JSON)
             path = os.path.join(a.out, re.sub(r"[^\w.-]+", "_", label).strip("_") + "." + a.format)
-            {"csv": out.write_csv, "parquet": out.write_parquet, "json": out.write_json}[a.format](path)
+            table = out if a.format == "parquet" else plain(out)
+            {"csv": table.write_csv, "parquet": table.write_parquet, "json": table.write_json}[a.format](path)
             if not a.quiet:
                 print(f"wrote {path} ({out.height} rows)")
+        out = plain(out)
         if a.rows and not a.quiet:
             with pl.Config(tbl_rows=a.rows, tbl_cols=20, fmt_str_lengths=40):
                 print(f"\n{label}:\n{out.head(a.rows)}")
@@ -352,7 +374,7 @@ def _identifier(label: str, taken: set) -> str:
     return name
 
 
-def to_standalone(wf: _Engine, path: str | None = None) -> str:
+def to_standalone(wf: _Engine, path: str | None = None, notes=()) -> str:
     """A Python script that rebuilds the workflow with this module's API and runs it (no Jupyter)."""
     from .commands import _lit, _changed_settings
 
@@ -429,7 +451,8 @@ def to_standalone(wf: _Engine, path: str | None = None) -> str:
         "",
         "File paths are relative to --base-dir (default: this script's folder). It needs the",
         "jupyterlab-verknode package (and the packages its nodes use) - not a Jupyter server.",
-        f"Exported by verknode on {time.strftime('%Y-%m-%d')}.",
+        f"Exported by verknode on {time.strftime('%Y-%m-%d')}" + (":" if notes else "."),
+        *(f"- {n}" for n in notes),
         '"""',
         "import os",
         "",

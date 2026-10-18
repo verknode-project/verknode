@@ -996,6 +996,7 @@ class WorkflowAgentChat(NodeModel):
     icon = "🛠💬"
     node_type = "Manipulator"
     sandbox_unsafe = True  # (changes the workflow, waits for the canvas)
+    needs_canvas = True  # (not in headless runs: export)
     renderer = "chat"
     width, height = 420, 520
     short_description = "A chat on the canvas with an agent that builds the workflow you describe (one node)."

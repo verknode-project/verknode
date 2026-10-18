@@ -17,6 +17,17 @@ const MAX_LOG = 1000;
  * engine writes the zip archive to the document path and the model is
  * reverted so it matches the file on disk.
  */
+/** What to export and how (export.py): a group or nodes, headless, and for folders data / docker / api. */
+export interface ExportOptions {
+  group?: string | null;
+  nodes?: number[] | null;
+  headless?: boolean;
+  snapshot?: boolean;
+  data?: boolean;
+  docker?: boolean;
+  api?: boolean;
+}
+
 export class WorkflowController implements IDisposable {
   constructor(readonly context: DocumentRegistry.Context) {}
 
@@ -102,13 +113,18 @@ export class WorkflowController implements IDisposable {
   }
 
   /** The workflow as a standalone script (it runs without Jupyter), and where it is saved. */
-  standalonePython(): Promise<{ script: string; path: string }> {
-    return requestAPI<{ script: string; path: string }>(this._url('python') + '?kind=standalone');
+  standalonePython(options: ExportOptions = {}): Promise<{ script: string; path: string; notes: string[]; problems: string[] }> {
+    return requestAPI(this._url('python') + '?kind=standalone&options=' + encodeURIComponent(JSON.stringify(options)));
+  }
+
+  /** Export a self-contained folder next to the workflow (export.export_bundle). */
+  exportFolder(options: ExportOptions & { overwrite?: boolean }): Promise<{ exported: boolean; exists?: boolean; folder: string; text?: string; report?: any }> {
+    return requestAPI(this._url('python/export'), { method: 'POST', body: JSON.stringify(options) });
   }
 
   /** Save the standalone script next to the workflow (an existing file only with overwrite). */
-  saveStandalonePython(overwrite: boolean): Promise<{ saved: boolean; exists?: boolean; path: string }> {
-    return requestAPI(this._url('python/save'), { method: 'POST', body: JSON.stringify({ overwrite }) });
+  saveStandalonePython(overwrite: boolean, options: ExportOptions = {}): Promise<{ saved: boolean; exists?: boolean; path: string }> {
+    return requestAPI(this._url('python/save'), { method: 'POST', body: JSON.stringify({ ...options, overwrite }) });
   }
 
   nodeView(nodeId: number): Promise<NodeViewData> {

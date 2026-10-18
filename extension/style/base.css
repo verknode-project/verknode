@@ -3670,3 +3670,30 @@
   border-bottom-color: var(--jp-brand-color1);
   color: var(--jp-ui-font-color0);
 }
+
+.verknode-export-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 6px 0;
+  font-size: var(--jp-ui-font-size1);
+}
+
+.verknode-export-sep {
+  color: var(--jp-ui-font-color2);
+}
+
+.verknode-export-notes {
+  margin: 4px 0;
+  padding-left: 18px;
+  font-size: var(--jp-ui-font-size0);
+  color: var(--jp-ui-font-color2);
+}
+
+.verknode-python-hint.verknode-export-report {
+  height: auto;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+}

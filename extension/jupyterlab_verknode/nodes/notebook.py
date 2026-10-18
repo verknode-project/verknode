@@ -59,6 +59,8 @@ def _out_ports(n):
 
 class JupyterNotebook(NodeModel):
     factory = "verknode.scripting.JupyterNotebook"
+    # (export: the notebook runs on a kernel in a process of its own - not measured by the test run)
+    export_requirements = ["ipykernel", "nbclient", "nbformat"]
     sandbox_unsafe = True  # (runs code: files outside the sandbox)
     name = "Jupyter Notebook"
     category = "Scripting/Python"

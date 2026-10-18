@@ -78,6 +78,7 @@ def _check_conversation(spec):
 class Chat(OutputWidget):
     factory = "verknode.widgets.Chat"
     sandbox_unsafe = True  # (waits for the canvas: not in a test run)
+    needs_canvas = True  # (not in headless runs: export)
     name = "Chat"
     icon = "💬"
     renderer = "chat"
@@ -110,6 +111,7 @@ class ChatLoopStart(RecursiveLoopStart):
     factory = "verknode.flow.ChatLoopStart"
     closed_by = ["verknode.flow.RecursiveLoopEnd"]
     sandbox_unsafe = True  # (waits for the canvas: not in a test run)
+    needs_canvas = True  # (not in headless runs: export)
     name = "Chat Loop Start"
     category = "AI/LLM"
     icon = "⟳💬"

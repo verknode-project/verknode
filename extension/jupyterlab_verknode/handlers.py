@@ -19,6 +19,7 @@ from .engine.persistence import load_workflow, save_workflow
 from .agentapi import AgentAPI, LocalWorkspace, ToolError
 from .commands import Recorder, open_hint, to_python
 from .mcp_server import MCPServer
+from .export import ExportError, export_bundle, format_report, prepare
 from .standalone import to_standalone
 from .engine.workflow import Workflow, WorkflowError
 
@@ -354,9 +355,20 @@ class PythonHandler(BaseHandler):
         wf = self.manager.get(sid)
         rel = getattr(wf, "rel_path", None)
         if self.get_argument("kind", "live") == "standalone":  # (runs without Jupyter)
-            self.reply({"script": to_standalone(wf, rel), "path": _script_path(rel)})
+            opts = _export_options(json.loads(self.get_argument("options", "{}")))
+            try:
+                e, notes, problems = prepare(wf, opts["group"], opts["nodes"], "include", opts["headless"])
+            except ExportError as err:
+                raise tornado.web.HTTPError(400, str(err)) from None
+            self.reply({"script": to_standalone(e, rel, notes=notes), "path": _script_path(rel),
+                        "notes": notes, "problems": problems})
             return
         self.reply({"script": to_python(wf, rel), "hint": open_hint(rel or "workflow.vkf")})
+
+
+def _export_options(body: dict) -> dict:
+    return {"group": body.get("group") or None, "nodes": body.get("nodes") or None,
+            "headless": bool(body.get("headless")), "upstream": "snapshot" if body.get("snapshot") else "include"}
 
 
 def _script_path(rel: str | None) -> str:
@@ -381,9 +393,40 @@ class PythonSaveHandler(BaseHandler):
         if exists and not body.get("overwrite"):
             self.reply({"saved": False, "exists": True, "path": path})
             return
+        opts = _export_options(body)
+        try:
+            e, notes, _ = prepare(wf, opts["group"], opts["nodes"], "include", opts["headless"])
+        except ExportError as err:
+            raise tornado.web.HTTPError(400, str(err)) from None
         await ensure_async(self.manager.cm.save({"type": "file", "format": "text",
-                                                 "content": to_standalone(wf, rel)}, path))
+                                                 "content": to_standalone(e, rel, notes=notes)}, path))
         self.reply({"saved": True, "path": path})
+
+
+class PythonExportHandler(BaseHandler):
+    """A self-contained export folder next to the workflow (export.export_bundle)."""
+
+    @tornado.web.authenticated
+    async def post(self, sid):
+        wf = self.manager.get(sid)
+        rel = getattr(wf, "rel_path", None)
+        if not rel:
+            raise tornado.web.HTTPError(400, "Save the workflow first")
+        body, opts = self.body(), _export_options(self.body())
+        folder = posixpath.splitext(rel)[0] + "_export"
+        loop = asyncio.get_running_loop()
+        try:
+            report = await loop.run_in_executor(None, lambda: export_bundle(
+                wf, os.path.join(self.manager.root_dir, folder), posixpath.splitext(posixpath.basename(rel))[0],
+                opts["group"], opts["nodes"], opts["upstream"], opts["headless"], bool(body.get("data", True)),
+                bool(body.get("docker")), bool(body.get("api")), True, bool(body.get("overwrite"))))
+        except ExportError as err:
+            if "exists" in str(err):
+                self.reply({"exported": False, "exists": True, "folder": folder})
+                return
+            raise tornado.web.HTTPError(400, str(err)) from None
+        report["folder"] = folder
+        self.reply({"exported": True, "folder": folder, "text": format_report(report), "report": report})
 
 
 class TableHandler(BaseHandler):
@@ -601,6 +644,7 @@ def setup_handlers(server_app):
         (url_path_join(base, "sessions", sid, "nodes"), SessionNodesHandler),
         (url_path_join(base, "sessions", sid, "python"), PythonHandler),
         (url_path_join(base, "sessions", sid, "python", "save"), PythonSaveHandler),
+        (url_path_join(base, "sessions", sid, "python", "export"), PythonExportHandler),
         (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "dialog_data"), DialogDataHandler),
         (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "action"), DialogActionHandler),
         (url_path_join(base, "chem", "structure"), ChemStructureHandler),

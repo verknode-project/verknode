@@ -71,6 +71,7 @@ Jupyter server's root.
 | `run` | run all or some nodes: each node's state, rows and time, and the problems (`sandbox`: on a copy, nothing written) |
 | `get_table` | rows of an output table, as Markdown, JSON or CSV, a page at a time |
 | `run_workflow` | a workflow as a tool: a private copy, run with other variable values, its result tables |
+| `export_workflow` | export to run without Jupyter: a script, or a self-contained folder (minimal requirements, data, Dockerfile, API server; a group; headless) - see [Export](export.md) |
 | `save_workflow` | save, or save as |
 
 The results are written for models:

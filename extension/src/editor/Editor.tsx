@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
-import { WorkflowController } from '../controller';
+import { ExportOptions, WorkflowController } from '../controller';
 import { FlowVariableInfo, GroupInfo, NodeDescription, NodeInfo, VarType, WidgetLayout, WorkflowView } from '../types';
 import { ConfigureDialog, VarBadge } from './ConfigureDialog';
 import { EditorPreferences, EditorSettings } from '../settings';
@@ -305,10 +305,21 @@ function Console(props: {
 }
 
 /* ------------------------------------------------------------------ */
-function PythonDialog(props: { controller: WorkflowController; onClose: () => void }) {
+function PythonDialog(props: { controller: WorkflowController; groups: GroupInfo[]; selected: number[]; onClose: () => void }) {
   const [tab, setTab] = useState<'live' | 'standalone'>('live');
+  // what to export: '' (all), 'group:<text>', 'selected'
+  const [part, setPart] = useState('');
+  const [opts, setOpts] = useState({ headless: true, snapshot: false, data: true, docker: false, api: false });
+  const [exported, setExported] = useState<{ exported: boolean; exists?: boolean; folder: string; text?: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const options: ExportOptions = {
+    group: part.startsWith('group:') ? part.slice(6) : null,
+    nodes: part === 'selected' ? props.selected : null,
+    headless: opts.headless,
+    snapshot: !!part && opts.snapshot
+  };
   const [data, setData] = useState<{ script: string; hint: string } | null>(null);
-  const [standalone, setStandalone] = useState<{ script: string; path: string } | null>(null);
+  const [standalone, setStandalone] = useState<{ script: string; path: string; notes?: string[]; problems?: string[] } | null>(null);
   const [saved, setSaved] = useState<{ saved: boolean; exists?: boolean; path: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -317,17 +328,34 @@ function PythonDialog(props: { controller: WorkflowController; onClose: () => vo
       .python()
       .then(setData)
       .catch(e => setError(e.message));
+  }, []);
+  useEffect(() => {
+    setError(null);
     props.controller
-      .standalonePython()
+      .standalonePython(options)
       .then(setStandalone)
       .catch(e => setError(e.message));
-  }, []);
+  }, [part, opts.headless]);
   const script = tab === 'live' ? data?.script : standalone?.script;
   const save = (overwrite: boolean) =>
     props.controller
-      .saveStandalonePython(overwrite)
+      .saveStandalonePython(overwrite, options)
       .then(setSaved)
       .catch(e => setError(e.message));
+  const exportFolder = (overwrite: boolean) => {
+    setBusy(true);
+    setError(null);
+    props.controller
+      .exportFolder({ ...options, data: opts.data, docker: opts.docker, api: opts.api, overwrite })
+      .then(setExported)
+      .catch(e => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+  const flag = (key: keyof typeof opts, label: string, title: string) => (
+    <label title={title}>
+      <input type="checkbox" checked={opts[key]} onChange={e => setOpts({ ...opts, [key]: e.target.checked })} /> {label}
+    </label>
+  );
   const file = standalone?.path.split('/').pop() ?? 'workflow.py';
   return (
     <Modal
@@ -340,6 +368,18 @@ function PythonDialog(props: { controller: WorkflowController; onClose: () => vo
           {tab === 'standalone' && (
             <button
               className="jp-Dialog-button jp-mod-accept jp-mod-styled"
+              disabled={busy}
+              title="A folder that runs on its own: the script, the parts of verknode it uses, its data, requirements.txt (only what it needs) - and a Dockerfile / API server if chosen"
+              onClick={() => exportFolder(!!exported?.exists && !exported.exported)}
+            >
+              <div className="jp-Dialog-buttonLabel">
+                {busy ? 'Exporting…' : exported?.exists && !exported.exported ? 'Replace the folder' : 'Export folder'}
+              </div>
+            </button>
+          )}
+          {tab === 'standalone' && (
+            <button
+              className="jp-Dialog-button jp-mod-reject jp-mod-styled"
               disabled={!standalone}
               title={`Save it as ${standalone?.path ?? ''}, next to the workflow`}
               onClick={() => void save(!!saved?.exists)}
@@ -389,11 +429,62 @@ function PythonDialog(props: { controller: WorkflowController; onClose: () => vo
         <>
           <p className="verknode-field-help">
             The workflow as a Python script that rebuilds and runs it <b>without Jupyter</b> - from a terminal, cron, CI, a
-            container or another program. It needs the jupyterlab-verknode package (and the packages its nodes use), not a
-            Jupyter server; file paths are relative to the script's folder (saved next to the workflow, they work as they
-            are). Options: <code>--var NAME=VALUE</code> (workflow variables), <code>--out DIR</code> (write the result
-            tables; <code>--format parquet</code>), <code>--save copy.vkf</code>.
+            container or another program: <code>--var NAME=VALUE</code> (workflow variables), <code>--out DIR</code> (write the
+            result tables; <code>--format parquet</code>), <code>--save copy.vkf</code>. <b>Save as</b> writes the script
+            (it needs the jupyterlab-verknode package); <b>Export folder</b> writes a folder that runs on its own - the
+            script, the parts of verknode it uses, its data and a requirements.txt of only what it needs (measured by
+            running it) - with a Dockerfile and an HTTP API server if you like.
           </p>
+          <div className="verknode-export-options">
+            <label>
+              Export{' '}
+              <select value={part} onChange={e => setPart(e.target.value)}>
+                <option value="">the whole workflow</option>
+                {props.groups
+                  .filter(g => g.text)
+                  .map(g => (
+                    <option key={g.id} value={`group:${g.text}`}>
+                      the group "{g.text}"
+                    </option>
+                  ))}
+                {props.selected.length > 0 && <option value="selected">the {props.selected.length} selected node(s)</option>}
+              </select>
+            </label>
+            {flag('headless', 'Headless', 'Leave out what only the canvas uses: displays, views and nodes no result needs; input widgets become workflow variables (--var)')}
+            {part && flag('snapshot', 'Snapshot the data coming in', 'Instead of the nodes before the part: their tables, saved in the folder (export folder only)')}
+            <span className="verknode-export-sep">Folder:</span>
+            {flag('data', 'Data files', 'Copy the files the workflow reads into the folder (data/)')}
+            {flag('docker', 'Dockerfile', 'A Dockerfile to run it in a container')}
+            {flag('api', 'API server', 'server.py: an HTTP API that runs the workflow with the variables of a request')}
+          </div>
+          {standalone?.notes && standalone.notes.length > 0 && (
+            <ul className="verknode-export-notes">
+              {standalone.notes.map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
+            </ul>
+          )}
+          {standalone?.problems?.map((p, i) => (
+            <p key={i} className="verknode-dialog-error">
+              {p}
+            </p>
+          ))}
+          {exported?.exported && (
+            <>
+              <p className="verknode-field-help">
+                Exported to <code>{exported.folder}/</code>.{' '}
+                <button className="verknode-chat-link" onClick={() => openFileInLab(`${exported.folder}/README.md`)}>
+                  Open its README
+                </button>
+              </p>
+              <pre className="verknode-python-hint verknode-export-report">{exported.text}</pre>
+            </>
+          )}
+          {exported?.exists && !exported.exported && (
+            <p className="verknode-dialog-error">
+              {exported.folder}/ exists already: <b>Replace the folder</b> exports again over it.
+            </p>
+          )}
           <pre className="verknode-python-hint">{`python ${file} --out results/`}</pre>
           {saved?.saved && (
             <p className="verknode-field-help">
@@ -2499,7 +2590,9 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         python={prefs.showPythonCommands}
         setPython={on => void settings.set('showPythonCommands', on)}
       />
-      {pythonOpen && <PythonDialog controller={controller} onClose={() => setPythonOpen(false)} />}
+      {pythonOpen && (
+        <PythonDialog controller={controller} groups={rawView?.groups ?? []} selected={selectedIds()} onClose={() => setPythonOpen(false)} />
+      )}
       {settingsOpen && (
         <SettingsDialog controller={controller} settings={settings} onClose={() => setSettingsOpen(false)} />
       )}

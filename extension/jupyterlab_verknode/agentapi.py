@@ -115,12 +115,27 @@ TOOLS = [
                        "of each branch)"},
            "rows": {"type": "integer", "default": 50}, "sandbox": {"type": "boolean"},
            "timeout": {"type": "number"}}, ["workflow"], read_only=True),
+    _tool("export_workflow", "Export a workflow to run without Jupyter",
+          "Export the workflow (or a group of it) to run anywhere. kind \"folder\" (default): a self-contained "
+          "folder - the script, the parts of verknode it uses and a requirements.txt of only what it needs (measured "
+          "by running it), its data files, optionally a Dockerfile and an HTTP API server (server.py). kind "
+          "\"script\": one .py file (needs the jupyterlab-verknode package). headless: drop widgets, views and what "
+          "no result needs; input widgets become workflow variables (--var parameters).",
+          {"workflow": WF, "kind": {"type": "string", "enum": ["folder", "script"]},
+           "path": {"type": "string", "description": "Where (default: <name>_export/ or <name>.py next to the workflow)"},
+           "group": {"type": "string", "description": "Export only this group annotation"},
+           "nodes": {"type": "array", "items": NODE, "description": "Export only these nodes"},
+           "upstream": {"type": "string", "enum": ["include", "snapshot"], "description": "With group / nodes: the "
+                        "nodes before them come along (include), or the data coming in is saved (snapshot, folder)"},
+           "headless": {"type": "boolean"}, "data": {"type": "boolean", "description": "Copy the files it reads (folder; default true)"},
+           "docker": {"type": "boolean"}, "api": {"type": "boolean"}, "overwrite": {"type": "boolean"}},
+          ["workflow"]),
     _tool("save_workflow", "Save a workflow", "Save the workflow (to its file, or to another path).",
           {"workflow": WF, "path": {"type": "string", "description": "Save as (default: its own file)"}},
           ["workflow"], idempotent=True),
     _tool("undo", "Undo", "Undo the last edit of the workflow.", {"workflow": WF}, ["workflow"]),
 ]
-SPECIAL = {"create_workflow", "save_workflow", "run_workflow"}  # (async: they open or save files)
+SPECIAL = {"create_workflow", "save_workflow", "run_workflow", "export_workflow"}  # (async: they open or save files)
 NEEDS_WORKFLOW = {t["name"] for t in TOOLS if "workflow" in t["inputSchema"]["required"]}
 EDITS = {"add_node", "configure_node", "connect", "disconnect", "remove_node", "set_variables", "undo"}
 
@@ -254,6 +269,8 @@ class AgentAPI:
                         "error": False}
             if name == "run_workflow":
                 return await self._run_workflow(wf, **args)
+            if name == "export_workflow":
+                return await self._export(wf, **args)
             loop = asyncio.get_running_loop()
             text, data = await loop.run_in_executor(None, lambda: fn(wf, **args) if wf is not None else fn(**args))
             if name in EDITS and self.ws.autosave and wf is not None:
@@ -592,6 +609,40 @@ class AgentAPI:
             body = markdown_table(part, part.height, cols=40)
         more = f"\n(rows {offset}-{offset + part.height - 1} of {df.height})" if df.height > part.height else ""
         return head + body + more, {"rows": part.to_dicts(), "total": df.height, "columns": df.columns}
+
+    async def _export(self, wf, kind="folder", path=None, group=None, nodes=None, upstream="include",
+                      headless=False, data=True, docker=False, api=False, overwrite=False):
+        from .export import ExportError, export_bundle, format_report, prepare
+        from .standalone import to_standalone
+
+        stem = os.path.splitext(os.path.basename(wf.rel_path))[0]
+        folder = posixpath.dirname(wf.rel_path)
+        loop = asyncio.get_running_loop()
+        try:
+            if kind == "script":
+                if upstream == "snapshot":
+                    raise ToolError("upstream \"snapshot\" saves data: export a folder")
+                dest = self.ws.rel(path or posixpath.join(folder, stem + ".py"), vkf=False)
+                if not dest.endswith(".py"):
+                    raise ToolError("a script path ends with .py")
+                full = self.ws.abs(dest)
+                if os.path.exists(full) and not overwrite:
+                    raise ToolError(f"{dest} exists (overwrite replaces it)")
+                e, notes, problems = await loop.run_in_executor(None, lambda: prepare(wf, group, nodes, "include", headless))
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                with open(full, "w") as f:
+                    f.write(to_standalone(e, wf.rel_path, notes=notes))
+                text = (f"Wrote {dest}: python {posixpath.basename(dest)} [--var NAME=VALUE] [--out DIR] - it needs the "
+                        "jupyterlab-verknode package (kind \"folder\" needs only what the workflow uses)."
+                        + "".join(f"\n- {n}" for n in notes) + "".join(f"\nPROBLEM: {p}" for p in problems))
+                return {"text": text, "data": {"path": dest, "notes": notes, "problems": problems}, "error": False}
+            dest = self.ws.rel(path or posixpath.join(folder, stem + "_export"), vkf=False)
+            report = await loop.run_in_executor(None, lambda: export_bundle(
+                wf, self.ws.abs(dest), stem, group, nodes, upstream, headless, data, docker, api, True, overwrite))
+        except ExportError as e:
+            raise ToolError(str(e)) from None
+        report["folder"] = dest
+        return {"text": format_report(report), "data": report, "error": bool(report["check"] and not report["check"]["ok"])}
 
     async def _run_workflow(self, wf, variables=None, outputs=None, rows=50, sandbox=False, timeout=600):
         from .engine.sandbox import Sandbox

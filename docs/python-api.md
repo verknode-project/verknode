@@ -85,8 +85,14 @@ A `.vkf` file runs as it is, too:
     python -m jupyterlab_verknode.standalone report.vkf --var threshold=150 --out results/
 
 It runs afresh by default (`--cached` keeps the results saved in the file).
-Nodes that need the editor (chats on the canvas) or a server (LLM nodes)
-need those there too.
+Nodes that need a server (LLM nodes) need it there too. Nodes that need the
+editor (chats on the canvas) fail at once.
+
+To run where verknode is not installed, use an **export folder**. It holds
+the script, the parts of verknode it uses, its data and a requirements.txt
+of only what it needs, and can include a Dockerfile and an HTTP API server.
+You can also export only a group, and *Headless* removes the widgets. See
+[Export](export.md).
 
 ## Jupyter Notebook node
 

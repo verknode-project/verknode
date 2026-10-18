@@ -13,6 +13,9 @@
   Molecule Sketcher.
 - [LLM nodes](llm.md) - prompts to Ollama or OpenAI-compatible servers,
   one per row, and managing Ollama's models.
+- [Export](export.md) - workflows (or groups of them) as standalone scripts
+  or self-contained folders with minimal requirements, a Dockerfile and an
+  HTTP API; headless exports without widgets.
 - [Agents: API and MCP server](agents.md) - tools for agents (Claude Code,
   Claude Desktop, any LLM) to build, run and read workflows; workflows as
   reusable tools.

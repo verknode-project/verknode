@@ -37,6 +37,11 @@ standalone Python script that runs without Jupyter.
   script - also a standalone one that runs without Jupyter, from a terminal,
   cron or CI ([custom nodes](docs/custom-nodes.md),
   [Python API](docs/python-api.md#standalone-scripts-workflows-without-jupyter)).
+- **Export anywhere** - a workflow (or one group of it) as a folder that
+  runs on its own. Its requirements.txt holds only what it needs, measured
+  by running it: a workflow of table nodes needs only polars. Headless
+  exports drop the widgets and turn input widgets into parameters, and a
+  Dockerfile and an HTTP API server can come with it ([export](docs/export.md)).
 - **An agent that builds the workflow with you** - describe what you need
   in a chat on the canvas. The agent finds node types, adds, configures and
   connects nodes, and tests them on a copy in a file sandbox before anything
@@ -134,7 +139,7 @@ Other setups (network, reverse proxy, without Docker):
 See [docs/](docs/README.md): the [editor](docs/editor.md),
 [nodes](docs/nodes.md), [widgets](docs/widgets.md),
 [custom nodes](docs/custom-nodes.md), [Python API](docs/python-api.md),
-[agents and MCP](docs/agents.md),
+[export](docs/export.md), [agents and MCP](docs/agents.md),
 [chemistry](docs/chemistry.md), [deployment](docs/deployment.md) and
 [development](docs/development.md).
 

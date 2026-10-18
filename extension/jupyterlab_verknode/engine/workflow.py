@@ -17,7 +17,6 @@ import uuid
 import time
 import traceback
 
-import numpy as np
 import polars as pl
 
 from .custom import CustomNodes, capture_print, discard_print
@@ -227,6 +226,8 @@ class _Totals:
     ancestor bits of Workflow._closure: whole-workflow sums stay fast in big workflows."""
 
     def __init__(self, wf, members: dict):
+        import numpy as np  # (only for the editor's run-time estimates: runs need no numpy)
+
         self.order, self.pos, self.anc = wf._closure()
         n = len(self.order)
         est = [wf._estimate(nid) for nid in self.order]
@@ -240,6 +241,8 @@ class _Totals:
     def sum(self, nid, side: str, unexecuted: bool = False) -> tuple[float, bool, bool]:
         """(total, estimated: not all executed, partial: some without any time) of the node and
         those before / after it (unexecuted: only those not executed; the node itself counts)."""
+        import numpy as np
+
         i = self.pos.get(nid)
         if i is None:
             return 0.0, False, True
@@ -1556,7 +1559,11 @@ class Workflow:
         with self._inbox_event:
             return self._inbox.pop(nid, None) or []
 
+    headless = False  # (no editor: nodes that wait for the canvas fail at once - standalone runs)
+
     def _wait_input(self, nid, canceled):
+        if self.headless:
+            raise WorkflowError("This node waits for input on the canvas (a chat): it cannot run without the editor")
         with self._inbox_event:
             self._inbox.pop(nid, None)  # (only what is sent while it waits)
             self._waiting += 1
@@ -2282,6 +2289,8 @@ class Workflow:
         """(topological order, node id -> position, ancestors): row i holds the ancestors of the
         node at position i as packed bits (numpy.packbits order). Kept while the nodes and
         connections stay the same (views ask for it every time the workflow changes)."""
+        import numpy as np
+
         key = (tuple(self.nodes), self._connections, self._connections.rev)
         cached = getattr(self, "_closure_cache", None)
         if cached is not None and cached[0][0] == key[0] and cached[0][1] is key[1] and cached[0][2] == key[2]:
