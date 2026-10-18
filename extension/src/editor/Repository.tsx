@@ -92,7 +92,7 @@ export function Repository(props: {
               .map(n => (
                 <div
                   key={n.factory}
-                  className={`verknode-repo-node ${props.highlight === n.factory ? 'verknode-repo-highlight' : ''}`}
+                  className={`verknode-repo-node ${props.highlight === n.factory ? 'verknode-repo-highlight' : ''} ${missing(n).length ? 'verknode-repo-missing' : ''}`}
                   ref={el => {
                     if (el && props.highlight === n.factory) {
                       el.scrollIntoView({ block: 'nearest' });
@@ -100,7 +100,10 @@ export function Repository(props: {
                   }}
                   style={{ paddingLeft: (depth + 1) * 12 + 10 }}
                   draggable
-                  title={n.shortDescription}
+                  title={
+                    n.shortDescription +
+                    (missing(n).length ? `\nNeeds ${missing(n).join(', ')} - not installed (pip install ${missing(n).join(' ')})` : '')
+                  }
                   onDragStart={e => {
                     e.dataTransfer.setData(NODE_DRAG_MIME, n.factory);
                     e.dataTransfer.effectAllowed = 'copy';
@@ -140,6 +143,11 @@ export function Repository(props: {
 /**
  * "Node Description" view.
  */
+/** The packages a node needs that are not installed (not the optional ones). */
+function missing(n: NodeDescription): string[] {
+  return (n.requires ?? []).filter(r => !r.installed && !r.optional).map(r => r.package);
+}
+
 export function Description({ node }: { node: NodeDescription | null }) {
   if (!node) {
     return (
@@ -179,6 +187,27 @@ export function Description({ node }: { node: NodeDescription | null }) {
           </div>
         </div>
         <p dangerouslySetInnerHTML={{ __html: node.description || node.shortDescription }} />
+        {node.requires && node.requires.length > 0 && (
+          <div className="verknode-desc-needs">
+            <b>Needs</b>{' '}
+            {node.requires.map((r, i) => (
+              <span
+                key={r.package}
+                className={r.installed ? 'verknode-needs-ok' : r.optional ? 'verknode-needs-optional' : 'verknode-needs-missing'}
+                title={r.installed ? 'installed' : `not installed: pip install ${r.package}`}
+              >
+                {i > 0 ? ', ' : ''}
+                {r.package}
+                {r.optional ? ' (optional)' : ''} {r.installed ? '✓' : '✗'}
+              </span>
+            ))}
+            {node.requires.some(r => !r.installed && !r.optional) && (
+              <div className="verknode-needs-hint">
+                Not installed: <code>pip install {node.requires.filter(r => !r.installed && !r.optional).map(r => r.package).join(' ')}</code>
+              </div>
+            )}
+          </div>
+        )}
         {node.fields.length > 0 && (
           <>
             <h4>Dialog Options</h4>

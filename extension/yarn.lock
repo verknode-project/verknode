@@ -1875,6 +1875,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/leaflet@npm:^1.9":
+  version: 1.9.22
+  resolution: "@types/leaflet@npm:1.9.22"
+  dependencies:
+    "@types/geojson": "*"
+  checksum: fb3b54f7c8ea2e3ca84d41c6ad06e418ec87a15c30c820f33e60cf91eadb3950392a794c870e5a01daa66dccda05a0d97067ba303299b1e479f579329e652d6a
+  languageName: node
+  linkType: hard
+
 "@types/mdast@npm:^4.0.0":
   version: 4.0.4
   resolution: "@types/mdast@npm:4.0.4"
@@ -4924,10 +4933,13 @@ __metadata:
     "@lumino/signaling": ^2.0.0
     "@lumino/widgets": ^2.0.0
     "@types/d3-contour": ^3.0.6
+    "@types/leaflet": ^1.9
     "@types/react": ^18.0.26
     "@types/react-dom": ^18.0.0
     "@xyflow/react": ^12.3.0
     d3-contour: ^4.0.2
+    leaflet: ^1.9
+    mermaid: ^11
     molstar: 5.12.0
     ngl: 2.5.0
     npm-run-all2: ^7.0.1
@@ -4974,6 +4986,13 @@ __metadata:
   version: 2.0.1
   resolution: "layout-base@npm:2.0.1"
   checksum: ef93baf044f67c3680f4f3a6d628bf4c7faba0f70f3e0abb16e4811bed087045208560347ca749e123d169cbf872505ad84e11fb21b0be925997227e042c7f43
+  languageName: node
+  linkType: hard
+
+"leaflet@npm:^1.9":
+  version: 1.9.4
+  resolution: "leaflet@npm:1.9.4"
+  checksum: bfc79f17a247b37b92d84b3c78702501603392d6589fde606de4a825d11f1609d90225388834f2e0709dac327e52dcd4b4b9cc9fd3d590060c5b1e53b84fa6c6
   languageName: node
   linkType: hard
 
@@ -5381,7 +5400,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"mermaid@npm:^11.15.0":
+"mermaid@npm:^11, mermaid@npm:^11.15.0":
   version: 11.17.2
   resolution: "mermaid@npm:11.17.2"
   dependencies:

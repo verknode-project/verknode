@@ -1,0 +1,16 @@
+# the build context is the repository: only the extension source and the examples go in
+**
+!extension
+!notebooks/examples
+extension/node_modules
+extension/lib
+extension/tsconfig.tsbuildinfo
+extension/jupyterlab_verknode/labextension
+extension/jupyterlab_verknode/vendor
+extension/jupyterlab_verknode/_version.py
+extension/.yarn
+**/__pycache__
+**/.ipynb_checkpoints
+**/*.egg-info
+notebooks/examples/output
+notebooks/examples/*_export

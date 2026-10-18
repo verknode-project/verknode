@@ -20,7 +20,12 @@ Widgets):
   Start chat / New chat runs it. The Chat Loop Start has the same chat on
   it ([LLM nodes](llm.md#a-chatbot)).
 - **Text Display** – the text of a column as Markdown (paragraphs, lists,
-  bold, code, tables), e.g. an LLM Summarizer's summary.
+  bold, code, tables, ```` ```mermaid ```` diagrams), e.g. an LLM Summarizer's summary.
+- **Map Display** – rows as dots on an OpenStreetMap map (coloured by a
+  column, sized by a number) and GeoJSON shapes; pan, zoom, hover; click,
+  Ctrl+click or Shift-drag a box to select rows ([GIS](web-gis-diagrams.md#gis)).
+- **Mermaid Display** – Mermaid diagrams: the code of a text column, or a
+  flowchart of the rows (from, to, label) ([diagrams](web-gis-diagrams.md#diagrams-mermaid)).
 - **Displays** – Table, Bar Chart, Line Chart, Scatter Plot, Value (first/last
   row, sum, mean, min, max or count of a column, in large type) and Image
   (the picture on a square image port, e.g. of a chart node). Empty column

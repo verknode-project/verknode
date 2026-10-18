@@ -1,0 +1,195 @@
+{
+ "features": [
+  {
+   "properties": {
+    "manager": "Aoife",
+    "territory": "West"
+   },
+   "geometry": {
+    "coordinates": [
+     [
+      [
+       -12,
+       47.5
+      ],
+      [
+       8.5,
+       47.5
+      ],
+      [
+       8.5,
+       54.5
+      ],
+      [
+       -12,
+       54.5
+      ],
+      [
+       -12,
+       47.5
+      ]
+     ]
+    ],
+    "type": "Polygon"
+   },
+   "type": "Feature"
+  },
+  {
+   "properties": {
+    "manager": "Jonas",
+    "territory": "Central"
+   },
+   "geometry": {
+    "coordinates": [
+     [
+      [
+       8.5,
+       45.5
+      ],
+      [
+       23,
+       45.5
+      ],
+      [
+       23,
+       54.5
+      ],
+      [
+       8.5,
+       54.5
+      ],
+      [
+       8.5,
+       45.5
+      ]
+     ]
+    ],
+    "type": "Polygon"
+   },
+   "type": "Feature"
+  },
+  {
+   "properties": {
+    "manager": "Nikos",
+    "territory": "South-East"
+   },
+   "geometry": {
+    "coordinates": [
+     [
+      [
+       19,
+       34
+      ],
+      [
+       30,
+       34
+      ],
+      [
+       30,
+       48
+      ],
+      [
+       23,
+       48
+      ],
+      [
+       23,
+       45.5
+      ],
+      [
+       8.5,
+       45.5
+      ],
+      [
+       19,
+       40
+      ],
+      [
+       19,
+       34
+      ]
+     ]
+    ],
+    "type": "Polygon"
+   },
+   "type": "Feature"
+  },
+  {
+   "properties": {
+    "manager": "Luc\u00eda",
+    "territory": "South"
+   },
+   "geometry": {
+    "coordinates": [
+     [
+      [
+       -12,
+       34
+      ],
+      [
+       19,
+       34
+      ],
+      [
+       19,
+       40
+      ],
+      [
+       8.5,
+       45.5
+      ],
+      [
+       8.5,
+       47.5
+      ],
+      [
+       -12,
+       47.5
+      ],
+      [
+       -12,
+       34
+      ]
+     ]
+    ],
+    "type": "Polygon"
+   },
+   "type": "Feature"
+  },
+  {
+   "properties": {
+    "manager": "Ingrid",
+    "territory": "North"
+   },
+   "geometry": {
+    "coordinates": [
+     [
+      [
+       -25,
+       54.5
+      ],
+      [
+       32,
+       54.5
+      ],
+      [
+       32,
+       71
+      ],
+      [
+       -25,
+       71
+      ],
+      [
+       -25,
+       54.5
+      ]
+     ]
+    ],
+    "type": "Polygon"
+   },
+   "type": "Feature"
+  }
+ ],
+ "type": "FeatureCollection"
+}

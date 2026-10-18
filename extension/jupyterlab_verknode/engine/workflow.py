@@ -554,6 +554,8 @@ class Workflow:
         out_stack = dict(in_stack)
         if ok and any_inactive and not m.handles_inactive:
             specs = [INACTIVE] * (n_out + 1)
+        elif ok and _missing_packages(type(m)):
+            ok, message = False, _missing_packages(type(m))  # (it could not run here)
         elif ok:
             try:
                 s, exposed = self._resolve_settings(nc, in_stack)
@@ -2167,6 +2169,9 @@ class Workflow:
             ctx.frontend_request = lambda payload, timeout=4.0, _ctx=ctx: self.frontend_request(
                 dict(payload, node=nid), timeout, _ctx.canceled)
             in_specs = [_spec_of_output(i) if i is not None else None for i in inputs]
+            why = _missing_packages(type(m))
+            if why:
+                raise WorkflowError(why)
             m.validate(settings, in_specs)
             if getattr(m, "_verknode_custom", False):
                 with capture_print(ctx):
@@ -2640,6 +2645,15 @@ def _port_json(port: Port, index: int, implicit: bool) -> dict:
     d = port.to_json(index)
     d["implicit"] = implicit
     return d
+
+
+def _missing_packages(cls) -> str | None:
+    try:
+        from .requirements import missing
+
+        return missing(cls)
+    except Exception:  # noqa: BLE001 - never in the way of running
+        return None
 
 
 def _spec_of_output(obj):

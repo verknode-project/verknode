@@ -2,7 +2,7 @@
 
 ## Nodes
 
-About 250 nodes, by category:
+About 280 nodes, by category:
 
 - **IO** – CSV, Excel, Parquet, JSON, XML, fixed-width, line and native
   table readers/writers, model and image writers, file handling (list,
@@ -56,6 +56,16 @@ About 250 nodes, by category:
   tables by a prompt; Ollama management: models,
   loaded models and their GPU memory, model info, load / unload, download,
   create, delete ([LLM nodes](llm.md)).
+- **Web Services** – curl, HTTP Request, Feed Reader (RSS / Atom), Wikipedia,
+  PubMed, OpenStreetMap Geocode and Places Nearby (Overpass), Weather
+  (Open-Meteo), Google Maps, Apple Podcasts; life science: ChEMBL, Protein
+  Data Bank (RCSB), UCSC Genome Browser, Ensembl, Gene Ontology (QuickGO)
+  ([web services](web-gis-diagrams.md)).
+- **GIS** – GeoJSON Reader / Writer, Geo Distance, Geo Filter (radius, box,
+  polygon), Point in Polygon, Nearest Point; Map Display on the canvas
+  ([GIS](web-gis-diagrams.md#gis)).
+- **Views/Diagrams** – Mermaid Diagram (code from tables); Mermaid Display
+  on the canvas ([diagrams](web-gis-diagrams.md#diagrams-mermaid)).
 - **Scripting** – Python Script (polars; `chem` helpers when RDKit is present),
   Python Code Runner (the code of each row, with tests, in a separate process
   with time and memory limits - e.g. code written by an LLM),
@@ -68,7 +78,7 @@ the `.vkf`, so only open workflow files you trust.
 
 Examples: `notebooks/examples/demo.vkf`, `chemistry.vkf`, `analytics.vkf`,
 `custom_nodes.vkf`, `widgets.vkf`, `timing.vkf`, `workflow_scripts.vkf`,
-`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses), `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`.
+`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses), `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`, `mermaid.vkf`.
 
 ## Workflow files (.vkf)
 

@@ -3847,3 +3847,118 @@
 .verknode-text-display ol {
   padding-left: 18px;
 }
+
+/* what a node needs (engine/requirements.py) */
+.verknode-repo-missing {
+  opacity: 0.5;
+}
+
+.verknode-desc-needs {
+  margin: 6px 0;
+  font-size: var(--jp-ui-font-size1);
+}
+
+.verknode-needs-ok {
+  color: var(--jp-ui-font-color1);
+}
+
+.verknode-needs-optional {
+  color: var(--jp-ui-font-color2);
+}
+
+.verknode-needs-missing {
+  color: var(--jp-error-color1);
+  font-weight: 600;
+}
+
+.verknode-needs-hint {
+  margin-top: 3px;
+  color: var(--jp-error-color1);
+}
+
+/* ---------------------------------------------------------------- Mermaid diagrams, maps */
+.verknode-mermaid {
+  margin: 4px 0;
+}
+
+.verknode-mermaid-sizer {
+  height: 0;
+  overflow: hidden;
+}
+
+.verknode-mermaid-svg svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.verknode-mermaid-display {
+  padding: 6px;
+  box-sizing: border-box;
+  background: var(--jp-layout-color0);
+}
+
+.verknode-mermaid-display .verknode-mermaid + .verknode-mermaid {
+  border-top: 1px solid var(--jp-border-color2);
+  padding-top: 8px;
+}
+
+.verknode-mermaid-error {
+  font-size: var(--jp-ui-font-size0);
+  color: var(--jp-error-color1);
+}
+
+.verknode-mermaid-error pre {
+  white-space: pre-wrap;
+}
+
+.verknode-map-display {
+  position: relative;
+  overflow: hidden;
+}
+
+.verknode-map {
+  background: var(--jp-layout-color2);
+  font: inherit;
+}
+
+.verknode-map .leaflet-tooltip {
+  font-size: var(--jp-ui-font-size0);
+  line-height: 1.4;
+  max-width: 260px;
+  white-space: normal;
+}
+
+.verknode-map-key {
+  color: #666666;
+}
+
+.verknode-map-legend {
+  position: absolute;
+  right: 6px;
+  bottom: 18px;
+  z-index: 1000;
+  max-height: 60%;
+  overflow: auto;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 88%);
+  color: #222222;
+  font-size: var(--jp-ui-font-size0);
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+.verknode-map-legend-title {
+  font-weight: 600;
+}
+
+.verknode-map-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: -1px;
+}

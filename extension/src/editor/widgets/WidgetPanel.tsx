@@ -6,6 +6,7 @@ import { BUILTIN_CONTROLS } from './controls';
 import { HtmlFrame } from './HtmlFrame';
 import { DisplayLoader } from './frames';
 import { ChatRenderer, TextRenderer } from './chat';
+import { MapRenderer, MermaidRenderer } from './diagrams';
 import { useWidgetSelection, WidgetSelection } from './selection';
 import { dockGroup, groupTop, Rect as DockRect, snapGroup, snapResize } from './snap';
 import { TailStore } from './tails';
@@ -124,6 +125,8 @@ registerOutputRenderer('image', ImageRenderer);
 registerOutputRenderer('html', HtmlRenderer);
 registerOutputRenderer('chat', ChatRenderer);
 registerOutputRenderer('markdown', TextRenderer);
+registerOutputRenderer('mermaid', MermaidRenderer);
+registerOutputRenderer('map', MapRenderer);
 
 /** Canvas zoom of the node (its screen size over its own size). */
 function zoomOf(el: HTMLElement): number {

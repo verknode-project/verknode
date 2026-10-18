@@ -440,7 +440,18 @@ class NodeModel:
             "hasDialog": bool(cls.fields),
             "hasView": cls.has_view,
             "closedBy": list(cls.closed_by),
+            # (the packages it needs beyond polars, and whether they are installed: engine/requirements.py)
+            "requires": _requirements(cls),
         }
+
+
+def _requirements(cls) -> list:
+    try:
+        from .requirements import requirements
+
+        return requirements(cls)
+    except Exception:  # noqa: BLE001 - never in the way of describing a node
+        return []
 
 
 def spec_of(obj):

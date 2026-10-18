@@ -141,6 +141,8 @@ class ExcelReader(NodeModel):
             read_options["use_columns"] = s["columns"].replace(" ", "")
         if s["n_rows"] > 0:
             read_options["n_rows"] = s["n_rows"]
+        import fastexcel  # noqa: F401 - (polars reads Excel files with it)
+
         try:
             df = pl.read_excel(p, **_excel_sheet_kwargs(s), has_header=s["has_header"],
                                read_options=read_options, raise_if_empty=False)
@@ -461,6 +463,8 @@ class ExcelWriter(_FileSink):
                 ws.append([v.isoformat() if isinstance(v, dt.timedelta) else v for v in row])
             wb.save(p)
         else:
+            import xlsxwriter  # noqa: F401 - (polars writes Excel files with it)
+
             df.write_excel(p, worksheet=sheet, include_header=s["include_header"], autofit=s["autofit"],
                            autofilter=False)
         ctx.log(f"Wrote {df.height} rows to sheet {sheet!r} of {p}")

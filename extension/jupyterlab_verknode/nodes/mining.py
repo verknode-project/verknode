@@ -59,6 +59,8 @@ class FittedModel:
         if self.impute:
             cols = cols.with_columns(pl.col(c).fill_null(v) for c, v in self.impute.items() if v is not None)
         valid = cols.select(pl.all_horizontal(pl.all().is_not_null()).alias("v"))["v"]
+        import pandas  # noqa: F401 - (to_pandas needs it: said here, so the node's requirements show it)
+
         return cols.filter(valid).to_pandas(), valid.to_numpy()
 
     def feature_names(self) -> list:

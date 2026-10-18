@@ -31,3 +31,10 @@ watch:
 
 login:
 	docker compose exec -u root verknode bash
+
+# the conda-free image (docker/dist/Dockerfile, pip on python:slim): everything, or the core only
+dist:
+	cd .. && docker build -f docker/dist/Dockerfile -t verknode .
+
+dist-core:
+	cd .. && docker build -f docker/dist/Dockerfile --build-arg EXTRAS= -t verknode-core .

@@ -1,7 +1,11 @@
 # Deploying verknode
 
-verknode runs as a JupyterLab container (`docker/Dockerfile`, based on
-`quay.io/jupyter/scipy-notebook`) with the extension in `extension/`.
+This page is about the development setup: a JupyterLab container
+(`docker/Dockerfile`, based on `quay.io/jupyter/scipy-notebook`) with the
+extension in `extension/`. To use verknode, the conda-free image
+`docker/dist/Dockerfile` (pip, with all extras or only the core) is smaller
+and simpler; see [installing](install.md). The proxy settings below apply
+to either.
 Everything for the container is in `docker/`: `compose.yml` is the same for
 every environment, and everything specific to a machine lives in gitignored
 files next to it.

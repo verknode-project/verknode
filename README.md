@@ -23,9 +23,14 @@ standalone Python script that runs without Jupyter.
 
 ## Highlights
 
-- **About 250 nodes** for files, tables, dates, JSON / XML, statistics,
+- **About 280 nodes** for files, tables, dates, JSON / XML, statistics,
   scikit-learn models, databases, charts, loops, switches and error
   handling ([nodes](docs/nodes.md)).
+- **Web services, maps and diagrams** - curl and HTTP requests; Wikipedia,
+  PubMed, OpenStreetMap, weather, podcasts and RSS / Atom feeds; ChEMBL, the
+  PDB, UCSC Genome Browser, Ensembl and Gene Ontology. GIS nodes for
+  GeoJSON, distances and points in polygons, an interactive map and Mermaid
+  diagrams on the canvas ([web, GIS, diagrams](docs/web-gis-diagrams.md)).
 - **Widgets on the canvas** - sliders, inputs and editable tables next to
   their nodes; tables and charts that update as you change them, and whose
   selections feed the rest of the workflow ([widgets](docs/widgets.md)).
@@ -106,6 +111,21 @@ that takes the conversation as input:
 
 ![A workflow agent chat on the canvas: it built a reader, revenue formula, group-by, sorter and bar chart in its own group, shows the result table, and asks for an OK before removing the chart it built - the chart is highlighted on the canvas](docs/images/workflow-agent-v1.png)
 
+**Ask about the results**: a Data Q&A Chat answers questions about the
+workflow's tables. The model computes every number it gives with SQL over
+them, and says which node the answer comes from. An LLM Summarizer turns
+tables into a summary by a prompt, shown in a Text Display:
+
+![A Data Q&A Chat next to a sales workflow: which region did best against its target (East, 267%), North's revenue share of headlamps (60.13%), the product with the fewest units (Shoes, 24), each with a small table and its source node; above, an LLM summary for the regional managers in a Text Display](docs/images/data-chat-v1.png)
+
+**Web services, maps and diagrams**: ask Wikipedia, OpenStreetMap, weather,
+podcast, ChEMBL, PDB, Ensembl or Gene Ontology services for every row of a
+table; put places in territories and on an interactive map, and select on
+it; draw tables and LLM answers as Mermaid diagrams
+([use cases](docs/web-gis-diagrams.md#use-cases)):
+
+![A GIS workflow: European capitals and sales territories into Point in Polygon and Geo Distance; a Map Display with the capitals coloured by territory and sized by population, five selected on the map and listed in a table below](docs/images/gis-map-v1.png)
+
 **Chat with a model** right on the canvas: a Chat Loop Start waits for your
 message, a local LLM answers (here with Ollama), and the conversation goes
 round the loop again - it keeps growing, and answers can come from your
@@ -121,26 +141,36 @@ it, and each failing case goes back to the model:
 
 ## Quick start
 
-With Docker:
+With Docker. The image needs only pip and no conda: JupyterLab and verknode
+on `python:3.13-slim`.
 
     git clone https://github.com/verknode-project/verknode.git
-    cd verknode/docker
-    make build      # creates docker/credentials_norepo.env - set JUPYTER_TOKEN there
-    make up         # http://127.0.0.1:8888/lab?token=<JUPYTER_TOKEN>
+    cd verknode
+    docker build -f docker/dist/Dockerfile -t verknode .     # --build-arg EXTRAS= for the core only
+    docker run --rm -p 8888:8888 -e JUPYTER_TOKEN=a-long-secret -v "$PWD/work:/home/jovyan/work" verknode
+    # http://localhost:8888/lab?token=a-long-secret
 
-Open `notebooks/examples/demo.vkf` (more examples next to it:
+The full image (1.3 GB) has every node. The core (700 MB) has the 243 nodes
+that need only polars and numpy; the editor shows which nodes need which
+extra (chemistry, machine learning, Excel / XML / JSON, notebooks). See
+[installing](docs/install.md). To work on verknode, use the development
+setup: `cd docker && make build && make up`, based on the conda
+`scipy-notebook`, with the source mounted ([development](docs/development.md)).
+
+Open `examples/demo.vkf` (more examples next to it:
 `widgets.vkf`, `timing.vkf`, `analytics.vkf`, `chemistry.vkf`,
-`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
+`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`, `mermaid.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
 
-Other setups (network, reverse proxy, without Docker):
-[deployment](docs/deployment.md).
+Other setups: pip into your own JupyterLab, the image's variants and what
+each node needs are in [installing](docs/install.md); a network or a
+reverse proxy is in [deployment](docs/deployment.md).
 
 ## Documentation
 
 See [docs/](docs/README.md): the [editor](docs/editor.md),
 [nodes](docs/nodes.md), [widgets](docs/widgets.md),
 [custom nodes](docs/custom-nodes.md), [Python API](docs/python-api.md),
-[export](docs/export.md), [agents and MCP](docs/agents.md),
+[installing](docs/install.md), [export](docs/export.md), [agents and MCP](docs/agents.md),
 [chemistry](docs/chemistry.md), [deployment](docs/deployment.md) and
 [development](docs/development.md).
 

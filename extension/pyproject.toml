@@ -16,8 +16,18 @@ classifiers = [
     "Framework :: Jupyter :: JupyterLab :: Extensions :: Prebuilt",
     "Programming Language :: Python :: 3",
 ]
-dependencies = ["jupyter_server>=2.0.1,<3", "polars>=1.0"]
 dynamic = ["version", "description", "keywords"]
+
+# the core: the editor, the engine and the ~240 nodes on tables, files, flow control, widgets, LLMs
+dependencies = ["jupyter_server>=2.0.1,<3", "polars>=1.0", "numpy>=1.24"]
+
+# what some nodes need besides (the editor marks nodes whose packages are missing; docs/install.md)
+[project.optional-dependencies]
+chem = ["rdkit>=2023.9"]                                # RDKit nodes, molecules, 3D structures
+ml = ["scikit-learn>=1.3", "scipy>=1.10", "statsmodels>=0.14", "pandas>=2.0", "matplotlib>=3.7"]
+formats = ["fastexcel>=0.10", "xlsxwriter>=3.1", "openpyxl>=3.1", "lxml>=5.0", "jsonpath-ng>=1.6"]
+notebooks = ["nbclient>=0.9", "nbformat>=5.9", "ipykernel>=6.25"]  # the Jupyter Notebook node
+all = ["jupyterlab_verknode[chem,ml,formats,notebooks]"]
 
 [tool.hatch.version]
 source = "nodejs"

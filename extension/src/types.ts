@@ -46,6 +46,8 @@ export interface NodeDescription {
   closedBy: string[];
   custom?: boolean;
   source?: string;
+  /** packages it needs beyond polars (engine/requirements.py), and whether they are installed */
+  requires?: { package: string; module: string; optional: boolean; installed: boolean }[];
 }
 
 export interface CustomReport {

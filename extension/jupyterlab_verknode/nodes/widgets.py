@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import math
+import re
 
 import polars as pl
 
@@ -228,6 +229,7 @@ class TableInput(InputWidget):
 
 
 class MoleculeInput(InputWidget):
+    requires = ["rdkit"]  # (it makes molecules from SMILES)
     factory = "verknode.widgets.MoleculeInput"
     name = "Molecule Input"
     icon = "⌬"
@@ -574,3 +576,150 @@ class ImageDisplay(OutputWidget):
             raise InvalidSettingsError(f"The image is too large to show ({len(img.data) // 1024} kB)")
         return {"mime": img.mime, "data": base64.b64encode(img.data).decode("ascii"),
                 "fit": (s.get("fit") or "Fit to the display") == "Fit to the display"}
+
+
+class MermaidDisplay(OutputWidget):
+    """Renderer "mermaid": {"diagrams": [{"code", "title"}]}."""
+
+    factory = "verknode.widgets.MermaidDisplay"
+    name = "Mermaid Display"
+    icon = "⧉"
+    renderer = "mermaid"
+    width, height = 420, 300
+    max_diagrams = 12
+    short_description = "Draws Mermaid diagrams on the canvas: flowcharts, sequences, timelines, Gantt, pies ..."
+    description = (
+        "Code: the Mermaid code of a text column (e.g. of an LLM, or Mermaid Diagram) - the first row, or one "
+        "diagram per row. Edges: a flowchart of the rows of the table (from, to, optional label)." + _OUTPUT_HELP
+    )
+    widget_fields = [
+        F("mode", "enum", "Draw", "Code column", options=["Code column", "Edges (from, to, label)"]),
+        F("column", "column", "Code column", None, "Empty: the first text column.", kinds=["string"]),
+        F("rows", "enum", "Rows", "First row", options=["First row", "All rows"]),
+        F("source", "column", "From column", None, "Edges."),
+        F("target", "column", "To column", None, "Edges."),
+        F("label", "column", "Label column", None, "Edges. Empty: none."),
+        F("direction", "enum", "Direction", "LR", "Edges.", options=["LR", "TD", "RL", "BT"]),
+    ]
+
+    def render(self, df, s, ctx):
+        if (s.get("mode") or "Code column").startswith("Edges"):
+            from .diagrams import edges_to_mermaid
+
+            src = s.get("source") or (df.columns[0] if df.width else None)
+            dst = s.get("target") or (df.columns[1] if df.width > 1 else None)
+            if not src or not dst:
+                raise InvalidSettingsError("Pick the from and to columns")
+            return {"diagrams": [{"code": edges_to_mermaid(df, src, dst, s.get("label"), s.get("direction") or "LR"),
+                                  "title": ""}] if df.height else []}
+        col = s.get("column") or next((c for c, t in df.schema.items() if t == pl.String), None)
+        if col is None or col not in df.columns:
+            raise InvalidSettingsError("The input has no text column" if col is None else f'Column "{col}" not found')
+        codes = [str(v) for v in df[col].to_list() if v is not None and str(v).strip()]
+        codes = codes[:1] if s.get("rows") != "All rows" else codes
+        if len(codes) > self.max_diagrams:
+            ctx.warn(f"Showing {self.max_diagrams} of {len(codes)} diagrams")
+        fence = re.compile(r"^\s*```(?:mermaid)?\s*\n([\s\S]*?)```\s*$")
+        return {"diagrams": [{"code": (fence.match(c).group(1) if fence.match(c) else c).strip(), "title": ""}
+                             for c in codes[:self.max_diagrams]]}
+
+
+TILES = {
+    "OpenStreetMap": ("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'),
+    "OpenTopoMap": ("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+                    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, '
+                    '<a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)'),
+    "None": ("", ""),
+}
+
+
+class MapDisplay(OutputWidget):
+    """Renderer "map": {"points": [{lat, lon, row, label, group, size, tip}], "shapes": [{geometry, row,
+    label, group, tip}], "groups": [names], "color": column, "tiles", "attribution"}."""
+
+    factory = "verknode.widgets.MapDisplay"
+    name = "Map Display"
+    icon = "🗺"
+    renderer = "map"
+    interactive = True
+    width, height = 460, 340
+    max_points = 5000
+    max_shapes = 2000
+    max_groups = 8
+    short_description = "Points and shapes on an interactive map (OpenStreetMap) on the canvas."
+    description = (
+        "Shows the rows at their latitude / longitude as dots - coloured by a column, sized by a number - and "
+        "GeoJSON geometries (a geometry column, e.g. of GeoJSON Reader) as shapes. Pan and zoom the map; hover "
+        "for a row's values. Map tiles: OpenStreetMap (the browser loads them), or a tile URL of your own."
+        + _OUTPUT_HELP + _SELECT_HELP + " (click a dot or shape; Ctrl adds or removes; Shift-drag a box)."
+    )
+    widget_fields = [
+        F("lat", "column", "Latitude column", None, "Empty: lat / latitude."),
+        F("lon", "column", "Longitude column", None, "Empty: lon / lng / longitude."),
+        F("geometry", "column", "Geometry column", None, "GeoJSON text. Empty: geometry, if there is one.", kinds=["string"]),
+        F("label", "column", "Label column", None, "Shown on hover. Empty: the first text column."),
+        F("color", "column", "Colour by", None, "Up to 8 colours (the rest: Other). Empty: one colour."),
+        F("size", "column", "Size by", None, "A number. Empty: all the same.", kinds=["double", "integer", "long"]),
+        F("tiles", "enum", "Map", "OpenStreetMap", options=list(TILES)),
+        F("tile_url", "string", "Tile URL", "", "Instead of the map above: https://.../{z}/{x}/{y}.png"),
+    ]
+
+    def render(self, df, s, ctx):
+        from .gis import LAT_NAMES, LON_NAMES, guess, parse_geometry
+
+        lat = s.get("lat") or guess(df, LAT_NAMES)
+        lon = s.get("lon") or guess(df, LON_NAMES)
+        geo = s.get("geometry") or ("geometry" if "geometry" in df.columns else None)
+        for c in (lat if s.get("lat") else None, lon if s.get("lon") else None, geo, s.get("label"), s.get("color"), s.get("size")):
+            if c and c not in df.columns:
+                raise InvalidSettingsError(f'Column "{c}" not found in input table')
+        if not geo and not (lat and lon):
+            raise InvalidSettingsError("Pick the latitude and longitude columns (or a GeoJSON geometry column)")
+        label = s.get("label") or next((c for c, t in df.schema.items() if t == pl.String and c != geo), None)
+        color, size = s.get("color"), s.get("size")
+        groups: list = []
+        if color:
+            top = df[color].cast(pl.String).value_counts(sort=True).drop_nulls()[color].to_list()
+            groups = top[:self.max_groups - 1] if len(top) > self.max_groups else top
+            other = len(top) > len(groups)
+            groups = [str(g) for g in groups] + (["Other"] if other else [])
+        tip_cols = [c for c in df.columns if c not in (geo, lat, lon) and dtype_kind(df.schema[c]) not in ("molecule", "binary")][:6]
+        sizes = None
+        if size:
+            v = df[size].cast(pl.Float64, strict=False)
+            lo, hi = v.min(), v.max()
+            sizes = [None if x is None or lo is None or hi == lo else (x - lo) / (hi - lo) for x in v.to_list()]
+        points, shapes = [], []
+        lats = df[lat].cast(pl.Float64, strict=False).to_list() if lat and lat in df.columns else [None] * df.height
+        lons = df[lon].cast(pl.Float64, strict=False).to_list() if lon and lon in df.columns else [None] * df.height
+        geoms = df[geo].to_list() if geo else [None] * df.height
+        for i, r in enumerate(df.select(tip_cols + [c for c in (label, color) if c and c not in tip_cols]).iter_rows(named=True)):
+            g = None
+            if geoms[i]:
+                try:
+                    g = parse_geometry(geoms[i])
+                except ValueError:
+                    g = None
+            item = {"row": i, "label": None if label is None or r.get(label) is None else str(r[label]),
+                    "tip": [[c, json_value(r[c])] for c in tip_cols]}
+            if color:
+                cv = None if r.get(color) is None else str(r[color])
+                item["group"] = groups.index(cv) if cv in groups else (len(groups) - 1 if groups and groups[-1] == "Other" and cv is not None else None)
+            if g and g.get("type") != "Point":
+                if len(shapes) < self.max_shapes:
+                    shapes.append({**item, "geometry": g})
+                continue
+            a, o = (g["coordinates"][1], g["coordinates"][0]) if g else (lats[i], lons[i])
+            if a is None or o is None or not (math.isfinite(a) and math.isfinite(o)) or abs(a) > 90 or abs(o) > 180:
+                continue
+            if len(points) < self.max_points:
+                points.append({**item, "lat": a, "lon": o, **({"size": sizes[i]} if sizes else {})})
+        n = len(points) + len(shapes)
+        if df.height > n and (len(points) >= self.max_points or len(shapes) >= self.max_shapes):
+            ctx.warn(f"Showing {n} of {df.height} rows")
+        url, attribution = TILES.get(s.get("tiles") or "OpenStreetMap", TILES["OpenStreetMap"])
+        if (s.get("tile_url") or "").strip():
+            url, attribution = s["tile_url"].strip(), ""
+        return {"points": points, "shapes": shapes, "groups": groups, "color": color, "tiles": url,
+                "attribution": attribution}

@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 
 import { CanvasLinkContext, CanvasNodeRef, OutputRendererProps } from './registry';
+import { MermaidDiagram } from './diagrams';
 
 /**
  * The display of the Chat node: the conversation and a box to type in. The node runs in a loop and
@@ -310,13 +311,16 @@ export function ChatRenderer({ data, width, height, onSend, running, nodeId, nod
   );
 }
 
-/** A little Markdown for answers: paragraphs, lists, ```code blocks```, `code` and **bold**. */
+/** A little Markdown for answers: paragraphs, lists, tables, ```code blocks``` (```mermaid: diagrams), `code` and **bold**. */
 export function Markdown({ text }: { text: string }) {
-  const parts = text.split(/```[a-zA-Z0-9_+-]*\n?([\s\S]*?)```/g);
+  // (split with two groups: text, language, code, text, ...)
+  const parts = text.split(/```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g);
   return (
     <>
       {parts.map((part, i) =>
-        i % 2 === 1 ? (
+        i % 3 === 1 ? null : i % 3 === 2 && parts[i - 1].toLowerCase() === 'mermaid' ? (
+          <MermaidDiagram key={i} code={part} />
+        ) : i % 3 === 2 ? (
           <pre key={i} className="verknode-chat-code">
             <code>{part.replace(/\n$/, '')}</code>
           </pre>

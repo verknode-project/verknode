@@ -501,7 +501,7 @@ def export_bundle(wf, out_dir: str, name: str | None = None, group: str | None =
         used = set(external)
     reqs = _distributions(used)
     for n in _real(e):  # (what nodes need in processes of their own, e.g. a notebook's kernel)
-        for dist in getattr(e.nodes[n].model, "export_requirements", ()):
+        for dist in list(getattr(e.nodes[n].model, "requires", ())) + list(getattr(e.nodes[n].model, "export_requirements", ())):
             try:
                 reqs[dist] = f"{dist}=={importlib.metadata.version(dist)}"
             except importlib.metadata.PackageNotFoundError:
