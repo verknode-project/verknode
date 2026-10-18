@@ -87,7 +87,7 @@ def save_workflow(wf: Workflow) -> bytes:
             z.writestr(f"{folder}/settings.json", _dump(settings))
             if nc.executed and nc.view is not None:
                 z.writestr(f"{folder}/view.html", nc.view)
-            if nc.executed and nc.display is not None:
+            if nc.display is not None and (nc.executed or getattr(nc.model, "keeps_display_on_reset", False)):
                 z.writestr(f"{folder}/display.json", _dump(nc.display))
             nodes.append({
                 "id": nc.id,
@@ -170,6 +170,11 @@ def load_workflow(data: bytes, base_dir: str | None = None) -> Workflow:
             if s.get("state") == "EXECUTED" and missing is None and same_impl:
                 folder = settings_file.rsplit("/", 1)[0]
                 _load_outputs(z, names, folder, nc, s)
+            elif getattr(nc.model, "keeps_display_on_reset", False):
+                # (e.g. a chat that was reset or canceled: its conversation, to resume it)
+                folder = settings_file.rsplit("/", 1)[0]
+                if f"{folder}/display.json" in names:
+                    nc.display = json.loads(z.read(f"{folder}/display.json").decode("utf-8"))
             if s.get("state") == "EXECUTED" and not nc.executed:
                 dropped.append(nid)
             timing = s.get("timing") or {}

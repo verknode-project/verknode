@@ -67,6 +67,7 @@ def run(code: str, tests: str, setup: str, timeout: float, memory_mb: int, max_o
 
 class PythonCodeRunner(NodeModel):
     factory = "verknode.scripting.CodeRunner"
+    sandbox_unsafe = True  # (runs code: files outside the sandbox)
     name = "Python Code Runner"
     category = "Scripting"
     icon = "▶Py"

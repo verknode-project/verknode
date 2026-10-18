@@ -34,6 +34,8 @@ def _conversation(df: pl.DataFrame) -> list:
         meta = " · ".join(p for p in (r.get("model"), f"{r['seconds']:.1f} s" if r.get("seconds") is not None else None) if p)
         if meta and r["role"] == "assistant":
             m["meta"] = meta
+        if r.get("confirm") and r["role"] == "assistant":
+            m["confirm"] = True  # (e.g. a Workflow Agent waits for an OK: the chat offers Yes / No)
         out.append(m)
     return out
 
@@ -75,6 +77,7 @@ def _check_conversation(spec):
 
 class Chat(OutputWidget):
     factory = "verknode.widgets.Chat"
+    sandbox_unsafe = True  # (waits for the canvas: not in a test run)
     name = "Chat"
     icon = "💬"
     renderer = "chat"
@@ -106,6 +109,7 @@ CONVERSATION = {"role": pl.String, "content": pl.String}
 class ChatLoopStart(RecursiveLoopStart):
     factory = "verknode.flow.ChatLoopStart"
     closed_by = ["verknode.flow.RecursiveLoopEnd"]
+    sandbox_unsafe = True  # (waits for the canvas: not in a test run)
     name = "Chat Loop Start"
     category = "AI/LLM"
     icon = "⟳💬"

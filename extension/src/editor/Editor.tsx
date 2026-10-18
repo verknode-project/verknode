@@ -43,6 +43,7 @@ import { useWidgetSelection, WidgetSelection } from './widgets/selection';
 import { dockGroup, outlinePath, Rect as WidgetRect } from './widgets/snap';
 import { TailStore, useTails } from './widgets/tails';
 import { DisplayLoader } from './widgets/frames';
+import { CanvasLink, CanvasLinkContext } from './widgets/registry';
 
 const nodeTypes = { node: WorkflowNode, metabar: MetanodeBar };
 
@@ -380,6 +381,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     }
   }, [rawView, level]);
   const flow = useReactFlow();
+  const flashing = useRef<Set<string>>(new Set()); // (nodes a display points at: canvasLink.highlight)
   const tails = useMemo(() => new TailStore(), []);
   // selected canvas widgets (marquee, Ctrl+click, or with their nodes unless anchored)
   const widgetSel = useMemo(() => new WidgetSelection(), []);
@@ -668,6 +670,8 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
           // hidden editor tab (e.g. while its notebook runs) cannot measure them again
           ...(old?.measured ? { measured: old.measured } : {}),
           selected: pendingSelect.current ? pendingSelect.current.has(String(n.id)) : (old?.selected ?? false),
+          // (nodes a display points at flash for a moment, also while the view changes)
+          ...(flashing.current.has(String(n.id)) ? { className: 'verknode-flash' } : {}),
           dragging: old?.dragging,
           data: {
             node: n,
@@ -748,6 +752,46 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   );
 
   const selectedIds = (): number[] => nodes.filter(n => n.selected).map(n => Number(n.id));
+  // the selection now and the one before (clicking a chat on the canvas selects its own node: a chat
+  // refers to what was selected before it)
+  const recentSelection = useRef<[number[], number[]]>([[], []]);
+  useEffect(() => {
+    const sel = nodes.filter(n => n.selected && n.type === 'node').map(n => Number(n.id));
+    const [cur] = recentSelection.current;
+    if (sel.join() !== cur.join()) {
+      recentSelection.current = [sel, cur];
+    }
+  }, [nodes]);
+  const viewRef = useRef(rawView);
+  viewRef.current = rawView;
+  const canvasLink = useMemo<CanvasLink>(
+    () => ({
+      selection: except => {
+        const [cur, prev] = recentSelection.current;
+        const ids = cur.length === 1 && cur[0] === except ? prev : cur;
+        const byNode = new Map((viewRef.current?.nodes ?? []).map(n => [n.id, n]));
+        return ids
+          .filter(id => id !== except && byNode.has(id))
+          .map(id => ({ id, name: byNode.get(id)!.name, label: byNode.get(id)!.annotation }));
+      },
+      highlight: ids => {
+        const want = new Set(ids.map(String));
+        flashing.current = want;
+        setNodes(ns => ns.map(n => ({ ...n, selected: want.has(n.id), className: want.has(n.id) ? 'verknode-flash' : undefined })));
+        window.setTimeout(() => {
+          if (flashing.current === want) {
+            flashing.current = new Set();
+            setNodes(ns => ns.map(n => (want.has(n.id) ? { ...n, className: undefined } : n)));
+          }
+        }, 2600);
+        const shown = ids.filter(id => flow.getNode(String(id)));
+        if (shown.length) {
+          void flow.fitView({ nodes: shown.map(id => ({ id: String(id) })), padding: 0.4, maxZoom: 1, duration: 500 });
+        }
+      }
+    }),
+    [flow]
+  );
 
   /** Select a node together with all nodes downstream (or upstream) of it. */
   const selectConnected = (id: number, direction: 'down' | 'up') => {
@@ -1396,13 +1440,24 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       await controller.op('execute', { ids: widgetsAfter(id) });
     });
   // a running node waits for what its widget sends (a chat message); {start: true}: run its loop afresh
+  // ({new: true}: the node is told to forget the conversation it shows); {sandbox}: a checkbox of the chat -
+  // for the running node ({live: true}), else its setting
   sendRef.current = (id, value) => {
     if (value?.start) {
       const after = new Set(widgetsAfter(id));
       const ends = (rawView?.nodes ?? []).filter(n => n.loopRole === 'end' && reachable(id, n.id)).map(n => n.id);
       void run(async () => {
         await controller.op('reset', { ids: [id] });
+        if (value.new) {
+          await controller.op('deliver', { id, value: { new: true } });
+        }
         await controller.op('execute', { ids: ends.length ? ends : [id, ...after] });
+      });
+      return;
+    }
+    if (value && 'sandbox' in value && !value.live) {
+      void run(async () => {
+        await controller.op('set_settings', { id, settings: { sandbox: !!value.sandbox } });
       });
       return;
     }
@@ -2008,6 +2063,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   }, [rawView]);
 
   return (
+    <CanvasLinkContext.Provider value={canvasLink}>
     <div
       ref={editorRef}
       className={`verknode-editor verknode-theme-${prefs.theme} verknode-lights-${prefs.statusLight} ${prefs.statusLight.startsWith('led-') ? 'verknode-lights-led' : ''} ${theme.dark ? 'verknode-theme-dark' : ''} ${prefs.showFlowVariablePorts ? 'verknode-show-flow-ports' : ''} ${panning ? 'verknode-panning' : ''}`}
@@ -2459,6 +2515,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         />
       )}
     </div>
+    </CanvasLinkContext.Provider>
   );
 }
 

@@ -129,7 +129,7 @@ class SessionManager:
 
     async def save(self, sid: str, path: str):
         wf = self.get(sid)
-        if wf.executing:
+        if wf.executing and not wf.waiting_for_input:
             raise tornado.web.HTTPError(409, "Cannot save while the workflow is executing")
         loop = asyncio.get_running_loop()
         data = await loop.run_in_executor(None, save_workflow, wf)

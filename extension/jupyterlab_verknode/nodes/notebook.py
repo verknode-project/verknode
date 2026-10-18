@@ -59,6 +59,7 @@ def _out_ports(n):
 
 class JupyterNotebook(NodeModel):
     factory = "verknode.scripting.JupyterNotebook"
+    sandbox_unsafe = True  # (runs code: files outside the sandbox)
     name = "Jupyter Notebook"
     category = "Scripting/Python"
     node_type = "Manipulator"

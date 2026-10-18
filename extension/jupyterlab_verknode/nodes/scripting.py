@@ -24,6 +24,7 @@ output_table_1 = input_table_1
 
 class PythonScript(NodeModel):
     factory = "verknode.scripting.PythonScript"
+    sandbox_unsafe = True  # (runs code: files outside the sandbox)
     name = "Python Script"
     category = "Scripting/Python"
     node_type = "Manipulator"

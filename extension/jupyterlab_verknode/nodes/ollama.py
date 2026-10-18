@@ -284,6 +284,7 @@ def _result(model, action, status, seconds=None):
 class _Action(NodeModel):
     abstract = True
     icon = "OL"
+    sandbox_unsafe = True  # (changes the Ollama server)
     node_type = "Manipulator"
     in_ports = [Port(TABLE, "Models", "A table with a model column (optional)", optional=True)]
     out_ports = [Port(TABLE, "Results", "Model, action, status (OK or the error) and the time it took")]

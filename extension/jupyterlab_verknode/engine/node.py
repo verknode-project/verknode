@@ -265,6 +265,9 @@ class ExecContext:
         self.on_progress = None  # set by the workflow: shows set_progress on the canvas
         self.on_display = None  # set by the workflow: shows set_display on the canvas at once
         self.input_waiter = None  # set by the workflow: wait_for_input
+        self.input_taker = None  # set by the workflow: received()
+        self.previous_display = None  # what the node showed before this run (set by the workflow)
+        self.path_mapper = None  # set by the workflow in a sandbox: real path -> its sandbox copy
         # set by the workflow: the workflow as a Workflow Script sees it (engine.workflow_edits)
         self.script_workflow = None
 
@@ -289,7 +292,9 @@ class ExecContext:
         path = os.path.expanduser(path)
         if not os.path.isabs(path):
             path = os.path.join(self.base_dir, path)
-        return os.path.normpath(path)
+        path = os.path.normpath(path)
+        # (a test run in a sandbox: the path's copy in its temporary folder - engine.sandbox)
+        return self.path_mapper(path) if self.path_mapper is not None else path
 
     def canceled(self) -> bool:
         """Has the user canceled the execution? (for nodes that wait on other processes)"""
@@ -315,6 +320,10 @@ class ExecContext:
             self.display = data
             if self.on_display is not None:
                 self.on_display(data)
+
+    def received(self) -> list:
+        """What the canvas sent this node before it ran (e.g. a conversation to resume), without waiting."""
+        return self.input_taker() if self.input_taker is not None else []
 
     def wait_for_input(self):
         """Wait until the canvas sends this node something (its widget's onSend); returns it.
@@ -372,6 +381,9 @@ class NodeModel:
     loop_role: str | None = None  # "start" | "end"
     scope_role: str | None = None  # "try" | "catch" (error handling)
     handles_inactive = False  # receives INACTIVE inputs instead of being skipped
+    # runs code or changes things outside the workflow (files not through resolve_path, servers):
+    # not run in a test sandbox (engine.sandbox) unless it allows it
+    sandbox_unsafe = False
     has_view = False  # execute() sets ctx.set_view(html)
     # nodes that close the scope this node opens (loop end, End IF, Catch ...),
     # most likely first; suggested first by the Tab quick-add while open

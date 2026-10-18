@@ -1,4 +1,4 @@
-import type React from 'react';
+import React from 'react';
 
 /** Props of a canvas control of input widget nodes (InputWidget.control). */
 export interface InputControlProps {
@@ -32,7 +32,27 @@ export interface OutputRendererProps {
   onSend?: (value: any) => void;
   /** the workflow is executing */
   running?: boolean;
+  /** the node of the display, and whether it is running itself */
+  nodeId?: number;
+  nodeRunning?: boolean;
 }
+
+/** A node as a display may refer to it (e.g. a chat mentioning the selected nodes). */
+export interface CanvasNodeRef {
+  id: number;
+  name: string;
+  label: string;
+}
+
+/** What displays can do with the canvas they are on. */
+export interface CanvasLink {
+  /** the nodes selected on the canvas lately - before the display was clicked (without `except`) */
+  selection: (except?: number) => CanvasNodeRef[];
+  /** show these nodes: select them, bring them into view and make them flash */
+  highlight: (ids: number[]) => void;
+}
+
+export const CanvasLinkContext = React.createContext<CanvasLink | null>(null);
 
 /**
  * Controls and displays by name. The built-in ones are registered by

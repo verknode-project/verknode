@@ -635,6 +635,8 @@ function OutputBody(props: {
       onSelect={w.interactive ? props.onSelect : undefined}
       onSend={props.onSend}
       running={props.running}
+      nodeId={props.id}
+      nodeRunning={props.stale}
     />
   ) : (
     <span className="verknode-widget-error">Unknown display "{w.renderer}"</span>

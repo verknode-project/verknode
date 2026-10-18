@@ -170,7 +170,8 @@ class NodeContainer:
         self.exec_time = None
         self.rows = None
         self.view = None
-        self.display = None
+        if not getattr(self.model, "keeps_display_on_reset", False):  # (e.g. a chat: its conversation stays)
+            self.display = None
         self.traceback = None
         self.external_state = None
 
@@ -302,7 +303,10 @@ class Workflow:
         self._frontend: dict[str, dict] = {}  # open requests to editors (frontend_request)
         self._inbox: dict[int, list] = {}  # what the canvas sent to waiting nodes (deliver)
         self._inbox_event = threading.Condition()
+        self._waiting = 0  # nodes waiting for the canvas (wait_for_input)
         self.editor_seen = 0.0  # last long poll of an editor (time.time())
+        self.sandbox = None  # engine.sandbox.Sandbox: files of a test run go to a temporary copy
+        self._live = threading.local()  # live_edits: this thread may edit while the workflow runs
 
     # ------------------------------------------------------------------
     # bookkeeping
@@ -328,8 +332,19 @@ class Workflow:
         self.version += 1
 
     def _require_idle(self):
-        if self.executing:
+        if self.executing and not getattr(self._live, "on", False):
             raise WorkflowError("Workflow is executing; cancel execution first")
+
+    @contextlib.contextmanager
+    def live_edits(self):
+        """Edits while the workflow runs, from this thread (e.g. an agent in a running chat loop that
+        builds the rest of the workflow). The caller keeps them away from the nodes that run; each
+        edit takes the lock, which views take too."""
+        self._live.on = True
+        try:
+            yield
+        finally:
+            self._live.on = False
 
     def node(self, nid) -> NodeContainer:
         nid = int(nid)
@@ -1537,15 +1552,28 @@ class Workflow:
             self._inbox.setdefault(nid, []).append(value)
             self._inbox_event.notify_all()
 
+    def _take_inputs(self, nid) -> list:
+        with self._inbox_event:
+            return self._inbox.pop(nid, None) or []
+
     def _wait_input(self, nid, canceled):
         with self._inbox_event:
             self._inbox.pop(nid, None)  # (only what is sent while it waits)
-            while True:
-                if self._inbox.get(nid):
-                    return self._inbox[nid].pop(0)
-                if canceled():
-                    raise CanceledExecutionError("Execution canceled")
-                self._inbox_event.wait(0.2)
+            self._waiting += 1
+            try:
+                while True:
+                    if self._inbox.get(nid):
+                        return self._inbox[nid].pop(0)
+                    if canceled():
+                        raise CanceledExecutionError("Execution canceled")
+                    self._inbox_event.wait(0.2)
+            finally:
+                self._waiting -= 1
+
+    @property
+    def waiting_for_input(self) -> bool:
+        """The run only waits for the canvas (e.g. a chat for the next message): it can be saved."""
+        return self._waiting > 0
 
     def cancel(self):
         self._cancel.set()
@@ -2116,9 +2144,16 @@ class Workflow:
             ctx = ExecContext(stack, self.base_dir, self._cancel, loop,
                               logger=lambda level, text: self._log(level, text, nid))
             ctx.caught_error = caught
+            if self.sandbox is not None:
+                ctx.path_mapper = self.sandbox.map
+                if not self.sandbox.allow_unsafe and (m.sandbox_unsafe or getattr(m, "_verknode_custom", False)):
+                    raise WorkflowError("Not run in the test sandbox: it runs code or changes things outside the "
+                                        "workflow (allow it with Run script nodes in the test)")
             ctx.on_progress = lambda f, _nc=nc: setattr(_nc, "progress", f)
             ctx.on_display = lambda d, _nc=nc: (setattr(_nc, "display", d), self._changed(dirty=False))
             ctx.input_waiter = lambda canceled, _nid=nid: self._wait_input(_nid, canceled)
+            ctx.input_taker = lambda _nid=nid: self._take_inputs(_nid)
+            ctx.previous_display = nc.display  # (e.g. the conversation a chat goes on with)
             ctx.script_workflow = lambda _nid=nid: self._script_workflow(_nid)
             ctx.workflow_path = self.path
             ctx.workflow_context = self.dialog_context(nid)
@@ -2141,6 +2176,8 @@ class Workflow:
                 raise WorkflowError(f"Node produced {len(outs)} outputs, expected {len(m.out_ports)}")
             for i, (port, obj) in enumerate(zip(m.out_ports, outs)):
                 outs[i] = _normalize_output(port, obj)
+                if self.sandbox is not None:
+                    outs[i] = self.sandbox.unmap_output(outs[i])
             nc.inactive = bool(outs) and all(o is INACTIVE for o in outs)
             nc.outputs = [INACTIVE if nc.inactive else FLOWVAR] + outs
             out_stack = dict(stack)
@@ -2338,6 +2375,11 @@ class Workflow:
         return "CONFIGURED" if a and a["ok"] else "IDLE"
 
     def view(self, log_since: int = 0) -> dict:
+        # (under the lock: live edits - live_edits - may change the nodes while the workflow runs)
+        with self._lock:
+            return self._view(log_since)
+
+    def _view(self, log_since: int = 0) -> dict:
         analysis = self.analyze()
         boundaries = self._boundaries()
         timings = self._timings(analysis)

@@ -32,10 +32,15 @@ and everything stays scriptable from Python.
   nodes, drive an open workflow from a notebook, export a workflow as a
   script ([custom nodes](docs/custom-nodes.md),
   [Python API](docs/python-api.md)).
+- **An agent that builds the workflow with you** - describe what you need
+  in a chat on the canvas. The agent finds node types, adds, configures and
+  connects nodes, and tests them on a copy in a file sandbox before anything
+  changes. It works only in its own group and asks before removing anything
+  ([workflow agent](docs/llm.md#a-workflow-agent-build-the-workflow-in-a-chat)).
 - **LLMs in the workflow** - prompt a local Ollama or any OpenAI-compatible
   server for every row: classify, summarize, extract typed fields; a chatbot
-  on the canvas; a small coding agent that writes code until hidden tests pass; manage Ollama's
-  models and GPU memory ([LLM nodes](docs/llm.md)).
+  on the canvas; a small coding agent that writes code until hidden tests
+  pass; manage Ollama's models and GPU memory ([LLM nodes](docs/llm.md)).
 - **Chemistry built in** - RDKit molecules as a column type, drawn as
   structures, with a structure sketcher; proteins and ligands in 3D with
   NGL or Mol*, in node views and on the canvas ([chemistry](docs/chemistry.md)).
@@ -62,6 +67,23 @@ from SMILES (NGL):
 
 ![Canvas widgets: a table of indinavir poses drawn as structures, the selected poses in HIV-1 protease in Mol*, and HIV protease inhibitors from SMILES in 2D and in 3D with NGL](docs/images/structures-v1.png)
 
+**Build a workflow by chatting with an agent**: tell the Workflow Agent Chat
+what you need ("total revenue per region, largest first", "as a bar chart").
+For each message the model works with tools:
+- it looks up node types and their settings;
+- it adds, configures and connects nodes;
+- it runs and previews them on a copy of the workflow, in a file sandbox,
+  and fixes what fails.
+
+Then the nodes appear in the agent's own group. Each reply lists the
+changes and the first rows of the result. **Show changes** highlights them
+on the canvas, and Tab adds the nodes you selected to your message.
+Anything that undoes earlier work, like removing a node, waits for your
+*Yes*. A finished chat can be resumed, or carried on in a second agent node
+that takes the conversation as input:
+
+![A workflow agent chat on the canvas: it built a reader, revenue formula, group-by, sorter and bar chart in its own group, shows the result table, and asks for an OK before removing the chart it built - the chart is highlighted on the canvas](docs/images/workflow-agent-v1.png)
+
 **Chat with a model** right on the canvas: a Chat Loop Start waits for your
 message, a local LLM answers (here with Ollama), and the conversation goes
 round the loop again - it keeps growing, and answers can come from your
@@ -86,7 +108,7 @@ With Docker:
 
 Open `notebooks/examples/demo.vkf` (more examples next to it:
 `widgets.vkf`, `timing.vkf`, `analytics.vkf`, `chemistry.vkf`,
-`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
+`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
 
 Other setups (network, reverse proxy, without Docker):
 [deployment](docs/deployment.md).

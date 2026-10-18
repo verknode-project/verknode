@@ -154,6 +154,60 @@ def chat(srv: dict, messages: list, s: dict, schema: dict | None = None) -> dict
             "seconds": time.time() - t0}
 
 
+def chat_tools(srv: dict, messages: list, s: dict, tools: list) -> dict:
+    """One step of a conversation in which the model calls tools (functions):
+    {"text", "calls": [{"id", "name", "args"}], "message": the model's message (append it), "seconds"}.
+    Answer each call with tool_message(srv, call, result) before the next step."""
+    if not srv["model"]:
+        raise InvalidSettingsError("No model: set Model, or VERKNODE_LLM_MODEL for the Jupyter server")
+    t0 = time.time()
+    timeout = max(1, int(s.get("timeout") or 300))
+    specs = [{"type": "function", "function": t} for t in tools]
+    if srv["provider"] == "Ollama":
+        options = {"temperature": float(s.get("temperature") or 0.0), "num_predict": int(s.get("max_tokens") or 2048)}
+        if s.get("seed"):
+            options["seed"] = int(s["seed"])
+        body = {"model": srv["model"], "messages": messages, "stream": False, "options": options, "tools": specs}
+        if not s.get("think"):
+            body["think"] = False
+        try:
+            r = _request(srv["url"] + "/api/chat", body, srv["key"], timeout)
+        except RuntimeError as e:
+            if "think" not in body or "think" not in str(e).lower():
+                raise
+            del body["think"]
+            r = _request(srv["url"] + "/api/chat", body, srv["key"], timeout)
+        msg = r.get("message") or {}
+        raw = msg.get("tool_calls") or []
+    else:
+        body = {"model": srv["model"], "messages": messages, "tools": specs,
+                "temperature": float(s.get("temperature") or 0.0), "max_tokens": int(s.get("max_tokens") or 2048)}
+        r = _request(_openai_base(srv["url"]) + "/chat/completions", body, srv["key"], timeout)
+        msg = ((r.get("choices") or [{}])[0].get("message") or {})
+        raw = msg.get("tool_calls") or []
+    calls = []
+    for i, c in enumerate(raw):
+        f = c.get("function") or {}
+        args = f.get("arguments") or {}
+        if isinstance(args, str):
+            try:
+                args = json.loads(args) if args.strip() else {}
+            except ValueError:
+                args = {"_unreadable": args}
+        calls.append({"id": c.get("id") or f"call_{i}", "name": f.get("name"), "args": args if isinstance(args, dict) else {}})
+    message = {"role": "assistant", "content": msg.get("content") or ""}
+    if raw:
+        message["tool_calls"] = raw
+    return {"text": msg.get("content") or "", "calls": calls, "message": message, "seconds": time.time() - t0}
+
+
+def tool_message(srv: dict, call: dict, content: str) -> dict:
+    """The answer to a tool call, for the next chat_tools step."""
+    if srv["provider"] == "Ollama":
+        return {"role": "tool", "content": content, "tool_name": call["name"]}
+    return {"role": "tool", "tool_call_id": call["id"], "content": content}
+
+
 def parse_fields(text: str) -> list:
     """"sentiment, score:number" -> [("sentiment", "string"), ("score", "number")]."""
     out = []

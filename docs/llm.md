@@ -146,6 +146,109 @@ Recursive Loop Start and a Chat. Nodes can wait for the canvas like the Chat doe
 `ctx.wait_for_input()`, and show what they are doing while they run with
 `ctx.set_display(...)`.
 
+## A workflow agent: build the workflow in a chat
+
+**Workflow Agent Chat** (AI › LLM) is one node that carries a whole chat
+with an agent that builds the workflow you describe. Run it (or click
+*Begin chat* on it): it shows a chat on the canvas, waits for your message,
+builds, answers, and waits for the next one, until *End chat*.
+
+A chat that has ended or was cancelled stays on the canvas. It stays after a
+reset, and after saving and reopening the workflow. *Resume chat*, or running
+the node, goes on with it; *New chat* starts again.
+
+**Point at nodes.** Select nodes on the canvas, then click into the message
+box: it offers the selection, and **Tab** adds it to the message as `@#4
+@#7`. The agent then gets those nodes' details (settings, columns), so you
+can write "@#4 as a bar chart" or "why does @#9 fail?".
+
+**See where it works.** The bar at the top of the chat names the agent's
+group. **◎ Show** highlights its nodes on the canvas: it selects them,
+brings them into view and makes them flash. **Show changes** under a reply
+does the same for the nodes that reply changed (or, while it waits for your
+OK, the ones it would change).
+
+**Go on in another chat.** The node's output is the conversation, and its
+input (optional) takes one. Connect a finished chat to a new Workflow Agent
+Chat: the new chat starts with that conversation, so its agent knows what was
+asked and built. It builds in a group of its own, and uses the earlier
+group's nodes by connecting from them.
+
+Tell it what to build, a step at a time or all at once. Some examples:
+- "read agent/sales.csv, add revenue = amount * quantity and give me the
+  total revenue per region, largest first";
+- "join it with agent/regions.csv and show the amount as percent of target";
+- "make that a bar chart";
+- "change the threshold to 200";
+- "remove the chart".
+
+For each message the model works with **tools** on a **copy** of the
+workflow:
+
+| Tool | What it does |
+|---|---|
+| `find_node_types`, `node_type_help` | search the node types; their ports, settings and setting formats |
+| `list_files` | the files next to the workflow |
+| `show_workflow` | the nodes, their settings and output columns, what is not ready and why |
+| `add_node`, `configure_node`, `connect`, `disconnect`, `remove_node` | edit the copy; each result shows the node's output columns or what is wrong |
+| `run`, `preview` | run the copy and look at the first rows |
+
+The copy runs in a **file sandbox**:
+- the paths nodes use point into a temporary folder;
+- files are copied in the first time they are used, so nodes read the real
+  data, but nothing real is written, moved or deleted;
+- scripts, notebooks, the Code Runner and custom nodes (which could reach
+  files some other way) are not run there unless allowed.
+
+When the model answers, the agent checks its work before anything changes:
+- **It tests what was built.** Failures go back to the model for a few rounds.
+- **It shows the model the result,** if the model has not looked at it, so
+  that it fixes a sum where you asked for a count.
+
+Then the same edits are made to the workflow while the chat goes on. The
+nodes appear on the canvas, and each message is one undo step. The reply
+lists the changes, the test and the first rows of the result.
+
+**Safe by default:**
+- **Its own group.** The agent builds in *Build in group*. By default this
+  is a group of its own, "Built by agent #<id>", so two agents never share
+  one. It may change, rewire or remove only those nodes; others it can only
+  read from, by connecting their outputs into its nodes.
+- **It asks before undoing anything.** It asks for your OK (*Yes* or *No* in
+  the chat) before:
+  - removing nodes or connections that were there before your message;
+  - replacing a connection;
+  - building something that, when run, would overwrite or delete a file.
+
+  Any other message drops the change.
+- **The Sandbox checkbox** on the chat is the *Test in a sandbox* setting.
+  You can change it while the chat waits for you. When it is off, the chat
+  warns you, and the agent works on the real workflow:
+  - its test runs read, write, overwrite and delete the real files;
+  - they run scripts;
+  - their results go straight into the workflow's nodes, so you see them
+    at once.
+
+  The confirmations for removing nodes and connections stay. A file the
+  agent writes is written as it tests, so nothing asks first.
+- **When the chat ends,** what was built runs for real (*Run what was built
+  when the chat ends*).
+
+*Guidance* adds your own rules, such as where the data is or how to name
+things.
+
+**Workflow Agent** is the same agent for a chat loop of your own:
+
+    Chat Loop Start -> Workflow Agent -> Concatenate -> Recursive Loop End
+
+It never touches the loop it runs in or anything connected to it.
+
+`notebooks/examples/workflow_agent.vkf` has two chats:
+- **Chat 1** builds the revenue per region, largest first, and a bar chart.
+- **Chat 2**, fed by chat 1's output, goes on from that conversation. It joins
+  the result with the regions' targets and adds the percent of target. The example data is in `notebooks/examples/agent/`:
+`sales.csv`, `regions.csv` and `customers_raw.csv`.
+
 ## A coding agent
 
 `notebooks/examples/coding_agent.vkf` is a small coding agent made of
@@ -198,6 +301,8 @@ manipulation tasks whose hidden cases ask for more than the task says, so
 the agent learns from the failing cases, one per attempt.
 
 `notebooks/examples/chatbot.vkf`: the two chats above.
+
+`notebooks/examples/workflow_agent.vkf`: the workflow agent above (one node).
 
 `notebooks/examples/ollama.vkf`:
 

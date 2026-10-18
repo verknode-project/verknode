@@ -387,7 +387,7 @@ STRING_FUNCTIONS = {
                 "joinSep(sep, str, ...) concatenates with a separator"),
     "upperCase": (1, 1, lambda a: _s(a[0]).str.to_uppercase(), "upperCase(str)"),
     "lowerCase": (1, 1, lambda a: _s(a[0]).str.to_lowercase(), "lowerCase(str)"),
-    "capitalize": (1, 1, _py1(_capitalize), "capitalize(str) capitalizes all words"),
+    "capitalize": (1, 1, _py1(_capitalize), "capitalize(str) makes the first letter of each word upper case (the others stay: capitalize(lowerCase(str)) for Title Case)"),
     "substr": (2, 3, lambda a: _s(a[0]).str.slice(a[1].expr.cast(pl.Int64),
                                                   a[2].expr.cast(pl.Int64) if len(a) > 2 else None),
                "substr(str, start[, length]); start is 0-based"),
