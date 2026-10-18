@@ -36,6 +36,9 @@ Create one from the Launcher ("Workflow") or the command palette
   goes to a free spot near its port, clear of the nodes, the canvas widgets
   and the other inspection widgets where possible. It goes away when the pointer leaves the port and the widget.
   - Ctrl+click the port, or 📌 on the widget, to keep it.
+  - Node numbers in chats (#7) do the same: hover one for the node's
+    output beside the chat, click it to keep it. Each node shows its number
+    in the corner of its icon.
   - **Inspect Outputs** in a node's context menu keeps one for each output
     of the selected nodes, beside them.
   - Kept widgets can be moved by their title bar, resized and closed (×);

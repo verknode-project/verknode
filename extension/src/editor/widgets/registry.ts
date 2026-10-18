@@ -48,8 +48,14 @@ export interface CanvasNodeRef {
 export interface CanvasLink {
   /** the nodes selected on the canvas lately - before the display was clicked (without `except`) */
   selection: (except?: number) => CanvasNodeRef[];
-  /** show these nodes: select them, bring them into view and make them flash */
-  highlight: (ids: number[]) => void;
+  /** show these nodes: select them, bring them into view and make them flash (fit 'if-hidden': move the
+   * view only if one is out of it; false: only the flash) */
+  highlight: (ids: number[], fit?: boolean | 'if-hidden') => void;
+  /** a node of the canvas by its number (#id), or null */
+  node: (id: number) => CanvasNodeRef | null;
+  /** a look at a node's output data (inspection widget) while hovered (null: gone); pin: kept; near:
+   * the screen box of what points at it (the widget goes beside it) */
+  inspect: (id: number | null, pin?: boolean, near?: DOMRect) => void;
 }
 
 export const CanvasLinkContext = React.createContext<CanvasLink | null>(null);

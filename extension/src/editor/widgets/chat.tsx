@@ -395,12 +395,52 @@ function Blocks({ text }: { text: string }) {
   );
 }
 
+/**
+ * A node a message refers to (#id, @#id): hovering it makes the node flash and shows its output data
+ * (an inspection widget); a click brings the node into view and keeps the inspection widget.
+ */
+/** Where a look at a node goes: beside the canvas widget of the element (at its height). */
+const beside = (el: Element) => {
+  const dock = (el.closest('.verknode-widget-dock') ?? el).getBoundingClientRect();
+  const at = el.getBoundingClientRect();
+  return new DOMRect(dock.left, at.top - 20, dock.width, at.height);
+};
+
+function NodeChip({ text, id }: { text: string; id: number }) {
+  const link = useContext(CanvasLinkContext);
+  const node = link?.node(id);
+  if (!link || !node) {
+    return <>{text}</>;
+  }
+  return (
+    <span
+      className="verknode-node-chip"
+      role="button"
+      title={`${node.label || node.name} (#${id}) - click: select it and keep the look at its data`}
+      onMouseEnter={e => {
+        link.highlight([id], false);
+        link.inspect(id, false, beside(e.currentTarget));
+      }}
+      onMouseLeave={() => link.inspect(null)}
+      onClick={e => {
+        e.stopPropagation();
+        link.inspect(id, true, beside(e.currentTarget));
+        link.highlight([id], 'if-hidden');
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
 function Inline({ text }: { text: string }) {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|(?<![\w#&])@?#\d+(?!\w))/g);
   return (
     <>
       {parts.map((p, i) =>
-        p.startsWith('`') && p.endsWith('`') && p.length > 1 ? (
+        /^@?#\d+$/.test(p) ? (
+          <NodeChip key={i} text={p} id={Number(p.replace(/^@?#/, ''))} />
+        ) : p.startsWith('`') && p.endsWith('`') && p.length > 1 ? (
           <code key={i}>{p.slice(1, -1)}</code>
         ) : p.startsWith('**') && p.endsWith('**') && p.length > 4 ? (
           <b key={i}>{p.slice(2, -2)}</b>

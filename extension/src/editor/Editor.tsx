@@ -558,7 +558,10 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   const flashing = useRef<Set<string>>(new Set()); // (nodes a display points at: canvasLink.highlight)
   // inspection widgets (Inspector.tsx): the one shown while a port is hovered ("peek") and kept ones
   const [inspections, setInspections] = useState<Inspection[]>([]);
-  const inspectRef = useRef<(node: number, kind: 'in' | 'out', port: number, action: 'enter' | 'leave' | 'pin') => void>();
+  const inspectRef = useRef<
+    (node: number, kind: 'in' | 'out', port: number, action: 'enter' | 'leave' | 'pin', near?: { x: number; y: number; w: number }) => void
+  >();
+  const inspectNodeRef = useRef<(node: number | null, pin?: boolean, near?: DOMRect) => void>();
   const tails = useMemo(() => new TailStore(), []);
   // selected canvas widgets (marquee, Ctrl+click, or with their nodes unless anchored)
   const widgetSel = useMemo(() => new WidgetSelection(), []);
@@ -953,10 +956,21 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
           .filter(id => id !== except && byNode.has(id))
           .map(id => ({ id, name: byNode.get(id)!.name, label: byNode.get(id)!.annotation }));
       },
-      highlight: ids => {
+      node: id => {
+        const n = viewRef.current?.nodes.find(x => x.id === id);
+        return n ? { id, name: n.name, label: n.annotation } : null;
+      },
+      inspect: (id, pin, near) => inspectNodeRef.current?.(id, pin, near),
+      highlight: (ids, fit = true) => {
+        const hidden = (id: number) => {
+          const el = wrapper.current?.querySelector(`.react-flow__node[data-id="${id}"]`)?.getBoundingClientRect();
+          const box = wrapper.current?.getBoundingClientRect();
+          return !el || !box || el.right < box.left || el.left > box.right || el.bottom < box.top || el.top > box.bottom;
+        };
         const want = new Set(ids.map(String));
         flashing.current = want;
-        setNodes(ns => ns.map(n => ({ ...n, selected: want.has(n.id), className: want.has(n.id) ? 'verknode-flash' : undefined })));
+        // (fit false: a hover - only the flash, the selection stays)
+        setNodes(ns => ns.map(n => ({ ...n, selected: fit ? want.has(n.id) : n.selected, className: want.has(n.id) ? 'verknode-flash' : undefined })));
         window.setTimeout(() => {
           if (flashing.current === want) {
             flashing.current = new Set();
@@ -964,7 +978,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
           }
         }, 2600);
         const shown = ids.filter(id => flow.getNode(String(id)));
-        if (shown.length) {
+        if (shown.length && (fit === true || (fit === 'if-hidden' && shown.some(hidden)))) {
           void flow.fitView({ nodes: shown.map(id => ({ id: String(id) })), padding: 0.4, maxZoom: 1, duration: 500 });
         }
       }
@@ -1775,7 +1789,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     window.clearTimeout(hideTimer.current);
     hideTimer.current = window.setTimeout(() => setInspections(list => list.filter(i => i.pinned)), delay);
   };
-  inspectRef.current = (node, kind, port, action) => {
+  inspectRef.current = (node, kind, port, action, near) => {
     window.clearTimeout(peekTimer.current);
     if (action === 'leave') {
       hidePeek();
@@ -1788,10 +1802,18 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       return;
     }
     const here = portPoint(flow, node, kind, port);
-    // (a free spot by the port: not over nodes, canvas widgets or other inspection widgets)
-    const at = here
-      ? place(here, kind === 'out' ? 'right' : 'left', { w: INSPECT_W, h: INSPECT_H }, obstacles(flow, wrapper.current, []))
-      : { x: 0, y: 0 };
+    // (a free spot by the port - or by what points at the node, e.g. a chat: near, its box on the screen,
+    // in canvas coordinates - not over nodes, canvas widgets or other inspection widgets)
+    const taken = obstacles(flow, wrapper.current, []);
+    const size = { w: INSPECT_W, h: INSPECT_H };
+    let at = here ? place(here, kind === 'out' ? 'right' : 'left', size, taken) : { x: 0, y: 0 };
+    if (near) {
+      // left of it if that is in view, else right of it
+      const box = wrapper.current?.getBoundingClientRect();
+      const left = box ? flow.screenToFlowPosition({ x: box.left, y: box.top }).x : -Infinity;
+      const l = place({ x: near.x, y: near.y }, 'left', size, taken);
+      at = l.x + INSPECT_W <= near.x && l.x >= left ? l : place({ x: near.x + near.w, y: near.y }, 'right', size, taken);
+    }
     const same = (i: Inspection) => i.node === src.node && i.port === src.port;
     if (action === 'pin') {
       window.clearTimeout(hideTimer.current);
@@ -1814,6 +1836,21 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         ]),
       350
     );
+  };
+  // a display pointing at a node (a #id in a chat): a look at its first output while hovered, kept on a click
+  inspectNodeRef.current = (id, pin, near) => {
+    const info = id === null ? undefined : rawView?.nodes.find(n => n.id === id);
+    const port = info?.outPorts.find(p => !p.implicit)?.index;
+    if (id === null || !info || port === undefined) {
+      hidePeek();
+      return;
+    }
+    // (near: the box of what points at it on the screen - the widget is put beside it, where it can be seen)
+    const box = near && {
+      ...flow.screenToFlowPosition({ x: near.left, y: near.top }),
+      w: flow.screenToFlowPosition({ x: near.right, y: near.top }).x - flow.screenToFlowPosition({ x: near.left, y: near.top }).x
+    };
+    inspectRef.current?.(id, 'out', port, pin ? 'pin' : 'enter', box || undefined);
   };
   /** Kept inspection widgets for the outputs of these nodes (executed ones), right of each node. */
   const inspectNodes = (ids: number[]) => {

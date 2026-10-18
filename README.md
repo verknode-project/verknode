@@ -113,10 +113,11 @@ that takes the conversation as input:
 
 **Ask about the results**: a Data Q&A Chat answers questions about the
 workflow's tables. The model computes every number it gives with SQL over
-them, and says which node the answer comes from. An LLM Summarizer turns
+them, and says which node the answer comes from: hover the node number
+(#6) for a look at its table, click it to keep the look. An LLM Summarizer turns
 tables into a summary by a prompt, shown in a Text Display:
 
-![A Data Q&A Chat next to a sales workflow: which region did best against its target (East, 267%), North's revenue share of headlamps (60.13%), the product with the fewest units (Shoes, 24), each with a small table and its source node; above, an LLM summary for the regional managers in a Text Display](docs/images/data-chat-v1.png)
+![A Data Q&A Chat next to a sales workflow: which region did best against its target (East, 267%), North's revenue share of headlamps (60.13%), the product with the fewest units (Shoes, 24), each with a small table and its source node; the pointer on node #6 in an answer shows that node's table beside the chat; above, an LLM summary for the regional managers in a Text Display](docs/images/data-chat-v1.png)
 
 **Web services, maps and diagrams**: ask Wikipedia, OpenStreetMap, weather,
 podcast, ChEMBL, PDB, Ensembl or Gene Ontology services for every row of a

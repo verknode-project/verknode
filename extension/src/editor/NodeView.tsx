@@ -397,6 +397,9 @@ export const WorkflowNode = memo(({ data, selected, positionAbsoluteX, positionA
       <div className="verknode-node-name">{n.name}</div>
       <div className="verknode-node-body">
         <NodeIcon nodeType={n.nodeType} icon={n.icon} category={n.category} />
+        <span className="verknode-node-id">
+          #{n.id}
+        </span>
         {implicitIn && (
           <PortHandle
             kind="target"

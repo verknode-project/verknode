@@ -162,6 +162,14 @@ box: it offers the selection, and **Tab** adds it to the message as `@#4
 @#7`. The agent then gets those nodes' details (settings, columns), so you
 can write "@#4 as a bar chart" or "why does @#9 fail?".
 
+Each node shows its number small in the corner of its icon (#4), so you can
+see which node a message means. In the chat, a node number (#7, @#7) is a
+link:
+- **hover** it: the node flashes, and an inspection widget beside the chat
+  shows its output, with its tail pointing to the node;
+- **click** it: the node is selected (and brought into view if it is off
+  screen), and the inspection widget stays.
+
 **See where it works.** The bar at the top of the chat names the agent's
 group. **◎ Show** highlights its nodes on the canvas: it selects them,
 brings them into view and makes them flash. **Show changes** under a reply
@@ -285,7 +293,9 @@ from. Nothing in the workflow changes.
 Run the workflow first; the nodes connected to it run when it starts. The
 conversation stays, as with the agent: *Resume chat* goes on with it, and
 *New chat* starts again. Tab adds the nodes selected on the canvas, so
-"@#7 which product sold least?" asks about their tables. *Guidance* tells
+"@#7 which product sold least?" asks about their tables. The node numbers
+in its answers ("from the per_region table (node #7)") are links too: hover
+one to see that table. *Guidance* tells
 it what the columns mean, the currency, and so on.
 
 ## A summary by a prompt: LLM Summarizer
