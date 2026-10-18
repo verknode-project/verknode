@@ -150,9 +150,10 @@ def apply_defaults(cls, stem: str, prefix: str = "custom"):
         cls.factory = f"{prefix}.{stem}.{cls.__name__}"
     if not cls.__dict__.get("name"):
         cls.name = cls.__name__
-    if not cls.__dict__.get("category"):
+    # (category and icon may come from a base class, e.g. "Widgets/Displays" of OutputWidget)
+    if not getattr(cls, "category", ""):
         cls.category = "Custom" if prefix == "custom" else "Other"
-    if not cls.__dict__.get("icon"):
+    if not getattr(cls, "icon", ""):
         cls.icon = "Py"
 
 

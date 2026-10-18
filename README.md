@@ -33,7 +33,8 @@ and everything stays scriptable from Python.
   script ([custom nodes](docs/custom-nodes.md),
   [Python API](docs/python-api.md)).
 - **Chemistry built in** - RDKit molecules as a column type, drawn as
-  structures, with a structure sketcher ([chemistry](docs/chemistry.md)).
+  structures, with a structure sketcher; proteins and ligands in 3D with
+  NGL or Mol*, in node views and on the canvas ([chemistry](docs/chemistry.md)).
 
 ## A quick look
 
@@ -51,6 +52,17 @@ should be done; loops count their iterations:
 
 ![A table of molecules with their structures](docs/images/chemistry-v3.png)
 
+**Molecules in 2D and 3D**: pick ligand poses in a table of structures and
+see them in the protein pocket (Mol*), or let RDKit generate 3D structures
+from SMILES (NGL):
+
+![Canvas widgets: a table of indinavir poses drawn as structures, the selected poses in HIV-1 protease in Mol*, and HIV protease inhibitors from SMILES in 2D and in 3D with NGL](docs/images/structures-v1.png)
+
+**Open a 3D view** of a protein with its ligands, each in a colour of its
+own; show, hide or zoom to them from the list:
+
+![The NGL structure view: HIV-1 protease with the crystal pose of indinavir and a generated pose in the binding site](docs/images/structure-view-v1.png)
+
 ## Quick start
 
 With Docker:
@@ -62,7 +74,7 @@ With Docker:
 
 Open `notebooks/examples/demo.vkf` (more examples next to it:
 `widgets.vkf`, `timing.vkf`, `analytics.vkf`, `chemistry.vkf`,
-`custom_nodes.vkf`), or create a workflow from the Launcher.
+`structures.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
 
 Other setups (network, reverse proxy, without Docker):
 [deployment](docs/deployment.md).

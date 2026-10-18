@@ -13,6 +13,7 @@ extension/lib/
 extension/tsconfig.tsbuildinfo
 extension/jupyterlab_verknode/labextension/
 extension/jupyterlab_verknode/_version.py
+extension/jupyterlab_verknode/vendor/
 extension/.yarn/
 *.egg-info/
 __pycache__/

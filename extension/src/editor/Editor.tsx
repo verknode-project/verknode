@@ -41,6 +41,7 @@ import { SketcherDialog } from './sketcher/SketcherDialog';
 import { useWidgetSelection, WidgetSelection } from './widgets/selection';
 import { dockGroup, outlinePath, Rect as WidgetRect } from './widgets/snap';
 import { TailStore, useTails } from './widgets/tails';
+import { DisplayLoader } from './widgets/frames';
 
 const nodeTypes = { node: WorkflowNode, metabar: MetanodeBar };
 
@@ -2402,9 +2403,12 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
 }
 
 export function WorkflowEditor({ controller, settings }: { controller: WorkflowController; settings: EditorSettings }) {
+  const loadDisplay = useCallback((nodeId: number) => controller.widgetDisplay(nodeId), [controller]);
   return (
     <ReactFlowProvider>
-      <EditorCanvas controller={controller} settings={settings} />
+      <DisplayLoader.Provider value={loadDisplay}>
+        <EditorCanvas controller={controller} settings={settings} />
+      </DisplayLoader.Provider>
     </ReactFlowProvider>
   );
 }

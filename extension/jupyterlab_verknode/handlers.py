@@ -448,6 +448,28 @@ class KetcherFileHandler(tornado.web.StaticFileHandler):
         self.set_header("Cache-Control", "public, max-age=86400" if "/static/" in f"/{path}" else "no-cache")
 
 
+VENDOR_DIR = os.path.join(os.path.dirname(__file__), "vendor")
+
+
+class VendorFileHandler(tornado.web.StaticFileHandler):
+    """Viewer libraries for the 3D structure views (NGL, Mol*): public static files (no user data)
+    like JupyterLab's own assets - the views run in sandboxed frames, which load them by URL."""
+
+    def set_extra_headers(self, path):
+        self.set_header("Cache-Control", "public, max-age=86400")
+
+
+class DisplayHandler(BaseHandler):
+    """A canvas widget's display when it is too big to go with every view (Workflow.view)."""
+
+    @tornado.web.authenticated
+    def get(self, sid, nid):
+        try:
+            self.reply(self.manager.get(sid).widget_display(int(nid)))
+        except WorkflowError as e:
+            raise tornado.web.HTTPError(404, str(e)) from None
+
+
 class KetcherStatusHandler(BaseHandler):
     @tornado.web.authenticated
     def get(self):
@@ -470,6 +492,7 @@ def setup_handlers(server_app):
         (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "dialog"), DialogHandler),
         (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "ports", r"(?P<port>\d+)"), PortHandler),
         (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "view"), ViewHandler),
+        (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "display"), DisplayHandler),
         (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "ports", r"(?P<port>\d+)", "table"),
          TableHandler),
         (url_path_join(base, "sessions", sid, "wait"), WaitHandler),
@@ -483,5 +506,7 @@ def setup_handlers(server_app):
         # Ketcher editor app (embedded by the Molecule Sketcher dialog)
         (url_path_join(web_app.settings["base_url"], "verknode", "ketcher", "(.*)"), KetcherFileHandler,
          {"path": KETCHER_DIR, "default_filename": "index.html"}),
+        (url_path_join(web_app.settings["base_url"], "verknode", "vendor", "(.*)"), VendorFileHandler,
+         {"path": VENDOR_DIR}),
     ]
     web_app.add_handlers(".*$", handlers)

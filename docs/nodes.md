@@ -33,6 +33,16 @@ About 250 nodes, by category:
   Python code also uses several cores, or Auto: measured on each run, with a note
   on Parallel Chunk End when the other way would be faster); IF/CASE/empty-table switches; Try/Catch error
   handling, breakpoint, wait; flow variable creation and conversion.
+- **Chemistry** – RDKit nodes (SDF reader/writer, sketcher, descriptors,
+  fingerprints, searching, scaffolds, coordinates, reactions) and 3D
+  structures: NGL Structure View and Mol* Structure View (node views), NGL /
+  Mol* Structure Display (canvas widgets). They show a protein (PDB / mmCIF)
+  with ligands from SDF / MOL / MOL2 / PDB files or a molecule column (3D
+  coordinates generated when missing), each ligand in a colour of its own,
+  with a list to show / hide / zoom to them and the residues near the shown
+  ligands. The viewer libraries are served by the extension
+  (`verknode/vendor`, copied from `node_modules` by `jlpm build:vendor`, part
+  of `jlpm build`), with a CDN as the fallback.
 - **Scripting** – Python Script (polars; `chem` helpers when RDKit is present),
   Workflow Script (changes the workflow it is in), Jupyter Notebook (see [Python API and notebooks](python-api.md#jupyter-notebook-node)).
 
@@ -42,7 +52,8 @@ square = DB data. Non-table port objects (models etc.) are pickled inside
 the `.vkf`, so only open workflow files you trust.
 
 Examples: `notebooks/examples/demo.vkf`, `chemistry.vkf`, `analytics.vkf`,
-`custom_nodes.vkf`, `widgets.vkf`, `timing.vkf`, `workflow_scripts.vkf`.
+`custom_nodes.vkf`, `widgets.vkf`, `timing.vkf`, `workflow_scripts.vkf`,
+`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses).
 
 ## Workflow files (.vkf)
 

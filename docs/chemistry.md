@@ -15,6 +15,23 @@ Picker, Structure Normalizer, Find Murcko Scaffolds, Generate Coordinates
 molecules as SMILES; the Python Script node has `chem` helpers
 (`chem.to_mols(series)`, `chem.mol_series(name, mols)`) and `Chem`.
 
+**3D structures** (Chemistry › 3D Structures; canvas widgets in Widgets ›
+Displays): NGL Structure View and Mol* Structure View show a protein and
+ligands in the node view (right-click › Open View, Shift+F10); NGL / Mol*
+Structure Display show them next to the node on the canvas. The protein comes
+from a PDB or mmCIF file; ligands from SDF / MOL / MOL2 / PDB files (every SD
+record is a ligand) and from a molecule column of the input table (RDKit
+molecules, or SMILES / MolBlock / PDB text - ligands without 3D coordinates
+get them from RDKit, laid out side by side when there is no protein). Each
+ligand has a carbon colour of its own and a line in the list on the view:
+show or hide it, or click its name to zoom to it, seen from outside the
+protein. Residues within a distance of the shown ligands are drawn as thin
+sticks (PDB proteins); the protein file's own ligands are drawn thin and grey.
+Settings: protein style (cartoon, cartoon and surface, ball and stick,
+hidden), ligand style, which ligands are shown at the start, background, and
+a limit on the number of ligands. Example: `notebooks/examples/structures.vkf`
+- pick poses in a table of structures and see them in the pocket.
+
 **Molecule Sketcher** (Chemistry › RDKit › IO) makes a table of sketches
 (Index, Name, Molecule, SMILES, optional MolBlock) from structures drawn in
 its dialog; they are stored as MolBlocks in the node settings (from Python:

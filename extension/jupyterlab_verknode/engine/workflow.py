@@ -129,6 +129,7 @@ class NodeContainer:
         # for undo snapshots (Workflow._config): kept while those objects stay the same - edits
         # replace them, they are not changed in place
         self._config_cache: tuple | None = None
+        self._display_cache: tuple | None = None  # (display, key of a big one: Workflow._display_key)
         self.loop_state: dict | None = None  # loop ends while their loop runs (iteration, total, start)
         # input port -> (object, flow variables) it gets instead of what is connected (a parallel
         # chunk copy: its chunk, while the port it is connected to carries the whole table)
@@ -2345,7 +2346,7 @@ class Workflow:
                 # rows of each table output (by port index; None for other ports)
                 "outRows": [o.height if isinstance(o, pl.DataFrame) else None for o in (nc.outputs or [])],
                 # canvas widget (Direct Input / Output nodes): what to show and edit on the node
-                **({"widget": nc.model.widget(nc.settings, nc.display), "widgetLayout": nc.widget_layout or {}}
+                **({"widget": self._widget(nc), "widgetLayout": nc.widget_layout or {}}
                    if hasattr(nc.model, "widget") else {}),
                 "timing": timings.get(nid),
                 "loopIteration": pills.get(nid),
@@ -2430,7 +2431,35 @@ class Workflow:
 
     def node_view(self, nid) -> dict:
         nc = self.node(nid)
-        return {"node": nc.id, "nodeName": nc.name, "html": nc.view}
+        # ("scripts": the view runs scripts, e.g. a 3D viewer - in a sandboxed frame)
+        return {"node": nc.id, "nodeName": nc.name, "html": nc.view, "scripts": bool(getattr(nc.model, "view_scripts", False))}
+
+    # canvas displays bigger than this (JSON) are not in every view: the editor fetches them
+    # by key (widget_display) - e.g. a 3D structure, which would go along with each update
+    DEFER_DISPLAY = 64 * 1024
+
+    def _widget(self, nc) -> dict:
+        w = nc.model.widget(nc.settings, nc.display)
+        if w.get("type") == "output" and w.get("data") is not None:
+            key = self._display_key(nc)
+            if key is not None:
+                w = dict(w, data={"deferred": key})
+        return w
+
+    def _display_key(self, nc) -> str | None:
+        c = nc._display_cache
+        if c is None or c[0] is not nc.display:
+            text = json.dumps(nc.display, default=str)
+            key = hashlib.sha1(text.encode()).hexdigest()[:16] if len(text) > self.DEFER_DISPLAY else None
+            c = nc._display_cache = (nc.display, key)
+        return c[1]
+
+    def widget_display(self, nid) -> dict:
+        """The display of a canvas output widget (the data a deferred view entry stands for)."""
+        nc = self.node(nid)
+        if not hasattr(nc.model, "widget"):
+            raise WorkflowError(f"Node {nid} has no canvas widget")
+        return {"key": self._display_key(nc), "data": nc.model.widget(nc.settings, nc.display).get("data")}
 
     def port_data(self, nid, port: int, offset: int = 0, limit: int = 100, structures=()) -> dict:
         nc = self.node(nid)

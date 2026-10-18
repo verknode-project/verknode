@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { WorkflowController } from '../controller';
+import { withBaseUrl } from './widgets/frames';
 import { NodeViewData } from '../types';
 import { useWorkflowVersion, ViewFrame, ViewFrameKind, ViewMove } from './ChildWindow';
 
@@ -59,7 +60,14 @@ export function NodeViewDialog(props: {
           {busy ? 'Executing… the view opens when the node has executed.' : 'No view available. Execute the node first.'}
         </div>
       )}
-      {data?.html && <iframe className="verknode-view-frame" sandbox="" srcDoc={data.html} title="Node view" />}
+      {data?.html && (
+        <iframe
+          className="verknode-view-frame"
+          sandbox={data.scripts ? 'allow-scripts' : ''}
+          srcDoc={withBaseUrl(data.html)}
+          title="Node view"
+        />
+      )}
     </ViewFrame>
   );
 }

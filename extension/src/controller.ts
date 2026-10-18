@@ -105,6 +105,11 @@ export class WorkflowController implements IDisposable {
     return requestAPI<NodeViewData>(this._url(`nodes/${nodeId}/view`));
   }
 
+  /** A canvas widget's display that the view only refers to (too big to go with every update). */
+  widgetDisplay(nodeId: number): Promise<{ key: string | null; data: any }> {
+    return requestAPI<{ key: string | null; data: any }>(this._url(`nodes/${nodeId}/display`));
+  }
+
   async save(): Promise<void> {
     if (!this._session || this._saving) {
       return;

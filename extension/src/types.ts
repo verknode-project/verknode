@@ -299,4 +299,6 @@ export interface NodeViewData {
   node: number;
   nodeName: string;
   html: string | null;
+  /** the view runs scripts (e.g. a 3D viewer), still in a sandboxed frame */
+  scripts?: boolean;
 }

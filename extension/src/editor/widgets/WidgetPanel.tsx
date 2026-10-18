@@ -1,9 +1,10 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { InputWidgetInfo, OutputWidgetInfo, WidgetInfo, WidgetLayout } from '../../types';
 import { BarChart, formatValue, LineChart, ScatterChart } from './charts';
 import { BUILTIN_CONTROLS } from './controls';
 import { HtmlFrame } from './HtmlFrame';
+import { DisplayLoader } from './frames';
 import { useWidgetSelection, WidgetSelection } from './selection';
 import { dockGroup, groupTop, Rect as DockRect, snapGroup, snapResize } from './snap';
 import { TailStore } from './tails';
@@ -513,7 +514,7 @@ export function WidgetPanel(props: {
               {widget.type === 'input' ? (
                 <InputBody w={widget} busy={props.busy} width={w} height={h} onChange={props.onChange} onSketch={props.onSketch} />
               ) : (
-                <OutputBody w={widget} stale={props.executing} width={w!} height={h!} onSelect={props.onSelect} />
+                <OutputBody id={props.id} w={widget} stale={props.executing} width={w!} height={h!} onSelect={props.onSelect} />
               )}
             </div>
           )}
@@ -551,15 +552,52 @@ function InputBody(props: {
   );
 }
 
-function OutputBody(props: { w: OutputWidgetInfo; stale: boolean; width: number; height: number; onSelect: (s: any) => void }) {
+/** Big displays, fetched once per key (the view only has {deferred: key} for them). */
+const DEFERRED = new Map<string, any>();
+
+function useDisplay(id: number, data: any): any {
+  const load = useContext(DisplayLoader);
+  const key: string | null = data && typeof data === 'object' && typeof data.deferred === 'string' ? data.deferred : null;
+  const [loaded, setLoaded] = useState<{ key: string; data: any } | null>(null);
+  useEffect(() => {
+    if (key === null || DEFERRED.has(key) || !load) {
+      return;
+    }
+    let live = true;
+    void load(id).then(r => {
+      if (r.key) {
+        DEFERRED.set(r.key, r.data);
+        while (DEFERRED.size > 24) {
+          DEFERRED.delete(DEFERRED.keys().next().value!);
+        }
+      }
+      if (live) {
+        setLoaded({ key: r.key ?? key, data: r.data });
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [id, key, load]);
+  if (key === null) {
+    return data;
+  }
+  return DEFERRED.get(key) ?? (loaded?.key === key ? loaded.data : undefined);
+}
+
+function OutputBody(props: { id: number; w: OutputWidgetInfo; stale: boolean; width: number; height: number; onSelect: (s: any) => void }) {
   const { w } = props;
   const Renderer = OUTPUT_RENDERERS.get(w.renderer);
+  const data = useDisplay(props.id, w.data);
+  if (w.data !== null && w.data !== undefined && data === undefined) {
+    return <div className="verknode-widget-placeholder">Loading…</div>;
+  }
   if (w.data === null || w.data === undefined) {
     return <div className="verknode-widget-placeholder">{props.stale ? 'Executing…' : 'Execute to show'}</div>;
   }
   return Renderer ? (
     <Renderer
-      data={w.data}
+      data={data}
       width={props.width}
       height={props.height}
       selection={w.interactive ? w.selection : undefined}

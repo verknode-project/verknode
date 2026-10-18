@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
+import { withBaseUrl } from './frames';
 
 /**
  * A page of a custom widget node ("html" control or display), run in a
@@ -16,7 +17,7 @@ export function HtmlFrame(props: { html: string; value?: any; width: number; hei
       '<!doctype html><meta charset="utf-8"><script>window.verknode = { value: ' +
       value +
       ', setValue: function (v) { parent.postMessage({ verknodeWidget: true, value: v }, "*"); } };</script>' +
-      props.html
+      withBaseUrl(props.html)
     );
   }, [props.html, JSON.stringify(props.value)]);
   useEffect(() => {

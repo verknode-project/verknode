@@ -27,9 +27,10 @@ fields = ["description", "keywords"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["jupyterlab_verknode", "verknode"]
+artifacts = ["jupyterlab_verknode/vendor"]
 
 [tool.hatch.build.targets.sdist]
-artifacts = ["jupyterlab_verknode/labextension"]
+artifacts = ["jupyterlab_verknode/labextension", "jupyterlab_verknode/vendor"]
 
 [tool.hatch.build.targets.wheel.shared-data]
 "jupyterlab_verknode/labextension" = "share/jupyter/labextensions/jupyterlab-verknode"
@@ -44,6 +45,8 @@ build-function = "hatch_jupyter_builder.npm_builder"
 ensured-targets = [
     "jupyterlab_verknode/labextension/static/style.js",
     "jupyterlab_verknode/labextension/package.json",
+    "jupyterlab_verknode/vendor/ngl/ngl.js",
+    "jupyterlab_verknode/vendor/molstar/molstar.js",
 ]
 skip-if-exists = ["jupyterlab_verknode/labextension/static/style.js"]
 
