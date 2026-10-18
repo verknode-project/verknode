@@ -28,6 +28,24 @@ Create one from the Launcher ("Workflow") or the command palette
   last results remain visible (marked outdated) until it runs again. ≡
   Settings › "Open port and node views in" › JupyterLab tab opens them as
   JupyterLab tabs next to the editor (dock, split, drag like any notebook).
+- **Inspect without opening.** Hover a port of an executed node and an
+  inspection widget pops up after a moment, showing the first 25 rows of the
+  data with the column names and the row count. On an input port, it shows
+  the table that comes in, and its tail points at the output port it comes
+  from. The tail is the same as a canvas widget's. A new inspection widget
+  goes to a free spot near its port, clear of the nodes, the canvas widgets
+  and the other inspection widgets where possible. It goes away when the pointer leaves the port and the widget.
+  - Ctrl+click the port, or 📌 on the widget, to keep it.
+  - **Inspect Outputs** in a node's context menu keeps one for each output
+    of the selected nodes, beside them.
+  - Kept widgets can be moved by their title bar, resized and closed (×);
+    ⤢ opens the full view.
+  - To close several at once, right-click one for **Close**, **Close Others**
+    and **Close All Inspections**. A node's menu has **Close Inspections**
+    for the selected nodes, and the canvas menu has **Close All
+    Inspections**.
+  - They show new results when a node runs again, and say so when it is
+    reset. They are part of the editor, not of the workflow file.
   Every view has buttons to move it elsewhere: ⧉ Window, ⇗ Browser tab, ⇱
   JupyterLab tab, ▣ Dialog (so a docked view can be windowed again, and
   back).

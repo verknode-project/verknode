@@ -584,10 +584,16 @@ def _readme(out_dir, stem, script, e, reqs, notes, problems, docker, api):
     if vars_:
         lines += ["Workflow variables (`--var NAME=VALUE`): " + ", ".join(f"`{k}` = `{v!r}`" for k, v in vars_.items()) + ".", ""]
     if api:
+        from urllib.parse import quote
+
+        first = next(iter(_results(e, _real(e))), None)
+        label = e.nodes[first].annotation if first is not None else "..."
+        query = "&".join(([f"{one[0]}={one[1]}"] if one else []) + ["format=csv", f"result={quote(label)}"])
+        body = {"variables": {one[0]: one[1]}} if one else {"results": [label]}
         lines += ["## As an API", "", "```", "python server.py                            # http://localhost:8000",
                   "curl localhost:8000/                        # what it takes and gives",
-                  "curl -X POST localhost:8000/run -d '{\"variables\": {" + (f"\"{one[0]}\": {json.dumps(one[1])}" if one else "") + "}}'",
-                  "curl 'localhost:8000/run?" + (f"{one[0]}={one[1]}" if one else "") + "&format=csv&result=...'",
+                  f"curl -X POST localhost:8000/run -d '{json.dumps(body)}'",
+                  f"curl 'localhost:8000/run?{query}'",
                   "```", "",
                   "`PORT` (8000), `HOST` (0.0.0.0), `API_KEY` (if set, requests need `Authorization: Bearer <key>`), "
                   "`MAX_RUNS` (runs at the same time, 2). `/openapi.json` describes it.", ""]

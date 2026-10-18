@@ -7,7 +7,7 @@ import { useWorkflowVersion, ViewFrame, ViewFrameKind, ViewMove } from './ChildW
 
 const PAGE = 100;
 
-function Cell({ value, kind }: { value: any; kind: string }) {
+export function Cell({ value, kind }: { value: any; kind: string }) {
   if (value === null || value === undefined) {
     return <td className="verknode-missing-cell">?</td>;
   }

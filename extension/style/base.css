@@ -3697,3 +3697,133 @@
   overflow: auto;
   white-space: pre-wrap;
 }
+
+/* inspection widgets (Inspector.tsx): a look at a port's data above the canvas */
+.verknode-inspect-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.verknode-inspect {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  min-height: 90px;
+  border: 1px solid var(--jp-brand-color1);
+  border-radius: 6px;
+  background: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-size: 11px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.verknode-inspect-peek {
+  border-style: dashed;
+}
+
+.verknode-inspect-pinned {
+  resize: both;
+}
+
+.verknode-inspect-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 8px;
+  background: var(--jp-layout-color2);
+  border-bottom: 1px solid var(--jp-border-color2);
+  cursor: default;
+  user-select: none;
+}
+
+.verknode-inspect-pinned .verknode-inspect-head {
+  cursor: move;
+}
+
+.verknode-inspect-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.verknode-inspect-port,
+.verknode-inspect-rows {
+  font-weight: normal;
+  color: var(--jp-ui-font-color2);
+  white-space: nowrap;
+}
+
+.verknode-inspect-btn {
+  border: none;
+  background: none;
+  color: var(--jp-ui-font-color2);
+  font-size: 12px;
+  line-height: 1;
+  padding: 1px 3px;
+  cursor: pointer;
+}
+
+.verknode-inspect-btn:hover {
+  color: var(--jp-ui-font-color0);
+}
+
+.verknode-inspect-body {
+  flex: 1;
+  overflow: auto;
+}
+
+.verknode-inspect-note {
+  padding: 10px;
+  color: var(--jp-ui-font-color2);
+}
+
+.verknode-inspect-table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+}
+
+.verknode-inspect-table th,
+.verknode-inspect-table td {
+  padding: 1px 6px;
+  border-bottom: 1px solid var(--jp-border-color3);
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.verknode-inspect-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--jp-layout-color2);
+  font-weight: 600;
+}
+
+.verknode-inspect-table td.verknode-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.verknode-inspect-table .verknode-mol-cell svg {
+  width: 70px;
+  height: 50px;
+}
+
+.verknode-inspect-more {
+  color: var(--jp-ui-font-color2);
+  font-style: italic;
+}
+
+.verknode-inspect-image {
+  max-width: 100%;
+}

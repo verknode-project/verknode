@@ -8,7 +8,8 @@ import { useSyncExternalStore } from 'react';
  * above every node stacked below that one).
  */
 export class TailStore {
-  set(id: number, points: string | null): void {
+  /** id: a widget's node, or "inspect:<key>" for an inspection widget (Inspector.tsx) */
+  set(id: number | string, points: string | null): void {
     if ((this._tails.get(id) ?? null) === points) {
       return;
     }
@@ -23,12 +24,12 @@ export class TailStore {
     return () => this._listeners.delete(listener);
   };
 
-  snapshot = (): ReadonlyMap<number, string> => this._tails;
+  snapshot = (): ReadonlyMap<number | string, string> => this._tails;
 
-  private _tails = new Map<number, string>();
+  private _tails = new Map<number | string, string>();
   private _listeners = new Set<() => void>();
 }
 
-export function useTails(store: TailStore): ReadonlyMap<number, string> {
+export function useTails(store: TailStore): ReadonlyMap<number | string, string> {
   return useSyncExternalStore(store.subscribe, store.snapshot);
 }

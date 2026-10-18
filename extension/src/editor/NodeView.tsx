@@ -28,6 +28,8 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   navHints?: { keys: string[]; spatial: string[] };
   /** open an output port's view; tab = new browser tab instead of window */
   onOpenPort?: (node: number, port: number, tab: boolean) => void;
+  /** a port hovered (inspection widget for a moment), left, or Ctrl+clicked (kept) */
+  onInspect?: (node: number, kind: 'in' | 'out', port: number, action: 'enter' | 'leave' | 'pin') => void;
   /** height of a metanode port bar */
   barHeight?: number;
   /** Ctrl+click on the traffic light: execute / reset / cancel the node */
@@ -66,8 +68,9 @@ function PortHandle(props: {
   connected: boolean;
   inactive?: boolean;
   onOpen?: (tab: boolean) => void;
+  onInspect?: (action: 'enter' | 'leave' | 'pin') => void;
 }) {
-  const { kind, port, top, connected, inactive, onOpen } = props;
+  const { kind, port, top, connected, inactive, onOpen, onInspect } = props;
   const isVar = port.type === 'flowvariable';
   const isSquare = !isVar && port.type !== 'table';
   const cls = [
@@ -87,7 +90,19 @@ function PortHandle(props: {
       style={{ top }}
       title={
         `${port.index}: ${port.name}${port.optional && !port.implicit ? ' (optional)' : ''}` +
-        (onOpen ? '\nDouble-click to open (Ctrl: in a new tab)' : '')
+        (onOpen ? '\nDouble-click to open (Ctrl: in a new tab)' : '') +
+        (onInspect ? '\nHover to look at the data, Ctrl+click to keep it' : '')
+      }
+      onMouseEnter={onInspect && (() => onInspect('enter'))}
+      onMouseLeave={onInspect && (() => onInspect('leave'))}
+      onClick={
+        onInspect &&
+        ((e: React.MouseEvent) => {
+          if (e.ctrlKey || e.metaKey) {
+            e.stopPropagation();
+            onInspect('pin');
+          }
+        })
       }
       onDoubleClick={
         onOpen &&
@@ -382,7 +397,15 @@ export const WorkflowNode = memo(({ data, selected, positionAbsoluteX, positionA
       <div className="verknode-node-name">{n.name}</div>
       <div className="verknode-node-body">
         <NodeIcon nodeType={n.nodeType} icon={n.icon} category={n.category} />
-        {implicitIn && <PortHandle kind="target" port={implicitIn} top="0%" connected={data.connectedIn.includes(0)} />}
+        {implicitIn && (
+          <PortHandle
+            kind="target"
+            port={implicitIn}
+            top="0%"
+            connected={data.connectedIn.includes(0)}
+            onInspect={data.onInspect && (a => data.onInspect!(n.id, 'in', 0, a))}
+          />
+        )}
         {implicitOut && (
           <PortHandle
             kind="source"
@@ -391,10 +414,18 @@ export const WorkflowNode = memo(({ data, selected, positionAbsoluteX, positionA
             connected={data.connectedOut.includes(0)}
             inactive={n.inactivePorts.includes(0)}
             onOpen={data.onOpenPort && (tab => data.onOpenPort!(n.id, 0, tab))}
+            onInspect={data.onInspect && (a => data.onInspect!(n.id, 'out', 0, a))}
           />
         )}
         {ins.map((p, i) => (
-          <PortHandle key={p.index} kind="target" port={p} top={portTop(i, ins.length)} connected={data.connectedIn.includes(p.index)} />
+          <PortHandle
+            key={p.index}
+            kind="target"
+            port={p}
+            top={portTop(i, ins.length)}
+            connected={data.connectedIn.includes(p.index)}
+            onInspect={data.onInspect && (a => data.onInspect!(n.id, 'in', p.index, a))}
+          />
         ))}
         {outs.map((p, i) => (
           <PortHandle
@@ -405,6 +436,7 @@ export const WorkflowNode = memo(({ data, selected, positionAbsoluteX, positionA
             connected={data.connectedOut.includes(p.index)}
             inactive={n.inactivePorts.includes(p.index)}
             onOpen={data.onOpenPort && (tab => data.onOpenPort!(n.id, p.index, tab))}
+            onInspect={data.onInspect && (a => data.onInspect!(n.id, 'out', p.index, a))}
           />
         ))}
         {outs.map((p, i) => {

@@ -169,7 +169,7 @@ type Rect = { x: number; y: number; w: number; h: number };
  * when the widget covers the icon). Points of an SVG polygon, in the
  * coordinates of the boxes.
  */
-function tail(widget: Rect, icon: Rect): string | null {
+export function tail(widget: Rect, icon: Rect): string | null {
   const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
   const aim = { x: icon.x + icon.w / 2, y: icon.y + icon.h / 2 };
   // the wide end is centred on the widget (hidden under it)

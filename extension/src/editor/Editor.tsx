@@ -44,10 +44,11 @@ import { dockGroup, outlinePath, Rect as WidgetRect } from './widgets/snap';
 import { TailStore, useTails } from './widgets/tails';
 import { DisplayLoader } from './widgets/frames';
 import { CanvasLink, CanvasLinkContext } from './widgets/registry';
+import { InspectLayer, Inspection, INSPECT_H, INSPECT_W, obstacles, place, portPoint } from './Inspector';
 
 const nodeTypes = { node: WorkflowNode, metabar: MetanodeBar };
 
-type Menu = { x: number; y: number; nodeId: number | null; groupId?: number | null };
+type Menu = { x: number; y: number; nodeId: number | null; groupId?: number | null; inspection?: string };
 
 /** A port or node view shown in a child browser window. */
 type External = { key: number; win: Window; kind: 'port' | 'view'; node: number; port: number; tab: boolean };
@@ -537,6 +538,9 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   }, [rawView, level]);
   const flow = useReactFlow();
   const flashing = useRef<Set<string>>(new Set()); // (nodes a display points at: canvasLink.highlight)
+  // inspection widgets (Inspector.tsx): the one shown while a port is hovered ("peek") and kept ones
+  const [inspections, setInspections] = useState<Inspection[]>([]);
+  const inspectRef = useRef<(node: number, kind: 'in' | 'out', port: number, action: 'enter' | 'leave' | 'pin') => void>();
   const tails = useMemo(() => new TailStore(), []);
   // selected canvas widgets (marquee, Ctrl+click, or with their nodes unless anchored)
   const widgetSel = useMemo(() => new WidgetSelection(), []);
@@ -833,6 +837,8 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
             connectedIn: connIn.get(n.id) ?? [],
             connectedOut: connOut.get(n.id) ?? [],
             onOpenPort,
+            onInspect: (node: number, kind: 'in' | 'out', port: number, action: 'enter' | 'leave' | 'pin') =>
+              inspectRef.current?.(node, kind, port, action),
             onLight: (id: number, action: 'execute' | 'reset' | 'cancel') => lightRef.current?.(id, action),
             onWidget: (id: number, value: any) => widgetRef.current?.(id, value),
             onSelect: (id: number, selection: any) => selectRef.current?.(id, selection),
@@ -1743,6 +1749,75 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   const openPortRef = useRef(openPort);
   openPortRef.current = openPort;
   const onOpenPort = useCallback((node: number, port: number, tab: boolean) => openPortRef.current(node, port, tab), []);
+  // hovering a port: a look at its data after a moment; leaving it (and the widget): gone; Ctrl+click: kept
+  const peekTimer = useRef<number | undefined>();
+  const hideTimer = useRef<number | undefined>();
+  const hidePeek = (delay = 250) => {
+    window.clearTimeout(hideTimer.current);
+    hideTimer.current = window.setTimeout(() => setInspections(list => list.filter(i => i.pinned)), delay);
+  };
+  inspectRef.current = (node, kind, port, action) => {
+    window.clearTimeout(peekTimer.current);
+    if (action === 'leave') {
+      hidePeek();
+      return;
+    }
+    // the output the data comes from (an input: the one connected to it)
+    const c = kind === 'in' ? rawView?.connections.find(x => x.destID === node && x.destPort === port) : undefined;
+    const src = kind === 'out' ? { node, port } : c ? { node: c.sourceID, port: c.sourcePort } : null;
+    if (!src || rawView?.nodes.find(n => n.id === src.node)?.state !== 'EXECUTED') {
+      return;
+    }
+    const here = portPoint(flow, node, kind, port);
+    // (a free spot by the port: not over nodes, canvas widgets or other inspection widgets)
+    const at = here
+      ? place(here, kind === 'out' ? 'right' : 'left', { w: INSPECT_W, h: INSPECT_H }, obstacles(flow, wrapper.current, []))
+      : { x: 0, y: 0 };
+    const same = (i: Inspection) => i.node === src.node && i.port === src.port;
+    if (action === 'pin') {
+      window.clearTimeout(hideTimer.current);
+      setInspections(list =>
+        list.some(i => i.pinned && same(i))
+          ? list.filter(i => i.pinned)
+          : [
+              ...list.filter(i => i.pinned),
+              { ...(list.find(i => !i.pinned && same(i)) ?? { node: src.node, port: src.port, at }), key: `i${Date.now()}`, pinned: true }
+            ]
+      );
+      return;
+    }
+    window.clearTimeout(hideTimer.current);
+    peekTimer.current = window.setTimeout(
+      () =>
+        setInspections(list => [
+          ...list.filter(i => i.pinned),
+          ...(list.some(i => i.pinned && same(i)) ? [] : [{ key: 'peek', node: src.node, port: src.port, at, pinned: false }])
+        ]),
+      350
+    );
+  };
+  /** Kept inspection widgets for the outputs of these nodes (executed ones), right of each node. */
+  const inspectNodes = (ids: number[]) => {
+    const add: Inspection[] = [];
+    const taken = obstacles(flow, wrapper.current, []);
+    for (const id of ids) {
+      const info = rawView?.nodes.find(n => n.id === id);
+      const node = flow.getInternalNode(String(id));
+      if (!info || info.state !== 'EXECUTED' || !node) {
+        continue;
+      }
+      const ports = info.outPorts.filter(p => !p.implicit).map(p => p.index);
+      const p = node.internals.positionAbsolute;
+      const w = node.measured?.width ?? 80;
+      for (const port of ports.length ? ports : [0]) {
+        const anchor = portPoint(flow, id, 'out', port) ?? { x: p.x + w, y: p.y + 30 };
+        const at = place(anchor, 'right', { w: INSPECT_W, h: INSPECT_H }, taken);
+        taken.push({ x: at.x, y: at.y, w: INSPECT_W, h: INSPECT_H });
+        add.push({ key: `i${Date.now()}-${id}-${port}`, node: id, port, pinned: true, at });
+      }
+    }
+    setInspections(list => [...list.filter(i => i.pinned && !add.some(a => a.node === i.node && a.port === i.port)), ...add]);
+  };
 
   // close child windows with the editor (and when the page unloads)
   useEffect(() => {
@@ -2103,6 +2178,19 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         action: () => detach(selectedIds().length ? selectedIds() : [n.id])
       },
       '-' as const,
+      {
+        label: selectedIds().length > 1 && selectedIds().includes(n.id) ? `Inspect Outputs (${selectedIds().length} nodes)` : 'Inspect Outputs',
+        disabled: !(selectedIds().includes(n.id) ? selectedIds() : [n.id]).some(id => byId.get(id)?.state === 'EXECUTED'),
+        action: () => inspectNodes(selectedIds().includes(n.id) ? selectedIds() : [n.id])
+      },
+      {
+        label: 'Close Inspections',
+        disabled: !inspections.some(i => (selectedIds().includes(n.id) ? selectedIds() : [n.id]).includes(i.node)),
+        action: () => {
+          const ids = selectedIds().includes(n.id) ? selectedIds() : [n.id];
+          setInspections(list => list.filter(i => !ids.includes(i.node)));
+        }
+      },
       ...n.outPorts
         .filter(p => !p.implicit)
         .map(p => ({
@@ -2202,7 +2290,20 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     '-' as const,
     { label: 'Workflow Variables…', action: () => setWfVars(true) },
     { label: 'Export as Python…', action: () => setPythonOpen(true) },
-    { label: 'Fit to Screen', action: () => fitAll(200) }
+    { label: 'Fit to Screen', action: () => fitAll(200) },
+    ...(inspections.length
+      ? ['-' as const, { label: `Close All Inspections (${inspections.length})`, action: () => setInspections([]) }]
+      : [])
+  ];
+  // the menu of an inspection widget
+  const inspectionMenuItems = (key: string) => [
+    { label: 'Close', action: () => setInspections(list => list.filter(i => i.key !== key)) },
+    {
+      label: 'Close Others',
+      disabled: inspections.length < 2,
+      action: () => setInspections(list => list.filter(i => i.key === key))
+    },
+    { label: `Close All Inspections (${inspections.length})`, action: () => setInspections([]) }
   ];
 
   const localPos = (e: React.MouseEvent | MouseEvent) => {
@@ -2540,6 +2641,29 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
               <WidgetTails store={tails} />
               <WidgetHints selection={widgetSel} rects={() => widgetOps.current.env().rects} />
             </ViewportPortal>
+            <InspectLayer
+              controller={controller}
+              tails={tails}
+              inspections={inspections}
+              onMenu={(key, e) => setMenu({ ...localPos(e), nodeId: null, inspection: key })}
+              onChange={(key, patch) =>
+                setInspections(list =>
+                  list.map(i => (i.key !== key ? i : { ...i, ...patch, ...(patch.pinned && !i.pinned ? { key: `i${Date.now()}` } : {}) }))
+                )
+              }
+              onClose={key => setInspections(list => list.filter(i => i.key !== key))}
+              onHover={(key, inside) => {
+                if (key !== 'peek') {
+                  return;
+                }
+                if (inside) {
+                  window.clearTimeout(hideTimer.current);
+                } else {
+                  hidePeek();
+                }
+              }}
+              onOpen={(node, port) => openPort(node, port)}
+            />
             <Controls showInteractive={false} showFitView={false}>
               <ControlButton onClick={() => fitAll(200)} title="Fit view" aria-label="fit view" className="react-flow__controls-fitview">
                 <svg viewBox="0 0 32 30" xmlns="http://www.w3.org/2000/svg">
@@ -2568,7 +2692,9 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
             <ContextMenu
               menu={menu}
               items={
-                menu.nodeId !== null && byId.get(menu.nodeId)?.kind === 'metanode'
+                menu.inspection
+                  ? inspectionMenuItems(menu.inspection)
+                  : menu.nodeId !== null && byId.get(menu.nodeId)?.kind === 'metanode'
                   ? metanodeMenuItems(byId.get(menu.nodeId)!)
                   : menu.nodeId !== null && byId.get(menu.nodeId) && menu.nodeId > 0
                   ? nodeMenuItems(byId.get(menu.nodeId)!)
