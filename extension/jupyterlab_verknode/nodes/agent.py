@@ -40,6 +40,8 @@ CONFIRM = "\n\n**Waiting for your OK**"
 CLAIM = re.compile(r"\b(I|I've|I have)\s+(now\s+)?(added|removed|deleted|changed|updated|connected|disconnected|"
                    r"configured|created|built|set|renamed|replaced|cleared)\b|\bhas been (added|removed|deleted|"
                    r"changed|updated|cleared|created)\b", re.I)
+ASKS = re.compile(r"\b(do you (agree|want)|shall i|should i|would you like me to|may i|can i|is that ok(ay)?|"
+                  r"please confirm|confirm (that|if))\b[^?]*\?", re.I)
 YES = re.compile(r"\s*(y|yes|yeah|yep|ok|okay|sure|go ahead|do it|apply|confirm|confirmed|please do|yes,? (please|do it|go ahead|apply)?)[.! ]*", re.I)
 NO = re.compile(r"\s*(n|no|nope|cancel|don'?t|do not|stop|abort|keep (it|them)|never ?mind)[.! ]*", re.I)
 
@@ -536,8 +538,9 @@ Rules:
 - The workflow changes only through your tool calls. Never say you did something you did not do with a tool.
 - You may only change, connect into or remove your own nodes (marked *); new nodes join your group. \
 Other nodes are read only: connect from their outputs if you need their data. Never try to change them.
-- Only remove or rewire what the user asks you to. Removing nodes or connections that were there before this \
-message is shown to the user, who must agree before it happens: say so in your answer.
+- Only change, remove or rewire what the user asks you to. Do not ask the user for permission in words: make \
+the change with the tools - verknode shows changes of what was there before this message to the user \
+(highlighted on the canvas) and asks for their OK itself.
 - Ports count from 1. A node needs its (non optional) input ports connected before it is ready.
 - File paths are relative to the workflow's folder (list_files shows the files). Do not write files unless asked.
 - Everything you do is tried on a copy, in a file sandbox; it is made in the workflow when you have answered.
@@ -545,6 +548,9 @@ message is shown to the user, who must agree before it happens: say so in your a
 them (briefly) instead of guessing."""
 
 
+ASK_CHANGE = ("\n(This changes a node that was there before this message: it is made in the workflow only when the "
+              "user agrees - they will be asked, with the node highlighted. In your answer, say what you would "
+              "change and that it waits for their OK.)")
 ASK_OK = ("\n(This undoes what was there before this message: it is made in the workflow only when the user "
           "agrees - they will be asked. In your answer, say what you would change and that it waits for their OK; "
           "do not say it is done.)")
@@ -608,6 +614,8 @@ class AgentSession:
         self.edit = Edit(test, editable, gid, self.me, self.hidden, self.group)
         self.ops: list[dict] = []
         self.destructive: list[str] = []
+        self.changes: list[str] = []  # (changes of nodes that were there: asked when confirm_changes)
+        self.guarded = bool(s.get("confirm_changes", True))
         self.helped: set[str] = set()
         self.dirty = False  # (edited since the last run)
         self.last_run = None  # (report, problems, files) of the last run
@@ -627,7 +635,7 @@ class AgentSession:
         steps, max_steps = 0, max(4, int(s.get("steps") or 40))
         fixes, max_fixes = 0, max(0, int(s.get("rounds") or 3))
         checked = not s.get("check", True)
-        text, nudges, claimed = "", 0, False
+        text, nudges, claimed, asked = "", 0, False, False
         seen: dict = {}  # (tool calls so far: repeating one that cannot help is stopped)
         while True:
             self.ctx.check_canceled()
@@ -662,6 +670,13 @@ class AgentSession:
                 nudges += 1
                 messages.append({"role": "user", "content": "Go on: do what I asked with the tools, then answer me "
                                  "(or answer me if there is nothing to build)."})
+                continue
+            if not self.ops and not asked and ASKS.search(text):
+                # (it asks for permission in words: verknode asks - it makes the change)
+                asked = True
+                messages.append({"role": "user", "content": "(verknode: do not ask me in words - make the change "
+                                 "with the tools; verknode shows it to me and asks for my OK before anything that was "
+                                 f"there changes.) My message: \"{message}\""})
                 continue
             if not self.ops and not claimed and CLAIM.search(text):
                 # (it says it changed something, but no tool did: it has to do it)
@@ -706,14 +721,19 @@ class AgentSession:
         report, problems, files = self.last_run
         plan = {"ops": self.ops, "log": list(self.edit.log), "reply": reply, "problems": problems, "test": self.test,
                 "preview": self._result_text(rows=int(s.get("preview_rows") or 5), markdown=True), "report": report}
-        warnings = list(self.destructive)
+        # (what changes nodes that were there - with "Ask before changing existing nodes" - and what writes
+        # over files or leaves failures: the user's OK first)
+        warnings = list(self.destructive) + list(self.changes) if self.guarded else []
         if problems:
             warnings.append("leave these problems (the test still shows them): " + "; ".join(problems[:4]))
         warnings += [f"when what was built runs, it would {'overwrite' if f['change'] == 'modified' else 'delete'} "
                      f"{os.path.relpath(f['path'], wf.base_dir or '.')}" for f in files if f["change"] in ("modified", "deleted")]
         if warnings:
             self.pending = plan
-            self.nodes = sorted({int(op[k]) for op in self.ops for k in ("node", "from", "to")
+            if CLAIM.search(reply) or re.search(r"\b(has|have) been\b", reply):  # (it is not done yet)
+                reply = "Nothing has changed yet: this is what I would do, once you agree."
+            # (the nodes that were there and would change: highlighted on the canvas)
+            self.nodes = sorted({int(op[k]) for op in self.ops for k in ("node", "to")
                                  if isinstance(op.get(k), int) and op[k] in wf.nodes and op[k] not in self.hidden})
             return (reply + CONFIRM + " - this would:\n" + "\n".join(f"- {w}" for w in warnings) +
                     "\n\nShall I go ahead? (Yes / No)" + SUMMARY + " it would make\n" +
@@ -832,6 +852,10 @@ class AgentSession:
 
     def t_configure_node(self, node=None, settings=None, label=None):
         nid = self._edit({"op": "configure", "node": node, "settings": settings or {}, "label": label})
+        if nid in self.orig_nodes:
+            what = ", ".join(f"{k} = {_short(v, 60)}" for k, v in (settings or {}).items()) or f"label \"{label}\""
+            self.changes.append(f"change {self._name(nid)}: {what}")
+            return f"Configured on the copy. {self._after_edit(nid)}" + (ASK_CHANGE if self.guarded else "")
         return f"Configured. {self._after_edit(nid)}"
 
     def _conn(self, kind, from_node, from_port, to_node, to_port):
@@ -848,7 +872,10 @@ class AgentSession:
                 if k in self.orig_conns and k != (src, sp, dst, dp):
                     self.destructive.append(f"replace the connection {self._name(k[0])}:{k[1]} -> {self._name(dst)}:{dp} "
                                             f"by one from {self._name(src)}:{sp}")
-        return self._after_edit(dst) + (ASK_OK if len(self.destructive) > n else "")
+            if len(self.destructive) == n and dst in self.orig_nodes:  # (a new input of a node that was there)
+                self.changes.append(f"connect {self._name(src)}:{sp} into {self._name(dst)}:{dp}")
+                return self._after_edit(dst) + (ASK_CHANGE if self.guarded else "")
+        return self._after_edit(dst) + (ASK_OK if len(self.destructive) > n and self.guarded else "")
 
     def _name(self, nid):
         nc = self.test.nodes.get(nid) or self.wf.nodes.get(nid)
@@ -866,7 +893,7 @@ class AgentSession:
         self._edit({"op": "remove", "node": nid})
         if nid in self.orig_nodes:
             self.destructive.append(f"remove the node {name} [{self.wf.nodes[nid].name if nid in self.wf.nodes else ''}]")
-            return f"Removed {name} on the copy.{ASK_OK}"
+            return f"Removed {name} on the copy." + (ASK_OK if self.guarded else "")
         return f"Removed {name}."
 
     def _run(self, ids=None):
@@ -939,6 +966,10 @@ AGENT_FIELDS = [
       "if they are not what was asked for (when it did not look itself)."),
     F("memory", "int", "Memory (messages)", 20),
     F("preview_rows", "int", "Rows shown in replies", 5),
+    F("confirm_changes", "bool", "Ask before changing existing nodes", True,
+      "Changes of nodes that were there before your message - settings, connections into them, removing them - "
+      "are highlighted on the canvas and wait for your OK (Yes / No in the chat). Off: the agent goes ahead "
+      "(overwriting files and leaving failures are still asked about). Also the checkbox on the chat."),
     F("sandbox", "bool", "Test in a sandbox", True,
       "Off: the agent's test runs work on the real files (they can write, overwrite and delete them) and run "
       "scripts, and their results go straight into this workflow. Also the checkbox on the chat."),
@@ -1034,7 +1065,8 @@ class WorkflowAgentChat(NodeModel):
 
     def widget(self, s: dict, display) -> dict:
         # (agent: Begin / Resume chat, and the Sandbox checkbox - the setting)
-        data = {**(display or {}), "agent": True, "sandbox": bool(s.get("sandbox", True))}
+        data = {**(display or {}), "agent": True, "sandbox": bool(s.get("sandbox", True)),
+                "confirm_changes": bool(s.get("confirm_changes", True))}
         return {"type": "output", "renderer": self.renderer, "title": s.get("title") or "", "width": self.width,
                 "height": self.height, "data": data, "interactive": False, "selection": None}
 
@@ -1075,13 +1107,15 @@ class WorkflowAgentChat(NodeModel):
 
         session = None
 
-        def set_sandbox(value):
-            # (the checkbox while the chat runs: it is the setting at once - without running the chat again)
-            s["sandbox"] = value
+        def set_setting(key, value):
+            # (a checkbox while the chat runs: it is the setting at once - without running the chat again)
+            s[key] = value
+            if session is not None:
+                session.s[key] = value
             with wf._lock:
                 nc = wf.nodes.get(me)
                 if nc is not None:
-                    nc.settings = {**nc.settings, "sandbox": value}
+                    nc.settings = {**nc.settings, key: value}
             wf._changed()
 
         session = AgentSession(ctx, s, wf, me, status=lambda text: show(waiting=False, status=text),
@@ -1095,9 +1129,13 @@ class WorkflowAgentChat(NodeModel):
                     show(waiting=False, ended=True)
                     ctx.log("Chat ended")
                     break
-                if "sandbox" in got and "text" not in got:
-                    set_sandbox(bool(got["sandbox"]))
-                    ctx.log(f"Sandbox {'on' if s['sandbox'] else 'OFF: the agent works on the real files'}")
+                changed = {**({"sandbox": got["sandbox"]} if "sandbox" in got else {}), **(got.get("setting") or {})}
+                if changed and "text" not in got:
+                    for key, value in changed.items():
+                        if key in ("sandbox", "confirm_changes"):
+                            set_setting(key, bool(value))
+                            ctx.log({"sandbox": "Sandbox", "confirm_changes": "Ask before changing existing nodes"}[key]
+                                    + (" on" if value else " OFF"))
                     continue
                 text = str(got.get("text") or "").strip()
                 if not text:

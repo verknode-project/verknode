@@ -5,7 +5,7 @@ import { BarChart, formatValue, LineChart, ScatterChart } from './charts';
 import { BUILTIN_CONTROLS } from './controls';
 import { HtmlFrame } from './HtmlFrame';
 import { DisplayLoader } from './frames';
-import { ChatRenderer } from './chat';
+import { ChatRenderer, TextRenderer } from './chat';
 import { useWidgetSelection, WidgetSelection } from './selection';
 import { dockGroup, groupTop, Rect as DockRect, snapGroup, snapResize } from './snap';
 import { TailStore } from './tails';
@@ -123,6 +123,7 @@ registerOutputRenderer('value', ValueRenderer);
 registerOutputRenderer('image', ImageRenderer);
 registerOutputRenderer('html', HtmlRenderer);
 registerOutputRenderer('chat', ChatRenderer);
+registerOutputRenderer('markdown', TextRenderer);
 
 /** Canvas zoom of the node (its screen size over its own size). */
 function zoomOf(el: HTMLElement): number {

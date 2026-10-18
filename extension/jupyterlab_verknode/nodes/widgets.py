@@ -523,6 +523,33 @@ class ValueDisplay(OutputWidget):
         return {"column": col, "how": how, "value": json_value(v), "numeric": numeric or how == "Count"}
 
 
+class TextDisplay(OutputWidget):
+    """Renderer "markdown": {"text"}."""
+
+    factory = "verknode.widgets.TextDisplay"
+    name = "Text Display"
+    icon = "¶"
+    renderer = "markdown"
+    width, height = 380, 240
+    short_description = "Text of the input on the canvas, as Markdown (e.g. an LLM summary)."
+    description = (
+        "Shows the text of a column - the first row, or all rows one after another - formatted as Markdown "
+        "(paragraphs, lists, **bold**, `code`, tables): for summaries, notes, reports." + _OUTPUT_HELP
+    )
+    widget_fields = [
+        F("column", "column", "Column", None, "Empty: the first text column.", kinds=["string"]),
+        F("rows", "enum", "Rows", "First row", options=["First row", "All rows"]),
+    ]
+
+    def render(self, df, s, ctx):
+        col = s.get("column") or next((c for c, t in df.schema.items() if t == pl.String), None)
+        if col is None or col not in df.columns:
+            raise InvalidSettingsError("The input has no text column" if col is None else f'Column "{col}" not found')
+        values = [str(v) for v in df[col].to_list() if v is not None]
+        text = values[0] if values and s.get("rows") != "All rows" else "\n\n".join(values)
+        return {"text": text, "column": col}
+
+
 class ImageDisplay(OutputWidget):
     """Renderer "image": {"mime", "data" (base64)}."""
 

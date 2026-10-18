@@ -214,13 +214,23 @@ lists the changes, the test and the first rows of the result.
   is a group of its own, "Built by agent #<id>", so two agents never share
   one. It may change, rewire or remove only those nodes; others it can only
   read from, by connecting their outputs into its nodes.
-- **It asks before undoing anything.** It asks for your OK (*Yes* or *No* in
-  the chat) before:
-  - removing nodes or connections that were there before your message;
-  - replacing a connection;
-  - building something that, when run, would overwrite or delete a file.
+- **It asks before changing what was there.** Changes to nodes that existed
+  before your message wait for your OK (*Yes* or *No* in the chat). This
+  covers:
+  - their settings;
+  - new connections into them;
+  - replacing or removing their connections;
+  - removing them.
 
-  Any other message drops the change.
+  Those nodes flash on the canvas when the question comes, and *Show
+  changes* under it shows them again. The reply says that nothing has
+  changed yet. Any other message drops the change. The agent does not ask
+  in words; verknode asks.
+- **The Ask first checkbox** on the chat is the *Ask before changing
+  existing nodes* setting, and you can change it while the chat waits. When
+  it is off, the chat warns you and the agent goes ahead with those changes.
+  It still asks before building something that, when run, would overwrite or
+  delete a file, and before leaving changes whose test still fails.
 - **The Sandbox checkbox** on the chat is the *Test in a sandbox* setting.
   You can change it while the chat waits for you. When it is off, the chat
   warns you, and the agent works on the real workflow:
@@ -248,6 +258,46 @@ It never touches the loop it runs in or anything connected to it.
 - **Chat 2**, fed by chat 1's output, goes on from that conversation. It joins
   the result with the regions' targets and adds the percent of target. The example data is in `notebooks/examples/agent/`:
 `sales.csv`, `regions.csv` and `customers_raw.csv`.
+
+## Questions about the results: Data Q&A Chat
+
+**Data Q&A Chat** (AI › LLM) is a chat on the canvas, in one node like the
+Workflow Agent Chat, that answers questions about the workflow's data. For
+example: "which region did best against its target?" or "what share of
+North's revenue comes from headlamps?". It sees:
+- the tables of the workflow's executed nodes, named after their labels;
+- the tables connected to its three optional inputs (*Tables*: or only
+  those).
+
+The model answers with read-only tools:
+- list the tables, with the values of their short text columns;
+- describe a table: columns and statistics;
+- look at rows;
+- compute with **SQL** (polars SQL: `SELECT`, `GROUP BY`, `JOIN`, window
+  functions, ...).
+
+It has to compute every number it reports. An answer with numbers but no
+query for that question is sent back to be computed, and an SQL result of 0
+or no rows comes with a hint to check the values. The answer gives the
+numbers first, often as a small table, then the table (node) they come
+from. Nothing in the workflow changes.
+
+Run the workflow first; the nodes connected to it run when it starts. The
+conversation stays, as with the agent: *Resume chat* goes on with it, and
+*New chat* starts again. Tab adds the nodes selected on the canvas, so
+"@#7 which product sold least?" asks about their tables. *Guidance* tells
+it what the columns mean, the currency, and so on.
+
+## A summary by a prompt: LLM Summarizer
+
+**LLM Summarizer** (AI › LLM) sends a prompt and one to three input tables
+to the model. Each table is named after the node it comes from and sent as
+its columns, statistics of the numeric columns, the values of its short
+text columns, and its first rows (*Rows sent per table*; all of them when
+there are fewer). The answer is one row (`summary`, `model`, `seconds`) and
+the flow variable `summary`. A **Text Display** (Widgets › Displays) shows
+it on the canvas as Markdown, and a writer or a report node can take it
+further.
 
 ## A coding agent
 
@@ -303,6 +353,15 @@ the agent learns from the failing cases, one per attempt.
 `notebooks/examples/chatbot.vkf`: the two chats above.
 
 `notebooks/examples/workflow_agent.vkf`: the workflow agent above (one node).
+
+`notebooks/examples/data_chat.vkf` has the sales results: revenue per region
+against the targets, and per region and product. On top of them:
+- **Data Q&A Chat** with three questions answered from the data, each
+  computed with SQL: East did best with 267% of its target; headlamps are
+  60.13% of North's revenue; Shoes sold the fewest units, 24.
+- **LLM Summarizer**, writing a summary for the regional managers (one
+  bullet per region with its manager, revenue and percent of target, and
+  the region to watch), shown on the canvas in a **Text Display**.
 
 `notebooks/examples/ollama.vkf`:
 

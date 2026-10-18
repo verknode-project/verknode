@@ -11,7 +11,7 @@ import { CanvasLinkContext, CanvasNodeRef, OutputRendererProps } from './registr
  * A Workflow Agent Chat (data.agent) keeps its conversation: Resume chat goes on with it, New chat
  * starts again. It has the Sandbox checkbox (data.sandbox), Show (its nodes, data.group_nodes) and,
  * under its replies, Show changes (message.nodes); Tab adds the nodes selected on the canvas to the
- * message (as @#id).
+ * message (as @#id). A Data Q&A Chat (data.resumable) keeps its conversation and takes @#id too.
  */
 interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -24,8 +24,10 @@ interface Message {
 export function ChatRenderer({ data, width, height, onSend, running, nodeId, nodeRunning }: OutputRendererProps) {
   const stored: Message[] = Array.isArray(data?.messages) ? data.messages : [];
   const agent = !!data?.agent;
+  // (agent chats and Q&A chats keep their conversation: Begin / Resume / New chat, Tab adds selected nodes)
+  const resumable = agent || !!data?.resumable;
   // (an agent chat: whether its own node runs - another part of the workflow may run meanwhile)
-  const active = agent ? !!nodeRunning : !!running;
+  const active = resumable ? !!nodeRunning : !!running;
   const waiting = !!data?.waiting && active;
   const link = useContext(CanvasLinkContext);
   // (the message just sent shows at once, before the node shows it)
@@ -62,6 +64,14 @@ export function ChatRenderer({ data, width, height, onSend, running, nodeId, nod
   const send = () => sendText(draft.trim());
   const confirm = waiting && last?.role === 'assistant' && !!last.confirm;
   const sandbox = data?.sandbox !== false;
+  const askFirst = data?.confirm_changes !== false;
+  // a reply that waits for an OK: the nodes it would change flash on the canvas
+  const lastStored = stored[stored.length - 1];
+  useEffect(() => {
+    if (agent && waiting && lastStored?.role === 'assistant' && lastStored.confirm && lastStored.nodes?.length) {
+      link?.highlight(lastStored.nodes);
+    }
+  }, [stored.length, waiting]);
   // (the checkbox: while it runs, it goes to the chat - only while it waits; else it is the setting)
   const canToggle = !!onSend && (!active || waiting);
   const said = stored.some(m => m.role === 'user');
@@ -72,7 +82,7 @@ export function ChatRenderer({ data, width, height, onSend, running, nodeId, nod
   // the nodes selected on the canvas, offered to the message (Tab)
   const mentioned = (refs: CanvasNodeRef[]) => refs.filter(r => !draft.includes(`@#${r.id}`));
   const offerSelection = () => {
-    if (agent && link) {
+    if (resumable && link) {
       const refs = link.selection(nodeId);
       setOffer(keyOf(refs) === settled.current ? [] : mentioned(refs));
     }
@@ -154,7 +164,7 @@ export function ChatRenderer({ data, width, height, onSend, running, nodeId, nod
             </button>
           </div>
         )}
-        {!active && !agent && (
+        {!active && !resumable && (
           <div className="verknode-chat-note">
             {data?.ended ? 'The chat has ended. ' : messages.length ? 'The chat is not running. ' : ''}
             <button className="verknode-chat-link" disabled={!onSend} onClick={() => onSend?.({ start: true })}>
@@ -162,7 +172,7 @@ export function ChatRenderer({ data, width, height, onSend, running, nodeId, nod
             </button>
           </div>
         )}
-        {!active && agent && (
+        {!active && resumable && (
           <div className="verknode-chat-note">
             {blocked
               ? 'The workflow is running something else: the chat can start when it is done.'
@@ -181,7 +191,12 @@ export function ChatRenderer({ data, width, height, onSend, running, nodeId, nod
         </div>
       )}
       <div className="verknode-chat-input">
-        {waiting && offer.length > 0 && (
+        {agent && !askFirst && (
+        <div className="verknode-chat-warning" role="alert">
+          ⚠ Ask first is off: the agent changes and removes nodes that were there without asking.
+        </div>
+      )}
+      {waiting && offer.length > 0 && (
           <button className="verknode-chat-offer" onMouseDown={e => e.preventDefault()} onClick={insertOffer} title="Add the selected nodes to the message (Tab)">
             <kbd>Tab</kbd> add the selection:{' '}
             {offer
@@ -203,7 +218,7 @@ export function ChatRenderer({ data, width, height, onSend, running, nodeId, nod
                 ? 'Wait for the answer…'
                 : active
                   ? 'The workflow is running…'
-                  : agent
+                  : resumable
                     ? said
                       ? 'Resume the chat to type'
                       : 'Begin the chat to type'
@@ -228,7 +243,7 @@ export function ChatRenderer({ data, width, height, onSend, running, nodeId, nod
           }}
         />
         <div className="verknode-chat-buttons">
-          {agent && !active ? (
+          {resumable && !active ? (
             said ? (
               <>
                 <button className="jp-mod-styled jp-mod-accept" disabled={!onSend || blocked} onClick={() => start(false)} title="Go on with this conversation">
@@ -262,8 +277,31 @@ export function ChatRenderer({ data, width, height, onSend, running, nodeId, nod
                   : "Off: the agent's runs work on the real files and the current workflow"
               }
             >
-              <input type="checkbox" checked={sandbox} disabled={!canToggle} onChange={e => onSend?.({ sandbox: e.target.checked, live: active })} />
+              <input
+                type="checkbox"
+                checked={sandbox}
+                disabled={!canToggle}
+                onChange={e => onSend?.({ setting: { sandbox: e.target.checked }, live: active })}
+              />
               Sandbox
+            </label>
+          )}
+          {agent && (
+            <label
+              className="verknode-chat-sandbox"
+              title={
+                askFirst
+                  ? 'Changes of nodes that were there are highlighted and wait for your OK'
+                  : 'Off: the agent changes and removes existing nodes without asking'
+              }
+            >
+              <input
+                type="checkbox"
+                checked={askFirst}
+                disabled={!canToggle}
+                onChange={e => onSend?.({ setting: { confirm_changes: e.target.checked }, live: active })}
+              />
+              Ask first
             </label>
           )}
         </div>
@@ -273,7 +311,7 @@ export function ChatRenderer({ data, width, height, onSend, running, nodeId, nod
 }
 
 /** A little Markdown for answers: paragraphs, lists, ```code blocks```, `code` and **bold**. */
-function Markdown({ text }: { text: string }) {
+export function Markdown({ text }: { text: string }) {
   const parts = text.split(/```[a-zA-Z0-9_+-]*\n?([\s\S]*?)```/g);
   return (
     <>
@@ -367,5 +405,14 @@ function Inline({ text }: { text: string }) {
         )
       )}
     </>
+  );
+}
+
+/** The display of the Text Display node: its text as Markdown. */
+export function TextRenderer({ data, width, height }: OutputRendererProps) {
+  return (
+    <div className="verknode-text-display nowheel" style={{ width, height }}>
+      {data?.text ? <Markdown text={String(data.text)} /> : <span className="verknode-widget-placeholder">No text</span>}
+    </div>
   );
 }

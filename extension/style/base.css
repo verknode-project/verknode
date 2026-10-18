@@ -3827,3 +3827,23 @@
 .verknode-inspect-image {
   max-width: 100%;
 }
+
+/* the Text Display widget: Markdown text */
+.verknode-text-display {
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.verknode-text-display p,
+.verknode-text-display ul,
+.verknode-text-display ol {
+  margin: 0 0 6px;
+}
+
+.verknode-text-display ul,
+.verknode-text-display ol {
+  padding-left: 18px;
+}

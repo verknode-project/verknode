@@ -51,7 +51,9 @@ About 250 nodes, by category:
   Start (or a Chat widget in a recursive loop): a chatbot on the canvas; Workflow
   Agent Chat: builds the workflow you describe in a chat on the canvas, live (in
   its own group, each step tested in a file sandbox first, asking before it removes
-  anything; Workflow Agent: the same for a chat loop of your own); Ollama management: models,
+  anything; Workflow Agent: the same for a chat loop of your own); Data Q&A Chat: answers questions
+  about the workflow's results, computing with SQL; LLM Summarizer: a summary of
+  tables by a prompt; Ollama management: models,
   loaded models and their GPU memory, model info, load / unload, download,
   create, delete ([LLM nodes](llm.md)).
 - **Scripting** – Python Script (polars; `chem` helpers when RDKit is present),
@@ -66,7 +68,7 @@ the `.vkf`, so only open workflow files you trust.
 
 Examples: `notebooks/examples/demo.vkf`, `chemistry.vkf`, `analytics.vkf`,
 `custom_nodes.vkf`, `widgets.vkf`, `timing.vkf`, `workflow_scripts.vkf`,
-`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses), `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`.
+`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses), `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`.
 
 ## Workflow files (.vkf)
 

@@ -15,7 +15,7 @@ import {
   useReactFlow,
   ViewportPortal
 } from '@xyflow/react';
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { ExportOptions, WorkflowController } from '../controller';
 import { FlowVariableInfo, GroupInfo, NodeDescription, NodeInfo, VarType, WidgetLayout, WorkflowView } from '../types';
@@ -122,8 +122,26 @@ function ContextMenu(props: {
       window.removeEventListener('blur', close);
     };
   }, []);
+  // (kept inside the window: moved up / left by what would stick out)
+  const ref = useRef<HTMLDivElement>(null);
+  const [shift, setShift] = useState({ x: 0, y: 0 });
+  useLayoutEffect(() => {
+    const r = ref.current?.getBoundingClientRect();
+    if (r) {
+      const margin = 4;
+      setShift({
+        x: Math.min(0, window.innerWidth - margin - r.right),
+        y: r.height > window.innerHeight - 2 * margin ? margin - r.top : Math.min(0, window.innerHeight - margin - r.bottom)
+      });
+    }
+  }, [props.menu.x, props.menu.y]);
   return (
-    <div className="verknode-menu" style={{ left: props.menu.x, top: props.menu.y }} onMouseDown={e => e.stopPropagation()}>
+    <div
+      ref={ref}
+      className="verknode-menu"
+      style={{ left: props.menu.x + shift.x, top: props.menu.y + shift.y, maxHeight: window.innerHeight - 8, overflowY: 'auto' }}
+      onMouseDown={e => e.stopPropagation()}
+    >
       {props.items.map((it, i) =>
         it === '-' ? (
           <div key={i} className="verknode-menu-sep" />
@@ -1616,9 +1634,10 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       });
       return;
     }
-    if (value && 'sandbox' in value && !value.live) {
+    if (value?.setting && !value.live) {
+      // (a checkbox of a chat that does not run: its setting)
       void run(async () => {
-        await controller.op('set_settings', { id, settings: { sandbox: !!value.sandbox } });
+        await controller.op('set_settings', { id, settings: value.setting });
       });
       return;
     }

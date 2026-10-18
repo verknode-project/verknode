@@ -53,8 +53,9 @@ standalone Python script that runs without Jupyter.
   reviewed workflows that agents run as tools with other parameters
   ([agents](docs/agents.md)).
 - **LLMs in the workflow** - prompt a local Ollama or any OpenAI-compatible
-  server for every row: classify, summarize, extract typed fields; a chatbot
-  on the canvas; a small coding agent that writes code until hidden tests
+  server for every row: classify, summarize, extract typed fields; a chat
+  that answers questions about the workflow's results, computing its numbers
+  with SQL; summaries of tables by a prompt; a chatbot on the canvas; a small coding agent that writes code until hidden tests
   pass; manage Ollama's models and GPU memory ([LLM nodes](docs/llm.md)).
 - **Chemistry built in** - RDKit molecules as a column type, drawn as
   structures, with a structure sketcher; proteins and ligands in 3D with
@@ -129,7 +130,7 @@ With Docker:
 
 Open `notebooks/examples/demo.vkf` (more examples next to it:
 `widgets.vkf`, `timing.vkf`, `analytics.vkf`, `chemistry.vkf`,
-`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
+`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
 
 Other setups (network, reverse proxy, without Docker):
 [deployment](docs/deployment.md).
