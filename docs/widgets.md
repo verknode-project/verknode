@@ -13,6 +13,12 @@ Widgets):
   and, with *Run on change* (default), executes the output widgets after
   it; ↺ goes back to the default. Text and numbers apply on Enter or when
   the field loses focus, sliders when released.
+- **Chat** (Displays) – a chat on the canvas, run in a loop: it shows the
+  conversation (your messages right, the answers left, with lists, `code`
+  and code blocks) and waits, while the loop runs, for the message typed
+  into it (Enter sends, Shift+Enter: a new line); End chat stops the loop,
+  Start chat / New chat runs it. The Chat Loop Start has the same chat on
+  it ([LLM nodes](llm.md#a-chatbot)).
 - **Displays** – Table, Bar Chart, Line Chart, Scatter Plot, Value (first/last
   row, sum, mean, min, max or count of a column, in large type) and Image
   (the picture on a square image port, e.g. of a chart node). Empty column

@@ -300,6 +300,8 @@ class Workflow:
         self._redo: list[dict] = []
         self._batch: dict | None = None  # open batch (Workflow.batch / begin_batch)
         self._frontend: dict[str, dict] = {}  # open requests to editors (frontend_request)
+        self._inbox: dict[int, list] = {}  # what the canvas sent to waiting nodes (deliver)
+        self._inbox_event = threading.Condition()
         self.editor_seen = 0.0  # last long poll of an editor (time.time())
 
     # ------------------------------------------------------------------
@@ -1527,6 +1529,24 @@ class Workflow:
             return True
         raise WorkflowError(f"Unknown reply {action}")
 
+    def deliver(self, nid, value):
+        """The canvas sends a node something (e.g. a chat message); a node waiting for it gets it."""
+        nid = int(nid)
+        self.node(nid)
+        with self._inbox_event:
+            self._inbox.setdefault(nid, []).append(value)
+            self._inbox_event.notify_all()
+
+    def _wait_input(self, nid, canceled):
+        with self._inbox_event:
+            self._inbox.pop(nid, None)  # (only what is sent while it waits)
+            while True:
+                if self._inbox.get(nid):
+                    return self._inbox[nid].pop(0)
+                if canceled():
+                    raise CanceledExecutionError("Execution canceled")
+                self._inbox_event.wait(0.2)
+
     def cancel(self):
         self._cancel.set()
         self._changed(dirty=False)
@@ -2097,6 +2117,8 @@ class Workflow:
                               logger=lambda level, text: self._log(level, text, nid))
             ctx.caught_error = caught
             ctx.on_progress = lambda f, _nc=nc: setattr(_nc, "progress", f)
+            ctx.on_display = lambda d, _nc=nc: (setattr(_nc, "display", d), self._changed(dirty=False))
+            ctx.input_waiter = lambda canceled, _nid=nid: self._wait_input(_nid, canceled)
             ctx.script_workflow = lambda _nid=nid: self._script_workflow(_nid)
             ctx.workflow_path = self.path
             ctx.workflow_context = self.dialog_context(nid)
@@ -2347,6 +2369,8 @@ class Workflow:
                 "hasView": d["hasView"],
                 "viewAvailable": nc.view is not None,
                 "loopRole": nc.model.loop_role,
+                # (runs, like the output widgets, when an input widget before it changes)
+                "runsWithInputs": bool(getattr(nc.model, "runs_with_inputs", False)),
                 "usesVariables": any((b or {}).get("used") for b in nc.var_settings.values()),
                 "inactivePorts": [i for i, o in enumerate(nc.outputs or []) if o is INACTIVE],
                 # rows of each table output (by port index; None for other ports)

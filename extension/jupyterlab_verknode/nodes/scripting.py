@@ -101,6 +101,7 @@ class WorkflowScript(PythonScript):
     name = "Workflow Script"
     icon = "Py⚙"
     node_type = "Other"
+    runs_with_inputs = True  # (e.g. a checkbox before it switches a path)
     short_description = "Runs a Python script that changes the workflow it is in."
     description = (
         "Runs Python code with <code>workflow</code>: the workflow this node is in. The script can read "

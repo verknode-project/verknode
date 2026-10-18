@@ -42,7 +42,7 @@ from .node import TABLE, F, NodeModel, Port
 from .types import json_value
 
 INPUT_CONTROLS = ["text", "textarea", "number", "integer", "slider", "checkbox", "dropdown", "table", "molecule", "html"]
-OUTPUT_RENDERERS = ["table", "bar", "line", "scatter", "value", "image", "html"]
+OUTPUT_RENDERERS = ["table", "bar", "line", "scatter", "value", "image", "chat", "html"]
 
 
 class InputWidget(NodeModel):

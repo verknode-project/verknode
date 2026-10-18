@@ -28,6 +28,10 @@ export interface OutputRendererProps {
   /** interactive displays (OutputWidget.interactive): the selection and how to change it (null: clear) */
   selection?: any;
   onSelect?: (selection: any) => void;
+  /** send the node something while it runs and waits for it (ExecContext.wait_for_input), e.g. a chat message */
+  onSend?: (value: any) => void;
+  /** the workflow is executing */
+  running?: boolean;
 }
 
 /**

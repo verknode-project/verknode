@@ -3369,3 +3369,171 @@
 .verknode-theme-verkaround .verknode-node-icon {
   box-shadow: inset 0 0 0 1px rgb(15 23 42 / 14%), inset 0 -2px 0 rgb(15 23 42 / 10%), 0 1px 2px rgb(15 23 42 / 10%);
 }
+
+/* Chat Input: the conversation and a box to type in */
+.verknode-chat {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  font-size: 12px;
+  color: var(--jp-ui-font-color0);
+}
+
+.verknode-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  user-select: text;
+  cursor: auto;
+}
+
+.verknode-chat-message {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+}
+
+.verknode-chat-user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.verknode-chat-assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.verknode-chat-bubble {
+  padding: 5px 9px;
+  border-radius: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.verknode-chat-user .verknode-chat-bubble {
+  background: var(--jp-brand-color1);
+  color: #fff;
+  border-bottom-right-radius: 3px;
+}
+
+.verknode-chat-assistant .verknode-chat-bubble {
+  background: var(--jp-layout-color2);
+  border-bottom-left-radius: 3px;
+}
+
+.verknode-chat-bubble p {
+  margin: 0 0 4px;
+}
+
+.verknode-chat-bubble p:last-child {
+  margin-bottom: 0;
+}
+
+.verknode-chat-bubble ul,
+.verknode-chat-bubble ol {
+  margin: 2px 0 4px;
+  padding-left: 18px;
+}
+
+.verknode-chat-bubble code {
+  font-family: var(--jp-code-font-family);
+  font-size: 11px;
+  background: rgba(127, 127, 127, 0.15);
+  padding: 0 3px;
+  border-radius: 3px;
+}
+
+.verknode-chat-code {
+  margin: 4px 0;
+  padding: 5px 7px;
+  background: var(--jp-layout-color0);
+  border: 1px solid var(--jp-border-color2);
+  border-radius: 5px;
+  overflow-x: auto;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.verknode-chat-code code {
+  background: none;
+  padding: 0;
+  color: var(--jp-ui-font-color0);
+}
+
+.verknode-chat-meta {
+  margin: 1px 4px 0;
+  font-size: 10px;
+  color: var(--jp-ui-font-color2);
+}
+
+.verknode-chat-note {
+  align-self: center;
+  font-size: 11px;
+  color: var(--jp-ui-font-color2);
+}
+
+.verknode-chat-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--jp-brand-color1);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.verknode-chat-typing {
+  display: flex;
+  gap: 3px;
+  padding: 8px 10px;
+}
+
+.verknode-chat-typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--jp-ui-font-color2);
+  animation: verknode-chat-dot 1.2s infinite ease-in-out;
+}
+
+.verknode-chat-typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.verknode-chat-typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes verknode-chat-dot {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
+.verknode-chat-input {
+  display: flex;
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--jp-border-color2);
+}
+
+.verknode-chat-input textarea {
+  flex: 1;
+  resize: none;
+}
+
+.verknode-chat-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.verknode-chat-buttons button {
+  font-size: 11px;
+  padding: 1px 8px;
+  min-height: 0;
+  height: auto;
+  line-height: 1.6;
+}

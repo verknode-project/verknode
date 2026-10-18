@@ -80,6 +80,8 @@ export interface NodeInfo {
   hasView: boolean;
   viewAvailable: boolean;
   loopRole: 'start' | 'end' | null;
+  /** runs, like the output widgets, when an input widget before it changes (e.g. Workflow Script) */
+  runsWithInputs?: boolean;
   usesVariables: boolean;
   /** rows of each table output, by port index (when executed) */
   outRows?: (number | null)[];

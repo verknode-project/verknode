@@ -46,6 +46,11 @@ environment variables of the Jupyter server:
 | `VERKNODE_LLM_PROVIDER` | `ollama` or `openai` (OpenAI-compatible) | `ollama` |
 | `VERKNODE_LLM_API_KEY` | key sent as a Bearer token, if the server needs one | - |
 
+A variable that is not set in the environment is read from
+`~/.config/verknode/llm.env` (the Jupyter server's user; `KEY=VALUE` lines;
+another file: `VERKNODE_LLM_CONFIG`) - handy for a server that is already
+running: the file is read each time a node runs.
+
 The configure dialog lists the models of the server. API keys are read
 from an environment variable (the node names which one) and are never
 stored in the workflow - put them in `docker/credentials_norepo.env`.
@@ -100,6 +105,47 @@ Models. Download, Create and Delete change the server only with *Make the
 change* on (Delete starts with it off); otherwise they list what they would
 do. Each returns a row per model with its status (OK or the error) and time.
 
+## A chatbot
+
+A chat is a loop: the conversation - a table with role and content
+columns - goes round a Recursive Loop and grows by your message and the
+answer each time:
+
+    start (greeting) -> Recursive Loop Start -> Chat -> LLM Chat -> Concatenate -> Recursive Loop End
+                                                  |____________________^              (feeds it back)
+
+- **Chat** (Widgets › Displays) shows the conversation on the canvas and,
+  while the loop runs, waits for the message you type into it; it outputs
+  the conversation with your message last (and the message as the flow
+  variable `message`). *End chat* sets the flow variable `chat_end`, which
+  the Recursive Loop End's *End loop with variable* stops on; Cancel stops
+  it too. When the loop is not running, *Start chat* (or *New chat*) runs it.
+- **LLM Chat** (AI › LLM) sends the conversation to the model - the last
+  *Memory* messages, after a system prompt - and outputs the answer as one
+  row (role, content, model, seconds, tokens). Its optional second port
+  takes a table the model answers from: a chat about your data (each row
+  becomes a line of information).
+- **Concatenate** adds the answer to the conversation, and the Recursive
+  Loop End (*Collect data from last iteration only*) feeds it back to the
+  start - so the model sees everything said so far - and outputs the whole
+  conversation when the chat ends.
+
+**Chat Loop Start** (AI › LLM) is the Recursive Loop Start and the Chat in
+one node:
+
+    Chat Loop Start -> LLM Chat -> Concatenate -> Recursive Loop End
+
+It starts from its *Greeting* (or a conversation table at its optional
+input), shows the conversation on the canvas each time round and waits for
+your message; *End chat* ends the loop by itself (no end variable needed).
+
+`notebooks/examples/chatbot.vkf` has three: a plain chat and a shop
+assistant that answers from a product table ("What could I get for under
+50 EUR?"), both with a Chat Loop Start, and the same loop built from a
+Recursive Loop Start and a Chat. Nodes can wait for the canvas like the Chat does with
+`ctx.wait_for_input()`, and show what they are doing while they run with
+`ctx.set_display(...)`.
+
 ## A coding agent
 
 `notebooks/examples/coding_agent.vkf` is a small coding agent made of
@@ -150,6 +196,8 @@ each LLM node):
 `notebooks/examples/coding_agent.vkf`: the coding agent above - four text
 manipulation tasks whose hidden cases ask for more than the task says, so
 the agent learns from the failing cases, one per attempt.
+
+`notebooks/examples/chatbot.vkf`: the two chats above.
 
 `notebooks/examples/ollama.vkf`:
 

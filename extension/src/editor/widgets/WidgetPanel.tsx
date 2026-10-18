@@ -5,6 +5,7 @@ import { BarChart, formatValue, LineChart, ScatterChart } from './charts';
 import { BUILTIN_CONTROLS } from './controls';
 import { HtmlFrame } from './HtmlFrame';
 import { DisplayLoader } from './frames';
+import { ChatRenderer } from './chat';
 import { useWidgetSelection, WidgetSelection } from './selection';
 import { dockGroup, groupTop, Rect as DockRect, snapGroup, snapResize } from './snap';
 import { TailStore } from './tails';
@@ -121,6 +122,7 @@ registerOutputRenderer('scatter', ScatterChart);
 registerOutputRenderer('value', ValueRenderer);
 registerOutputRenderer('image', ImageRenderer);
 registerOutputRenderer('html', HtmlRenderer);
+registerOutputRenderer('chat', ChatRenderer);
 
 /** Canvas zoom of the node (its screen size over its own size). */
 function zoomOf(el: HTMLElement): number {
@@ -228,6 +230,8 @@ export function WidgetPanel(props: {
   busy: boolean;
   onChange: (value: any) => void;
   onSelect: (selection: any) => void;
+  /** output widgets that wait for input while they run (a chat) */
+  onSend?: (value: any) => void;
   onLayout: (layout: WidgetLayout) => Promise<unknown>;
   onSketch: () => void;
   /** the editor's widget selection; canvas positions of the selected widgets that move with a group */
@@ -514,7 +518,16 @@ export function WidgetPanel(props: {
               {widget.type === 'input' ? (
                 <InputBody w={widget} busy={props.busy} width={w} height={h} onChange={props.onChange} onSketch={props.onSketch} />
               ) : (
-                <OutputBody id={props.id} w={widget} stale={props.executing} width={w!} height={h!} onSelect={props.onSelect} />
+                <OutputBody
+                  id={props.id}
+                  w={widget}
+                  stale={props.executing}
+                  running={props.busy}
+                  width={w!}
+                  height={h!}
+                  onSelect={props.onSelect}
+                  onSend={props.onSend}
+                />
               )}
             </div>
           )}
@@ -585,14 +598,32 @@ function useDisplay(id: number, data: any): any {
   return DEFERRED.get(key) ?? (loaded?.key === key ? loaded.data : undefined);
 }
 
-function OutputBody(props: { id: number; w: OutputWidgetInfo; stale: boolean; width: number; height: number; onSelect: (s: any) => void }) {
+/** Displays that are drawn also without data, and keep their last data while their node runs again (a chat in a loop). */
+const LIVE_RENDERERS = new Set(['chat']);
+
+function OutputBody(props: {
+  id: number;
+  w: OutputWidgetInfo;
+  stale: boolean;
+  running: boolean;
+  width: number;
+  height: number;
+  onSelect: (s: any) => void;
+  onSend?: (value: any) => void;
+}) {
   const { w } = props;
   const Renderer = OUTPUT_RENDERERS.get(w.renderer);
-  const data = useDisplay(props.id, w.data);
-  if (w.data !== null && w.data !== undefined && data === undefined) {
+  const live = LIVE_RENDERERS.has(w.renderer);
+  const fetched = useDisplay(props.id, w.data);
+  const last = useRef<any>(null);
+  if (fetched !== undefined && fetched !== null) {
+    last.current = fetched;
+  }
+  const data = live && (fetched === undefined || fetched === null) ? last.current ?? {} : fetched;
+  if (!live && w.data !== null && w.data !== undefined && data === undefined) {
     return <div className="verknode-widget-placeholder">Loading…</div>;
   }
-  if (w.data === null || w.data === undefined) {
+  if (!live && (w.data === null || w.data === undefined)) {
     return <div className="verknode-widget-placeholder">{props.stale ? 'Executing…' : 'Execute to show'}</div>;
   }
   return Renderer ? (
@@ -602,6 +633,8 @@ function OutputBody(props: { id: number; w: OutputWidgetInfo; stale: boolean; wi
       height={props.height}
       selection={w.interactive ? w.selection : undefined}
       onSelect={w.interactive ? props.onSelect : undefined}
+      onSend={props.onSend}
+      running={props.running}
     />
   ) : (
     <span className="verknode-widget-error">Unknown display "{w.renderer}"</span>

@@ -47,7 +47,8 @@ About 250 nodes, by category:
   (`verknode/vendor`, copied from `node_modules` by `jlpm build:vendor`, part
   of `jlpm build`), with a CDN as the fallback.
 - **AI** – LLM Prompter: a prompt per row to Ollama or an OpenAI-compatible
-  server, answers as text or typed JSON fields; Ollama management: models,
+  server, answers as text or typed JSON fields; LLM Chat with the Chat Loop
+  Start (or a Chat widget in a recursive loop): a chatbot on the canvas; Ollama management: models,
   loaded models and their GPU memory, model info, load / unload, download,
   create, delete ([LLM nodes](llm.md)).
 - **Scripting** – Python Script (polars; `chem` helpers when RDKit is present),
@@ -62,7 +63,7 @@ the `.vkf`, so only open workflow files you trust.
 
 Examples: `notebooks/examples/demo.vkf`, `chemistry.vkf`, `analytics.vkf`,
 `custom_nodes.vkf`, `widgets.vkf`, `timing.vkf`, `workflow_scripts.vkf`,
-`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses), `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`.
+`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses), `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`.
 
 ## Workflow files (.vkf)
 

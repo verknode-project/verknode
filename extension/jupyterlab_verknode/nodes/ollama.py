@@ -18,7 +18,7 @@ import polars as pl
 
 from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE, dtype_kind
 
-from .llm import DEFAULT_URL
+from .llm import DEFAULT_URL, setting
 
 CAT = "AI/Ollama"
 GB = 1e9
@@ -27,7 +27,7 @@ UTC = pl.Datetime("us", "UTC")
 
 
 def base_url(s: dict) -> str:
-    return ((s.get("url") or "").strip() or os.environ.get("VERKNODE_LLM_URL", "").strip() or DEFAULT_URL).rstrip("/")
+    return ((s.get("url") or "").strip() or setting("VERKNODE_LLM_URL") or DEFAULT_URL).rstrip("/")
 
 
 def call(s: dict, method: str, path: str, body: dict | None = None, timeout: float = 60):
@@ -106,7 +106,7 @@ def _context(info: dict):
 
 def suggest_models(s, keys=("models",)) -> dict:
     """Dialog data: the server's models offered for the model settings, and where the server is."""
-    out = {"placeholder": {"url": os.environ.get("VERKNODE_LLM_URL", "").strip() or DEFAULT_URL}}
+    out = {"placeholder": {"url": setting("VERKNODE_LLM_URL") or DEFAULT_URL}}
     try:
         names = sorted(m["name"] for m in call(s, "GET", "/api/tags", timeout=3).get("models", []))
         out["suggest"] = {k: names for k in keys}

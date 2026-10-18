@@ -263,6 +263,8 @@ class ExecContext:
         self._cancel = cancel_event
         self._logger = logger
         self.on_progress = None  # set by the workflow: shows set_progress on the canvas
+        self.on_display = None  # set by the workflow: shows set_display on the canvas at once
+        self.input_waiter = None  # set by the workflow: wait_for_input
         # set by the workflow: the workflow as a Workflow Script sees it (engine.workflow_edits)
         self.script_workflow = None
 
@@ -307,9 +309,19 @@ class ExecContext:
             self.view = html
 
     def set_display(self, data: dict):
-        """Set what the node shows on the canvas (JSON; nodes with a widget() method)."""
+        """Set what the node shows on the canvas (JSON; nodes with a widget() method). Shown at once,
+        also while the node is still running (e.g. a chat waiting for the next message)."""
         if not self.dry:
             self.display = data
+            if self.on_display is not None:
+                self.on_display(data)
+
+    def wait_for_input(self):
+        """Wait until the canvas sends this node something (its widget's onSend); returns it.
+        Canceling the run ends the wait."""
+        if self.input_waiter is None:
+            raise InvalidSettingsError("This node waits for input from an open workflow editor")
+        return self.input_waiter(self.canceled)
 
     def set_progress(self, fraction: float):
         """How far the node is (0..1), for long nodes: the canvas shows it and the ETA follows it."""

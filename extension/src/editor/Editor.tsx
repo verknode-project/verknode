@@ -3,6 +3,7 @@ import {
   Background,
   BackgroundVariant,
   Connection,
+  ControlButton,
   Controls,
   Edge,
   IsValidConnection,
@@ -390,6 +391,24 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     dropped: (_: number, __: WidgetLayout) => Promise.resolve() as Promise<unknown>
   });
   const wrapper = useRef<HTMLDivElement>(null);
+  /** Fit to screen: the nodes and their canvas widgets (React Flow's own fit only knows the nodes). */
+  const fitAll = (duration = 0) => {
+    const el = wrapper.current;
+    const boxes = el
+      ? Array.from(el.querySelectorAll('.react-flow__node, .verknode-widget-dock')).map(e => e.getBoundingClientRect()).filter(b => b.width && b.height)
+      : [];
+    if (!boxes.length) {
+      void flow.fitView({ padding: 0.25, maxZoom: 1, duration });
+      return;
+    }
+    const a = flow.screenToFlowPosition({ x: Math.min(...boxes.map(b => b.left)), y: Math.min(...boxes.map(b => b.top)) });
+    const b = flow.screenToFlowPosition({ x: Math.max(...boxes.map(b => b.right)), y: Math.max(...boxes.map(b => b.bottom)) });
+    void flow.fitBounds({ x: a.x, y: a.y, width: b.x - a.x, height: b.y - a.y }, { padding: 0.06, duration }).then(() => {
+      if (flow.getZoom() > 1) {
+        void flow.zoomTo(1);
+      }
+    });
+  };
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [repo, setRepo] = useState<NodeDescription[]>([]);
@@ -658,6 +677,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
             onLight: (id: number, action: 'execute' | 'reset' | 'cancel') => lightRef.current?.(id, action),
             onWidget: (id: number, value: any) => widgetRef.current?.(id, value),
             onSelect: (id: number, selection: any) => selectRef.current?.(id, selection),
+            onSend: (id: number, value: any) => sendRef.current?.(id, value),
             onWidgetLayout: (id: number, layout: WidgetLayout) => controller.op('set_widget_layouts', { layouts: [{ id, layout }] }),
             onSketch: setSketch,
             tails,
@@ -701,7 +721,8 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     }
     if (!fitted.current && view.nodes.some(n => n.id > 0)) {
       fitted.current = true;
-      window.requestAnimationFrame(() => flow.fitView({ padding: 0.25, maxZoom: 1 }));
+      // (after the widgets are drawn: they count too)
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => fitAll()));
     }
   }, [view]);
 
@@ -1281,7 +1302,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     setMenu(null);
     setCursor(null);
     fitted.current = false;
-    window.requestAnimationFrame(() => window.requestAnimationFrame(() => flow.fitView({ padding: 0.25, maxZoom: 1 })));
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => fitAll()));
   };
   const collapse = async (ids: number[]) => {
     // default name: the group annotation made of exactly the selected nodes (on this level;
@@ -1317,7 +1338,26 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   const [sketch, setSketch] = useState<number | null>(null);
   const widgetRef = useRef<(id: number, value: any) => void>();
   const selectRef = useRef<(id: number, selection: any) => void>();
+  const sendRef = useRef<(id: number, value: any) => void>();
   /** Output widgets and Workflow Scripts after a node (and the node itself when there are none, or it is an output widget). */
+  /** Is node `to` downstream of node `from`? */
+  const reachable = (from: number, to: number): boolean => {
+    const seen = new Set<number>([from]);
+    const todo = [from];
+    while (todo.length) {
+      const n = todo.pop()!;
+      for (const c of rawView?.connections ?? []) {
+        if (c.sourceID === n && !seen.has(c.destID)) {
+          if (c.destID === to) {
+            return true;
+          }
+          seen.add(c.destID);
+          todo.push(c.destID);
+        }
+      }
+    }
+    return false;
+  };
   const widgetsAfter = (id: number): number[] => {
     const next = new Map<number, number[]>();
     for (const c of rawView?.connections ?? []) {
@@ -1333,9 +1373,9 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         }
       }
     }
-    // (Workflow Script nodes after an input run too: e.g. a checkbox that switches a path)
+    // (nodes that say so run too: Workflow Script - e.g. a checkbox that switches a path)
     const outputs = (rawView?.nodes ?? [])
-      .filter(n => after.has(n.id) && (n.widget?.type === 'output' || n.factory === 'verknode.scripting.WorkflowScript'))
+      .filter(n => after.has(n.id) && (n.widget?.type === 'output' || n.runsWithInputs))
       .map(n => n.id);
     const self = rawView?.nodes.find(n => n.id === id)?.widget?.type === 'output';
     return self || !outputs.length ? [id, ...outputs] : outputs;
@@ -1355,6 +1395,20 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       await controller.op('set_settings', { id, settings: { selection } });
       await controller.op('execute', { ids: widgetsAfter(id) });
     });
+  // a running node waits for what its widget sends (a chat message); {start: true}: run its loop afresh
+  sendRef.current = (id, value) => {
+    if (value?.start) {
+      const after = new Set(widgetsAfter(id));
+      const ends = (rawView?.nodes ?? []).filter(n => n.loopRole === 'end' && reachable(id, n.id)).map(n => n.id);
+      void run(async () => {
+        await controller.op('reset', { ids: [id] });
+        await controller.op('execute', { ids: ends.length ? ends : [id, ...after] });
+      });
+      return;
+    }
+    // (not through run(): the chat box keeps the keyboard focus)
+    controller.op('deliver', { id, value }).catch(e => setError((e as Error).message));
+  };
   lightRef.current = (id, action) => void (action === 'execute' ? execute([id]) : action === 'reset' ? reset([id]) : cancel());
   /**
    * Port and node views open in a child browser window (a new tab with
@@ -1938,7 +1992,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     '-' as const,
     { label: 'Workflow Variables…', action: () => setWfVars(true) },
     { label: 'Export as Python…', action: () => setPythonOpen(true) },
-    { label: 'Fit to Screen', action: () => flow.fitView({ padding: 0.25, maxZoom: 1 }) }
+    { label: 'Fit to Screen', action: () => fitAll(200) }
   ];
 
   const localPos = (e: React.MouseEvent | MouseEvent) => {
@@ -2275,7 +2329,13 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
               <WidgetTails store={tails} />
               <WidgetHints selection={widgetSel} rects={() => widgetOps.current.env().rects} />
             </ViewportPortal>
-            <Controls showInteractive={false} />
+            <Controls showInteractive={false} showFitView={false}>
+              <ControlButton onClick={() => fitAll(200)} title="Fit view" aria-label="fit view" className="react-flow__controls-fitview">
+                <svg viewBox="0 0 32 30" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3.692 4.63c0-.53.4-.938.939-.938h5.215V0H4.708C2.13 0 0 2.054 0 4.63v5.216h3.692V4.631zM27.354 0h-5.2v3.692h5.17c.53 0 .984.4.984.939v5.215H32V4.631A4.624 4.624 0 0027.354 0zm.954 24.83c0 .532-.4.94-.939.94h-5.215v3.768h5.215c2.577 0 4.631-2.13 4.631-4.707v-5.139h-3.692v5.139zm-23.677.94c-.531 0-.939-.4-.939-.94v-5.138H0v5.139c0 2.577 2.13 4.707 4.708 4.707h5.138V25.77H4.631z" />
+                </svg>
+              </ControlButton>
+            </Controls>
             {prefs.showMinimap && (
               <MiniMap
                 pannable

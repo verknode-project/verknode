@@ -242,6 +242,7 @@ OPS = {
     "set_node_paths": lambda wf, a: wf.set_node_paths(a["paths"], a.get("autoReload")),
     "reload_nodes": lambda wf, a: wf.reload_nodes(),
     "create_node_template": lambda wf, a: _create_node_template(wf, a.get("folder") or "nodes"),
+    "deliver": lambda wf, a: wf.deliver(a["id"], a.get("value")),
     "begin_batch": lambda wf, a: wf.begin_batch(),
     "end_batch": lambda wf, a: wf.end_batch(),
 }

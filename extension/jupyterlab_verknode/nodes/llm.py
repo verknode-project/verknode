@@ -7,6 +7,9 @@ Where the server is comes from the node, or else from the environment of the Jup
     VERKNODE_LLM_MODEL     the model when the node does not name one
     VERKNODE_LLM_PROVIDER  ollama | openai (when the node says "Default")
     VERKNODE_LLM_API_KEY   the key for servers that need one (never stored in the workflow)
+
+Without the environment variable, a setting is read from ~/.config/verknode/llm.env (KEY=VALUE
+lines; another file: VERKNODE_LLM_CONFIG) - e.g. for a server that is already running.
 """
 from __future__ import annotations
 
@@ -32,6 +35,26 @@ SERVER_HELP = ("Empty: the VERKNODE_LLM_URL environment variable of the Jupyter 
                f"{DEFAULT_URL} (Ollama on this machine).")
 
 
+CONFIG = os.path.join("~", ".config", "verknode", "llm.env")
+
+
+def setting(name: str) -> str:
+    """An LLM setting of the Jupyter server: the environment variable, else the config file."""
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
+    path = os.path.expanduser(os.environ.get("VERKNODE_LLM_CONFIG", "").strip() or CONFIG)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                key, sep, val = line.strip().partition("=")
+                if sep and key.strip() == name and not key.strip().startswith("#"):
+                    return val.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return ""
+
+
 def server_fields():
     return [
         F("provider", "enum", "Server type", "Default", "Default: VERKNODE_LLM_PROVIDER, else Ollama. "
@@ -55,11 +78,11 @@ def server_fields():
 def server(s: dict) -> dict:
     provider = s.get("provider") or "Default"
     if provider == "Default":
-        provider = "OpenAI-compatible" if os.environ.get("VERKNODE_LLM_PROVIDER", "").lower() in (
+        provider = "OpenAI-compatible" if setting("VERKNODE_LLM_PROVIDER").lower() in (
             "openai", "openai-compatible", "llamacpp", "llama.cpp", "vllm") else "Ollama"
-    url = (s.get("url") or "").strip() or os.environ.get("VERKNODE_LLM_URL", "").strip() or DEFAULT_URL
-    model = (s.get("model") or "").strip() or os.environ.get("VERKNODE_LLM_MODEL", "").strip()
-    key = os.environ.get((s.get("api_key_env") or "").strip() or "VERKNODE_LLM_API_KEY", "")
+    url = (s.get("url") or "").strip() or setting("VERKNODE_LLM_URL") or DEFAULT_URL
+    model = (s.get("model") or "").strip() or setting("VERKNODE_LLM_MODEL")
+    key = setting((s.get("api_key_env") or "").strip() or "VERKNODE_LLM_API_KEY")
     return {"provider": provider, "url": url.rstrip("/"), "model": model, "key": key}
 
 
@@ -256,8 +279,8 @@ class LLMPrompter(NodeModel):
 
     def dialog_data(self, inputs, s, connected=(), context=None):
         srv = server(s)
-        out = {"placeholder": {"url": os.environ.get("VERKNODE_LLM_URL", "").strip() or DEFAULT_URL,
-                               "model": os.environ.get("VERKNODE_LLM_MODEL", "").strip() or "(a model of the server)"}}
+        out = {"placeholder": {"url": setting("VERKNODE_LLM_URL") or DEFAULT_URL,
+                               "model": setting("VERKNODE_LLM_MODEL") or "(a model of the server)"}}
         try:
             out["suggest"] = {"model": list_models(srv)}
         except Exception as e:  # noqa: BLE001 - the dialog opens anyway

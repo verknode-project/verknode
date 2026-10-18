@@ -33,8 +33,8 @@ and everything stays scriptable from Python.
   script ([custom nodes](docs/custom-nodes.md),
   [Python API](docs/python-api.md)).
 - **LLMs in the workflow** - prompt a local Ollama or any OpenAI-compatible
-  server for every row: classify, summarize, extract typed fields; a small
-  coding agent that writes code until hidden tests pass; manage Ollama's
+  server for every row: classify, summarize, extract typed fields; a chatbot
+  on the canvas; a small coding agent that writes code until hidden tests pass; manage Ollama's
   models and GPU memory ([LLM nodes](docs/llm.md)).
 - **Chemistry built in** - RDKit molecules as a column type, drawn as
   structures, with a structure sketcher; proteins and ligands in 3D with
@@ -73,7 +73,7 @@ With Docker:
 
 Open `notebooks/examples/demo.vkf` (more examples next to it:
 `widgets.vkf`, `timing.vkf`, `analytics.vkf`, `chemistry.vkf`,
-`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
+`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
 
 Other setups (network, reverse proxy, without Docker):
 [deployment](docs/deployment.md).

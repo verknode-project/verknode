@@ -37,6 +37,8 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   onSketch?: (node: number) => void;
   /** ... new selection on an interactive output widget (null = none), new placement / size */
   onSelect?: (node: number, selection: any) => void;
+  /** ... something for an output widget that waits for it while its node runs (a chat message) */
+  onSend?: (node: number, value: any) => void;
   onWidgetLayout?: (node: number, layout: WidgetLayout) => Promise<unknown>;
   /** the workflow is executing (input widgets cannot change then) */
   busy?: boolean;
@@ -453,6 +455,7 @@ export const WorkflowNode = memo(({ data, selected, positionAbsoluteX, positionA
           busy={!!data.busy}
           onChange={v => data.onWidget?.(n.id, v)}
           onSelect={sel => data.onSelect?.(n.id, sel)}
+          onSend={v => data.onSend?.(n.id, v)}
           onLayout={layout => data.onWidgetLayout?.(n.id, layout) ?? Promise.resolve()}
           onSketch={() => data.onSketch?.(n.id)}
         />
