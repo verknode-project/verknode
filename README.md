@@ -58,11 +58,6 @@ from SMILES (NGL):
 
 ![Canvas widgets: a table of indinavir poses drawn as structures, the selected poses in HIV-1 protease in Mol*, and HIV protease inhibitors from SMILES in 2D and in 3D with NGL](docs/images/structures-v1.png)
 
-**Open a 3D view** of a protein with its ligands, each in a colour of its
-own; show, hide or zoom to them from the list:
-
-![The NGL structure view: HIV-1 protease with the crystal pose of indinavir and a generated pose in the binding site](docs/images/structure-view-v1.png)
-
 ## Quick start
 
 With Docker:
