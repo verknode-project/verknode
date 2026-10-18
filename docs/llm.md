@@ -73,6 +73,48 @@ With Docker, set the variables in `docker/.env` (gitignored), for example:
 then `make up` (the container is created again with them). An Ollama on the
 Docker host must listen on more than localhost (`OLLAMA_HOST=0.0.0.0`).
 
+## Model connections: the LLM port
+
+Instead of the server settings above, an LLM node can take its model from
+an **LLM connector** node (AI › LLM › Connect). The connector's purple
+square port goes to the LLM port of LLM Prompter, LLM Chat, LLM Summarizer,
+Data Q&A Chat, the workflow agents, the agent nodes and the evaluation
+nodes. One connector then serves many nodes, and switching models means
+switching one connection.
+
+| Connector | For | Key |
+|---|---|---|
+| **Ollama Connector** | Ollama, the local model runner, on this machine or a server | - (or a variable, behind a proxy) |
+| **Inference Server Connector** | OpenAI-compatible servers and engines: vLLM, SGLang, llama.cpp's llama-server, LM Studio, Hugging Face TGI, LocalAI, llamafile, Jan, Ollama's OpenAI API | if the server wants one |
+| **LLM API Connector** | OpenAI, Google Gemini, Mistral, Groq, OpenRouter, Together AI, DeepSeek, xAI, Fireworks | `OPENAI_API_KEY`, `GEMINI_API_KEY`, ... |
+| **Anthropic Connector** | Claude, through Anthropic's Messages API (with tool use) | `ANTHROPIC_API_KEY` |
+| **Local Model (llama.cpp)** | a GGUF model run in the Jupyter server's process (llama-cpp-python), downloaded from Hugging Face if wanted | - |
+
+- **Keys** are never stored. A connection names the environment variable
+  (or the `~/.config/verknode/llm.env` setting) that holds the key, and the
+  key is read when a model is called.
+- **Checks:** when a connector runs, it asks the server for its models. A
+  wrong address, key or model fails there, not in the nodes after it.
+- **Temperature:** a connector can set one for all its nodes. That makes
+  "gemma at temperature 0.8" an arm of its own in a model comparison.
+- **The server's own address:** with an empty URL, the Ollama connectors
+  use `VERKNODE_LLM_URL`. It is read when a model is called, so a saved
+  workflow does not contain the address.
+- **Local models:** the llama.cpp connector needs `pip install
+  llama-cpp-python`. Its models stay loaded while the server runs and serve
+  one request at a time. Tool calls work through JSON output constrained by
+  a grammar, so the agents run on small local models too. Example: the
+  default, Qwen2.5-1.5B (1 GB), answers in a few seconds on a CPU.
+
+![LLM connectors on the canvas: Ollama, an inference server and a local llama.cpp model, each passing its connection to an LLM Prompter, the answers side by side; below, OpenAI, Anthropic and Gemini connectors ready for their keys](images/llm-connections-v1.png)
+
+`notebooks/examples/llm_connections.vkf` sends the same prompts three ways:
+- Ollama;
+- an inference server (Ollama's OpenAI API stands in for vLLM and the like);
+- a model in this process.
+
+It also has the commercial APIs ready to run once their keys are set.
+
 ## Managing Ollama
 
 The nodes in AI › Ollama look after an Ollama server (the same server
@@ -372,6 +414,11 @@ against the targets, and per region and product. On top of them:
 - **LLM Summarizer**, writing a summary for the regional managers (one
   bullet per region with its manager, revenue and percent of target, and
   the region to watch), shown on the canvas in a **Text Display**.
+
+`notebooks/examples/llm_connections.vkf`: the connectors above.
+`notebooks/examples/data_query_agent.vkf` and `agent_improvement.vkf`: data
+query agents with LangGraph and Deep Agents, and their evaluation and
+improvement ([agents](agents-build-evaluate.md)).
 
 `notebooks/examples/ollama.vkf`:
 

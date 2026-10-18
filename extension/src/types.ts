@@ -1,4 +1,4 @@
-export type PortType = 'table' | 'flowvariable' | 'model' | 'image' | 'dbsession' | 'dbdata';
+export type PortType = 'table' | 'flowvariable' | 'model' | 'image' | 'dbsession' | 'dbdata' | 'llm' | 'agent';
 export type NodeState = 'IDLE' | 'CONFIGURED' | 'EXECUTED' | 'EXECUTING' | 'QUEUED';
 export type VarType = 'STRING' | 'INTEGER' | 'DOUBLE' | 'BOOLEAN';
 

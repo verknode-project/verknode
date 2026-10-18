@@ -30,7 +30,7 @@ from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE
 from jupyterlab_verknode.engine.node import CanceledExecutionError
 
 from .chat import _check_conversation
-from .llm import chat_tools, server, server_fields, tool_message
+from .llm import chat_tools, llm_port, server, server_fields, server_for, tool_message
 
 ANSWER = {"role": pl.String, "content": pl.String, "model": pl.String, "seconds": pl.Float64, "tokens": pl.Int64,
           "confirm": pl.Boolean}
@@ -571,14 +571,14 @@ class AgentSession:
     turn(message, history) -> (reply, waiting for an OK). A pending change (self.pending) is applied by
     the next turn when the message is yes; any other message drops it."""
 
-    def __init__(self, ctx, s: dict, wf, me: int, hidden=(), status=None, after_change=None):
+    def __init__(self, ctx, s: dict, wf, me: int, hidden=(), status=None, after_change=None, srv=None):
         self.ctx, self.s, self.wf, self.me = ctx, s, wf, me
         self.hidden = set(hidden) | {me}
         self.status = status or (lambda text: None)
         self.after_change = after_change or (lambda: None)  # (e.g. run what was built when the chat ends)
         self.group = (s.get("group") or "").strip() or default_group(me)
         self.pending: dict | None = None
-        self.srv = server(s)
+        self.srv = srv or server(s)
         self.tokens = 0
 
     # -- the scope ------------------------------------------------------------------------------
@@ -1041,7 +1041,7 @@ class WorkflowAgentChat(NodeModel):
         "nodes, Show changes under a reply what it changed. " + AGENT_DESCRIPTION
     )
     in_ports = [Port(TABLE, "Conversation", "A chat to go on from (role and content, e.g. of another Workflow "
-                     "Agent Chat): optional", optional=True)]
+                     "Agent Chat): optional", optional=True), llm_port()]
     out_ports = [Port(TABLE, "Conversation", "role and content: what was said")]
     fields = [
         F("title", "string", "Title", "Workflow agent", "Shown above the chat on the canvas."),
@@ -1118,7 +1118,7 @@ class WorkflowAgentChat(NodeModel):
                     nc.settings = {**nc.settings, key: value}
             wf._changed()
 
-        session = AgentSession(ctx, s, wf, me, status=lambda text: show(waiting=False, status=text),
+        session = AgentSession(ctx, s, wf, me, srv=server_for(s, inputs), status=lambda text: show(waiting=False, status=text),
                                after_change=lambda: _run_at_end(ctx, s, session.group))
         model = session.srv["model"]
         try:
@@ -1174,7 +1174,7 @@ class WorkflowAgent(NodeModel):
         "Recursive Loop End); Workflow Agent Chat is the same in one node. It never touches the chat loop it is "
         "in. " + AGENT_DESCRIPTION
     )
-    in_ports = [Port(TABLE, "Conversation", "role and content columns (e.g. of a Chat Loop Start)")]
+    in_ports = [Port(TABLE, "Conversation", "role and content columns (e.g. of a Chat Loop Start)"), llm_port()]
     out_ports = [Port(TABLE, "Answer", "One row: role, content, model, seconds, tokens, confirm - for the conversation")]
     fields = [*AGENT_FIELDS, *server_fields()]
 
@@ -1197,7 +1197,8 @@ class WorkflowAgent(NodeModel):
         sw = ctx.script_workflow()
         wf, me = sw._wf, sw._me
         hidden = wf.ancestors(me) | wf.descendants(me)  # (the chat loop it runs in)
-        session = AgentSession(ctx, s, wf, me, hidden, after_change=lambda: _run_at_end(ctx, s, session.group))
+        session = AgentSession(ctx, s, wf, me, hidden, after_change=lambda: _run_at_end(ctx, s, session.group),
+                               srv=server_for(s, inputs))
         # (a change waiting for the OK, from the message before: kept on the node's model)
         pending = getattr(self, "_pending", None)
         if pending is not None and len(msgs) >= 2 and msgs[-2]["content"] == pending[0]:

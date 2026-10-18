@@ -19,7 +19,7 @@ from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE
 from jupyterlab_verknode.engine.widgets import OutputWidget
 
 from .flow_extra import RecursiveLoopStart, _state
-from .llm import chat, server, server_fields
+from .llm import chat, llm_port, server, server_fields, server_for
 
 ROLES = ("user", "assistant", "system")
 
@@ -193,7 +193,7 @@ class LLMChat(NodeModel):
         "(empty: VERKNODE_LLM_URL / VERKNODE_LLM_MODEL)."
     )
     in_ports = [Port(TABLE, "Conversation", "role and content columns"),
-                Port(TABLE, "Information", "Rows the model answers from (optional)", optional=True)]
+                Port(TABLE, "Information", "Rows the model answers from (optional)", optional=True), llm_port()]
     out_ports = [Port(TABLE, "Answer", "One row: role, content, model, seconds, tokens")]
     ANSWER = {"role": pl.String, "content": pl.String, "model": pl.String, "seconds": pl.Float64,
               "tokens": pl.Int64}
@@ -233,7 +233,7 @@ class LLMChat(NodeModel):
             system = (system + "\n\n" if system else "") + "Answer from this information:\n" + _context_text(info, s)
         if system:
             msgs = [{"role": "system", "content": system}] + msgs
-        srv = server(s)
+        srv = server_for(s, inputs)
         r = chat(srv, msgs, s)
         ctx.log(f"{srv['model']}: {r['tokens_out'] or 0} tokens in {r['seconds']:.1f} s")
         return [pl.DataFrame({"role": ["assistant"], "content": [r["text"].strip()], "model": [srv["model"]],

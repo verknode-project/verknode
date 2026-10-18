@@ -17,6 +17,9 @@
   Molecule Sketcher.
 - [LLM nodes](llm.md) - prompts to Ollama or OpenAI-compatible servers,
   one per row, and managing Ollama's models.
+- [Building and evaluating agents](agents-build-evaluate.md) - data query
+  agents with verknode's tool loop, LangGraph or Deep Agents; rubric-based
+  evaluation, hill climbing, multi-arm model comparison, ablation studies.
 - [Export](export.md) - workflows (or groups of them) as standalone scripts
   or self-contained folders with minimal requirements, a Dockerfile and an
   HTTP API; headless exports without widgets.

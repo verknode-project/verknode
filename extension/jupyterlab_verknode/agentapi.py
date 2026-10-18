@@ -146,7 +146,8 @@ the connections. Build a workflow when the user wants a data pipeline they can s
 
 How to work: find_node_types -> node_type_help (settings have exact names and formats) -> create_workflow -> \
 add_node / connect (each result shows the node's output columns or what is wrong) -> run -> get_table to check \
-the result -> save_workflow. File paths in settings are relative to the workflow's folder (list_files). \
+the result -> save_workflow. A node that is wrong: fix it (configure_node, reading the error), or remove_node it - \
+leave no failing or unconnected nodes behind; when the same fix fails twice, look at node_type_help again. File paths in settings are relative to the workflow's folder (list_files). \
 Workflow variables (set_variables, and settings taken from them) make a workflow a reusable tool: \
 run_workflow runs it with other values without changing it."""
 
@@ -371,6 +372,7 @@ class AgentAPI:
             with wf.batch():
                 wf.clear()
                 wf.set_workflow_variables([])
+                wf.next_id = 1  # (a new workflow: ids from 1 again; undo brings the old ones back)
         await self.ws.save(key)
         link = self.ws.link(key)
         return {"text": f"Created {key} (empty)." + (f" The user can watch it: {link}" if link else ""),

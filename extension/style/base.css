@@ -1519,6 +1519,14 @@
   fill: #8b5a2b;
 }
 
+.verknode-port-llm rect {
+  fill: #7e57c2;
+}
+
+.verknode-port-agent rect {
+  fill: #00897b;
+}
+
 .verknode-port-optional.verknode-port-square rect {
   fill: var(--jp-layout-color0);
   stroke-width: 1.2;
@@ -1532,7 +1540,9 @@
 .verknode-editor .react-flow__edge.verknode-edge-model .react-flow__edge-path,
 .verknode-editor .react-flow__edge.verknode-edge-image .react-flow__edge-path,
 .verknode-editor .react-flow__edge.verknode-edge-dbsession .react-flow__edge-path,
-.verknode-editor .react-flow__edge.verknode-edge-dbdata .react-flow__edge-path {
+.verknode-editor .react-flow__edge.verknode-edge-dbdata .react-flow__edge-path,
+.verknode-editor .react-flow__edge.verknode-edge-llm .react-flow__edge-path,
+.verknode-editor .react-flow__edge.verknode-edge-agent .react-flow__edge-path {
   stroke: var(--jp-ui-font-color1);
   stroke-width: 1.3;
 }
@@ -1554,6 +1564,14 @@
 
 .verknode-desc-port-dbdata {
   background: #8b5a2b;
+}
+
+.verknode-desc-port-llm {
+  background: #7e57c2;
+}
+
+.verknode-desc-port-agent {
+  background: #00897b;
 }
 
 /* node views */

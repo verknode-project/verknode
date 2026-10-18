@@ -2,7 +2,7 @@
 
 ## Nodes
 
-About 280 nodes, by category:
+About 300 nodes, by category:
 
 - **IO** – CSV, Excel, Parquet, JSON, XML, fixed-width, line and native
   table readers/writers, model and image writers, file handling (list,
@@ -53,7 +53,11 @@ About 280 nodes, by category:
   its own group, each step tested in a file sandbox first, asking before it removes
   anything; Workflow Agent: the same for a chat loop of your own); Data Q&A Chat: answers questions
   about the workflow's results, computing with SQL; LLM Summarizer: a summary of
-  tables by a prompt; Ollama management: models,
+  tables by a prompt; LLM connectors (Ollama, inference servers, commercial APIs,
+  Anthropic, llama.cpp in-process) for the LLM ports of these nodes; data query
+  agents (verknode's tool loop, LangGraph, Deep Agents) and Agent Runner; Rubric
+  Judge, Agent Evaluation, Hill Climbing, Multi-Arm Evaluation, Ablation Study
+  ([agents](agents-build-evaluate.md)); Ollama management: models,
   loaded models and their GPU memory, model info, load / unload, download,
   create, delete ([LLM nodes](llm.md)).
 - **Web Services** – curl, HTTP Request, Feed Reader (RSS / Atom), Wikipedia,
@@ -78,7 +82,7 @@ the `.vkf`, so only open workflow files you trust.
 
 Examples: `notebooks/examples/demo.vkf`, `chemistry.vkf`, `analytics.vkf`,
 `custom_nodes.vkf`, `widgets.vkf`, `timing.vkf`, `workflow_scripts.vkf`,
-`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses), `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`, `mermaid.vkf`.
+`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses), `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`, `mermaid.vkf`, `llm_connections.vkf`, `data_query_agent.vkf`, `agent_improvement.vkf`.
 
 ## Workflow files (.vkf)
 

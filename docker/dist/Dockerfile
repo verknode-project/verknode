@@ -4,7 +4,7 @@
 #   docker build -f docker/dist/Dockerfile --build-arg EXTRAS= -t verknode-core .   # the core only
 #   docker run --rm -p 8888:8888 -e JUPYTER_TOKEN=... -v "$PWD/work:/home/jovyan/work" verknode
 #
-# EXTRAS: all, or a comma list of chem, ml, formats, notebooks (empty: the core - polars, numpy). The
+# EXTRAS: all, or a comma list of chem, ml, formats, notebooks, agents (empty: the core - polars, numpy). The
 # build context is the repository root (docker/dist/Dockerfile.dockerignore keeps out builds and secrets).
 ARG PYTHON=3.13
 

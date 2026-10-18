@@ -23,7 +23,7 @@ ENV VERKNODE_KETCHER_DIR=/opt/ketcher
 
 USER ${NB_UID}
 
-# workflow engine data libraries (polars, RDKit) + JupyterLab extension build backend
+# workflow engine data libraries (polars, RDKit), the JupyterLab extension build backend, agent frameworks
 RUN pip install --no-cache-dir \
         polars \
         rdkit \
@@ -35,7 +35,11 @@ RUN pip install --no-cache-dir \
         "hatchling>=1.27" \
         editables \
         "hatch-nodejs-version>=0.3.2" \
-        "hatch-jupyter-builder>=0.5"
+        "hatch-jupyter-builder>=0.5" \
+        langgraph \
+        deepagents
+# models in the server's process (Local Model (llama.cpp)): builds llama.cpp, for any CPU
+RUN CMAKE_ARGS="-DGGML_NATIVE=OFF" pip install --no-cache-dir llama-cpp-python
 
 # dev-installs the bind-mounted extension source on every container start (last: changing it
 # rebuilds only this layer; compose.yml also mounts it)

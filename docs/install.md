@@ -44,7 +44,9 @@ workflow agents and MCP, exports, and 268 of the nodes:
 - widgets and charts;
 - the LLM and Ollama nodes, which talk to their server over HTTP;
 - the web-service nodes (HTTP with the standard library), the GIS nodes,
-  Map Display and the Mermaid diagrams.
+  Map Display and the Mermaid diagrams;
+- the LLM connectors (but the local llama.cpp one), the Data Query Agent,
+  Agent Runner and the evaluation nodes.
 
 The rest come with extras (`pip install "jupyterlab_verknode[chem,ml]"`,
 `EXTRAS=` in Docker):
@@ -55,7 +57,9 @@ The rest come with extras (`pip install "jupyterlab_verknode[chem,ml]"`,
 | `ml` | scikit-learn, scipy, statsmodels, pandas, matplotlib | **Analytics / Mining**: Decision Tree, Random Forest, Gradient Boosted Trees, Logistic / Linear / Polynomial Regression, Naive Bayes, SVM, K Nearest Neighbor, RProp MLP and Simple Regression Tree learners, k-Means, DBSCAN, Hierarchical Clustering, PCA, ROC Curve. **Analytics / Statistics**: Statistics, Crosstab, Linear / Rank Correlation, t-tests, One-way ANOVA, Kruskal-Wallis, Shapiro-Wilk. **Views**: Density Plot. |
 | `formats` | fastexcel, xlsxwriter, openpyxl, lxml, jsonpath-ng | Excel Reader / Writer, Read Excel Sheet Names, XML Reader, XPath, JSON Reader, JSON Path |
 | `notebooks` | nbclient, nbformat, ipykernel | Jupyter Notebook (runs a notebook as a node, on a kernel) |
-| `all` | all of the above | |
+| `agents` | langgraph, deepagents | LangGraph Agent, Deep Agent |
+| `local-llm` | llama-cpp-python (builds llama.cpp: needs a C++ compiler; not in `all`) | Local Model (llama.cpp) |
+| `all` | all of the above but `local-llm` | |
 
 **Optional packages.** Some nodes use a package if it is there and work
 without it. Python Script and Workflow Script offer `chem` helpers with

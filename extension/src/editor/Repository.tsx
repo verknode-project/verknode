@@ -12,7 +12,9 @@ const PORT_TYPE_NAMES: Record<string, string> = {
   model: 'Model',
   image: 'Image',
   dbsession: 'DB session',
-  dbdata: 'DB data'
+  dbdata: 'DB data',
+  llm: 'LLM connection',
+  agent: 'Agent'
 };
 
 const TOP_ORDER = ['IO', 'Manipulation', 'Views', 'Analytics', 'DB', 'Structured Data', 'Flow Control', 'Chemistry', 'Scripting'];

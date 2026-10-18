@@ -23,7 +23,8 @@ this API and the same conventions - read them for examples.
 Reference
 ---------
 - Ports: ``Port(type, name, description="", optional=False)`` with types TABLE,
-  FLOWVARIABLE, MODEL, IMAGE, DB_SESSION, DB_DATA. Explicit ports start at index 1.
+  FLOWVARIABLE, MODEL, IMAGE, DB_SESSION, DB_DATA, LLM (a model connection), AGENT. Explicit ports
+  start at index 1.
 - Dialog fields: ``F(key, type, label, default, description, **options)``; types
   string, int, float, bool, enum (options=[...]), column (port=, kinds=[...]),
   columns, multienum, varlist, variable, records (fields=[...]), code, tablecreator.
@@ -51,6 +52,8 @@ from jupyterlab_verknode.engine.custom import capture_stdout  # noqa: F401 - thi
 from jupyterlab_verknode.engine.helpers import selected_columns, substitute_variables  # noqa: F401
 from jupyterlab_verknode.engine.node import (  # noqa: F401
     DB_DATA,
+    AGENT,
+    AgentPortObject,
     DB_SESSION,
     FLOWVAR,
     FLOWVARIABLE,
@@ -66,6 +69,8 @@ from jupyterlab_verknode.engine.node import (  # noqa: F401
     Field,
     ImagePortObject,
     InvalidSettingsError,
+    LLM,
+    LLMConnectionPortObject,
     ModelPortObject,
     NodeModel,
     Port,

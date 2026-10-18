@@ -20,7 +20,7 @@ import polars as pl
 from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE
 from jupyterlab_verknode.engine.node import CanceledExecutionError
 
-from .llm import chat, chat_tools, server, server_fields, tool_message
+from .llm import chat, chat_tools, llm_port, server, server_fields, server_for, tool_message
 
 CONVERSATION = {"role": pl.String, "content": pl.String}
 
@@ -193,9 +193,9 @@ def _plain(df: pl.DataFrame) -> pl.DataFrame:
         return df
 
 
-def answer(ctx, s, tables: Tables, question: str, history: list, status=lambda t: None) -> str:
+def answer(ctx, s, tables: Tables, question: str, history: list, status=lambda t: None, srv=None) -> str:
     """The model's answer to a question, with the tools."""
-    srv = server(s)
+    srv = srv or server(s)
     guidance = (s.get("guidance") or "").strip()
     listing = tables.call("list_tables", {})
     messages = [{"role": "system", "content": SYSTEM + (f"\n\nMore instructions:\n{guidance}" if guidance else "")}]
@@ -256,7 +256,7 @@ class DataQAChat(NodeModel):
     )
     in_ports = [Port(TABLE, "Table 1", "A table to ask about (optional)", optional=True),
                 Port(TABLE, "Table 2", "(optional)", optional=True),
-                Port(TABLE, "Table 3", "(optional)", optional=True)]
+                Port(TABLE, "Table 3", "(optional)", optional=True), llm_port()]
     out_ports = [Port(TABLE, "Conversation", "role and content: what was said")]
     fields = [
         F("title", "string", "Title", "Ask about the data", "Shown above the chat on the canvas."),
@@ -302,7 +302,8 @@ class DataQAChat(NodeModel):
         def show(**kw):
             ctx.set_display({**base, "messages": list(msgs), **kw})
 
-        model = server(s)["model"]
+        srv = server_for(s, inputs)
+        model = srv["model"]
         try:
             while True:
                 show(waiting=True)
@@ -325,7 +326,7 @@ class DataQAChat(NodeModel):
                     question += f"\n(@#id: the tables {', '.join(named)})"
                 try:
                     reply = answer(ctx, s, tables, question, _history(msgs[:-1], s.get("memory", 20)),
-                                   status=lambda t: show(waiting=False, status=t))
+                                   status=lambda t: show(waiting=False, status=t), srv=srv)
                 except CanceledExecutionError:
                     raise
                 except Exception as e:  # noqa: BLE001 - the chat goes on
@@ -354,7 +355,7 @@ class LLMSummarizer(NodeModel):
     )
     in_ports = [Port(TABLE, "Table 1", "The data to summarize"),
                 Port(TABLE, "Table 2", "(optional)", optional=True),
-                Port(TABLE, "Table 3", "(optional)", optional=True)]
+                Port(TABLE, "Table 3", "(optional)", optional=True), llm_port()]
     out_ports = [Port(TABLE, "Summary", "One row: summary, model, seconds")]
     OUT = {"summary": pl.String, "model": pl.String, "seconds": pl.Float64}
     fields = [
@@ -379,7 +380,7 @@ class LLMSummarizer(NodeModel):
         for i, df in enumerate(inputs):
             if isinstance(df, pl.DataFrame):
                 parts.append(f"## Table {i + 1}: {names[i]}\n{profile(_plain(df), max(1, int(s.get('rows') or 100)))}")
-        srv = server(s)
+        srv = server_for(s, inputs)
         msgs = [{"role": "system", "content": (s.get("system") or "").strip()},
                 {"role": "user", "content": f"{s['prompt'].strip()}\n\n# The data\n\n" + "\n\n".join(parts)}]
         r = chat(srv, [m for m in msgs if m["content"]], s)

@@ -20,6 +20,8 @@ MODEL = "model"  # trained model (blue square port)
 IMAGE = "image"  # rendered image (green square port)
 DB_SESSION = "dbsession"  # database connection (dark red square port)
 DB_DATA = "dbdata"  # database connection + SQL query (brown square port)
+LLM = "llm"  # connection to a language model: server / API / local runner and model (purple square port)
+AGENT = "agent"  # an agent: its model connection, instructions, tools and data (teal square port)
 
 
 class _Marker:
@@ -112,6 +114,94 @@ class ImagePortObject(PortObject):
 
     def summary(self) -> dict:
         return {"Type": self.mime, "Size": f"{len(self.data)} bytes"}
+
+
+class LLMConnectionPortObject(PortObject):
+    """Where a language model is and which one: made by the LLM connector nodes, used by the LLM nodes
+    (their LLM port) instead of their own server settings. Keys are not in it: the name of the
+    environment variable (or ~/.config/verknode/llm.env setting) that holds the key is."""
+
+    port_type = LLM
+
+    def __init__(self, provider: str, url: str, model: str, key_env: str = "", label: str = "",
+                 options: dict | None = None, headers: dict | None = None):
+        self.provider = provider  # Ollama | OpenAI-compatible | Anthropic | llama.cpp (in-process)
+        self.url = url
+        self.model = model
+        self.key_env = key_env
+        self.label = label or f"{provider} · {model}"
+        self.options = dict(options or {})  # (e.g. temperature: overrides the nodes' settings)
+        self.headers = dict(headers or {})
+
+    def server(self, s: dict | None = None) -> dict:
+        """The server dict of nodes/llm.py (the key read now, from the environment)."""
+        import re
+
+        from jupyterlab_verknode.nodes.llm import DEFAULT_URL, setting
+
+        model = self.model or ((s or {}).get("model") or "").strip()
+        # (${VERKNODE_LLM_URL}: the server's setting, read now - so a workflow keeps no private address)
+        url = re.sub(r"\$\{(\w+)\}", lambda m: setting(m.group(1)) or (DEFAULT_URL if m.group(1) == "VERKNODE_LLM_URL" else ""), self.url)
+        return {"provider": self.provider, "url": url.rstrip("/"), "model": model,
+                "key": setting(self.key_env) if self.key_env else "", "options": dict(self.options),
+                "headers": dict(self.headers), "label": self.label}
+
+    def with_model(self, model: str, label: str = "") -> "LLMConnectionPortObject":
+        return LLMConnectionPortObject(self.provider, self.url, model, self.key_env, label or "",
+                                       self.options, self.headers)
+
+    def summary(self) -> dict:
+        out = {"Connection": self.label, "Provider": self.provider, "Where": self.url, "Model": self.model or "(the node's)"}
+        if self.key_env:
+            out["API key from"] = self.key_env
+        if self.options:
+            out["Options"] = ", ".join(f"{k}={v}" for k, v in self.options.items())
+        return out
+
+
+class AgentPortObject(PortObject):
+    """An agent: a framework (verknode's tool loop, LangGraph, Deep Agents), its model connection,
+    instructions (sections of a system prompt), tools, examples and data tables. Made by the agent
+    nodes, run by Agent Runner, evaluated and improved by the evaluation nodes (which output changed
+    copies: with_changes)."""
+
+    port_type = AGENT
+
+    def __init__(self, framework: str, connection, instructions: str, tools: list, tables: dict,
+                 examples: str = "", settings: dict | None = None, name: str = "agent", graph: str = ""):
+        self.framework = framework  # builtin | langgraph | deepagents
+        self.connection = connection  # LLMConnectionPortObject or None (the defaults of the server)
+        self.instructions = instructions
+        self.tools = list(tools)
+        self.tables = dict(tables)  # name -> polars DataFrame
+        self.examples = examples
+        self.settings = dict(settings or {})  # temperature, max_tokens, steps, verify, ...
+        self.name = name
+        self.graph = graph  # Mermaid of its graph
+
+    def with_changes(self, **kw) -> "AgentPortObject":
+        args = dict(framework=self.framework, connection=self.connection, instructions=self.instructions,
+                    tools=self.tools, tables=self.tables, examples=self.examples, settings=self.settings,
+                    name=self.name, graph=self.graph)
+        args.update(kw)
+        return AgentPortObject(**args)
+
+    def spec(self):
+        return AgentPortObject(self.framework, self.connection, self.instructions, self.tools,
+                               {k: v.clear() if isinstance(v, pl.DataFrame) else v for k, v in self.tables.items()},
+                               self.examples, self.settings, self.name, self.graph)
+
+    def summary(self) -> dict:
+        frame = {"builtin": "verknode tool loop", "langgraph": "LangGraph", "deepagents": "Deep Agents"}.get(self.framework, self.framework)
+        out = {"Agent": self.name, "Framework": frame,
+               "Model": self.connection.label if self.connection is not None else "(the server's default)",
+               "Tools": ", ".join(self.tools), "Tables": ", ".join(f"{k} ({v.height} rows)" if isinstance(v, pl.DataFrame) else k
+                                                                    for k, v in self.tables.items()),
+               "Instructions": self.instructions[:600] + ("…" if len(self.instructions) > 600 else "")}
+        if self.examples:
+            out["Examples"] = self.examples[:300]
+        out.update({k: v for k, v in self.settings.items() if not isinstance(v, (dict, list))})
+        return out
 
 
 class DBSessionPortObject(PortObject):

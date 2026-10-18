@@ -16,7 +16,8 @@ import sys
 
 # import name -> package (pip) name, where they differ
 PACKAGES = {"sklearn": "scikit-learn", "jsonpath_ng": "jsonpath-ng", "jupyter_client": "jupyter-client",
-            "PIL": "pillow", "yaml": "pyyaml", "cv2": "opencv-python", "IPython": "ipython"}
+            "PIL": "pillow", "yaml": "pyyaml", "cv2": "opencv-python", "IPython": "ipython",
+            "langchain_core": "langchain-core", "llama_cpp": "llama-cpp-python"}
 CORE = {"polars", "jupyterlab_verknode", "verknode", "__future__"}
 
 

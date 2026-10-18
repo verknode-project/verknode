@@ -23,7 +23,7 @@ standalone Python script that runs without Jupyter.
 
 ## Highlights
 
-- **About 280 nodes** for files, tables, dates, JSON / XML, statistics,
+- **About 300 nodes** for files, tables, dates, JSON / XML, statistics,
   scikit-learn models, databases, charts, loops, switches and error
   handling ([nodes](docs/nodes.md)).
 - **Web services, maps and diagrams** - curl and HTTP requests; Wikipedia,
@@ -62,6 +62,15 @@ standalone Python script that runs without Jupyter.
   that answers questions about the workflow's results, computing its numbers
   with SQL; summaries of tables by a prompt; a chatbot on the canvas; a small coding agent that writes code until hidden tests
   pass; manage Ollama's models and GPU memory ([LLM nodes](docs/llm.md)).
+- **Any model, one connection** - connector nodes for Ollama, inference
+  servers (vLLM, SGLang, llama-server, LM Studio, TGI), commercial APIs
+  (OpenAI, Gemini, Mistral, Groq, OpenRouter, ...), Claude, and GGUF models
+  run in-process with llama.cpp, passed to the LLM nodes on an LLM port
+  ([connections](docs/llm.md#model-connections-the-llm-port)).
+- **Agents you can measure** - data query agents built in the workflow with
+  verknode's tool loop, LangGraph or Deep Agents; rubric-based evaluation,
+  hill climbing on their instructions, multi-arm model comparison with
+  bandits, and ablation studies ([agents](docs/agents-build-evaluate.md)).
 - **Chemistry built in** - RDKit molecules as a column type, drawn as
   structures, with a structure sketcher; proteins and ligands in 3D with
   NGL or Mol*, in node views and on the canvas ([chemistry](docs/chemistry.md)).
@@ -127,6 +136,15 @@ it; draw tables and LLM answers as Mermaid diagrams
 
 ![A GIS workflow: European capitals and sales territories into Point in Polygon and Geo Distance; a Map Display with the capitals coloured by territory and sized by population, five selected on the map and listed in a table below](docs/images/gis-map-v1.png)
 
+**Build agents, then measure and improve them**: a data query agent as
+nodes (verknode's tool loop, LangGraph or Deep Agents), scored with a
+rubric. In this run, hill climbing took it from 0.75 to 0.99: the proposer
+found, with SQL, that revenue is amount × quantity. Multi-arm evaluation
+compares models, and an ablation study shows what each part of the agent
+is worth ([agents](docs/agents-build-evaluate.md)):
+
+![Rubric evaluation of a baseline data query agent (0.7455) and hill climbing on its instructions, rising to 0.9866; the table of proposed changes](docs/images/agent-improvement-v1.png)
+
 **Chat with a model** right on the canvas: a Chat Loop Start waits for your
 message, a local LLM answers (here with Ollama), and the conversation goes
 round the loop again - it keeps growing, and answers can come from your
@@ -160,7 +178,7 @@ setup: `cd docker && make build && make up`, based on the conda
 
 Open `examples/demo.vkf` (more examples next to it:
 `widgets.vkf`, `timing.vkf`, `analytics.vkf`, `chemistry.vkf`,
-`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`, `mermaid.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
+`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`, `mermaid.vkf`, `llm_connections.vkf`, `data_query_agent.vkf`, `agent_improvement.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
 
 Other setups: pip into your own JupyterLab, the image's variants and what
 each node needs are in [installing](docs/install.md); a network or a

@@ -228,7 +228,9 @@ class Scope:
 
     def column(self, name, pos):
         if name not in self.schema:
-            raise ExpressionError(f'Column "{name}" at position {pos + 1} does not exist')
+            names = list(self.schema)
+            have = ", ".join(names[:15]) + (", ..." if len(names) > 15 else "")
+            raise ExpressionError(f'Column "{name}" at position {pos + 1} does not exist (the columns: {have})')
         return name
 
     def variable(self, name, pos):
@@ -446,8 +448,25 @@ def _const_value(value, pos):
     return V.lit(value, pl.String)
 
 
+def _with_hint(text: str, scope: Scope, compile_):
+    """compile_() - its error with a hint at the column syntax when the expression writes columns
+    another way ($name without the closing $, a bare column name): what models and people often write."""
+    try:
+        return compile_()
+    except ExpressionError as e:
+        cols = list(scope.schema)
+        plain = re.sub(r'"(?:[^"\\]|\\.)*"|\$\$\{[^}]*\}\$\$|\$\$[A-Z_]+\$\$', " ", text or "")
+        named = [c for c in cols if re.search(rf"\$\s*{re.escape(c)}(?!\$)", plain) or
+                 re.search(rf"(?<![$\w]){re.escape(c)}(?![$\w])", re.sub(r"\$[^$]*\$", " ", plain))]
+        if named or plain.count("$") % 2:
+            example = " * ".join(f"${c}$" for c in (named or cols)[:2])
+            raise ExpressionError(f"{e} - columns are written between two dollar signs, $name$"
+                                  + (f" (e.g. {example})" if example else "")) from None
+        raise
+
+
 def compile_string(text: str, scope: Scope) -> pl.Expr:
-    return _compile_sm(_Parser(text or "", math_ops=False).parse(), scope).expr
+    return _with_hint(text, scope, lambda: _compile_sm(_Parser(text or "", math_ops=False).parse(), scope).expr)
 
 
 def _compile_sm(node, scope: Scope) -> V:
@@ -594,8 +613,8 @@ def _require_numeric(scope: Scope, name, pos):
 
 def compile_math(text: str, scope: Scope) -> pl.Expr:
     """Compile a JEP formula; missing values in referenced columns give a missing result."""
-    tree = _Parser(text or "", math_ops=True).parse()
-    expr = _compile_math(tree, scope).expr.cast(pl.Float64)
+    tree = _with_hint(text, scope, lambda: _Parser(text or "", math_ops=True).parse())
+    expr = _with_hint(text, scope, lambda: _compile_math(tree, scope).expr.cast(pl.Float64))
     refs = sorted(_row_references(tree, scope))
     if refs:
         expr = pl.when(pl.any_horizontal([pl.col(c).is_null() for c in refs])).then(None).otherwise(expr)

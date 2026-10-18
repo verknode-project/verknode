@@ -152,4 +152,14 @@ corrected a file path from the tool's hint. It then built and checked:
 
 Both answers matched a direct computation, and each took 20 to 40 seconds.
 
-![A workflow an LLM agent built over MCP, live in the open editor: CSV Reader, Column Expression (revenue), GroupBy per product, Column Expression (share of the total) and Sorter, all executed](images/agent-mcp-v1.png)
+What helps models here:
+- **Errors that say what to write.** For example, a formula error says that
+  columns are written `$name$`, with an example from the table's own
+  columns. An earlier run failed for want of this: the model kept writing
+  `$amount * $quantity`, and the errors only said "Unexpected input".
+- **Clean-up instructions.** The server's instructions ask the model to
+  fix or remove failing and unconnected nodes.
+- **Numbering from 1.** A workflow replaced by `create_workflow` numbers
+  its nodes from 1 again.
+
+![A workflow an LLM agent built over MCP, live in the open editor: CSV Reader, Math Formula (revenue), GroupBy per product, Sorter and Math Formula (share of the total), all executed](images/agent-mcp-v1.png)

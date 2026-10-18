@@ -1,5 +1,10 @@
 """LLM nodes: prompts to a large language model served by Ollama or by an OpenAI-compatible
-server (llama.cpp, vLLM, LM Studio, OpenAI, ...), one per row of a table.
+server (llama.cpp, vLLM, LM Studio, OpenAI, ...), one per row of a table - and the model calls all LLM
+nodes use: chat() and chat_tools(), for Ollama, OpenAI-compatible servers and APIs, Anthropic's
+Messages API and models run in this process with llama.cpp.
+
+An LLM node's LLM port takes a connection of an LLM connector node (nodes/llm_connect.py) instead of
+its own server settings (server_for).
 
 Where the server is comes from the node, or else from the environment of the Jupyter server:
 
@@ -16,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -23,13 +29,17 @@ from concurrent.futures import ThreadPoolExecutor
 
 import polars as pl
 
-from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE
+from verknode.node import F, InvalidSettingsError, LLM, LLMConnectionPortObject, NodeModel, Port, TABLE
 
 CAT = "AI/LLM"
 DEFAULT_URL = "http://localhost:11434"
 PLACEHOLDER = re.compile(r"\{\{|\}\}|\{([^{}]+)\}")
 TYPES = {"string": pl.String, "number": pl.Float64, "integer": pl.Int64, "boolean": pl.Boolean}
 JSON_TYPES = {"string": "string", "number": "number", "integer": "integer", "boolean": "boolean"}
+
+ANTHROPIC = "Anthropic"
+LOCAL = "llama.cpp (in-process)"
+ANTHROPIC_VERSION = "2023-06-01"
 
 SERVER_HELP = ("Empty: the VERKNODE_LLM_URL environment variable of the Jupyter server, else "
                f"{DEFAULT_URL} (Ollama on this machine).")
@@ -75,6 +85,21 @@ def server_fields():
     ]
 
 
+def llm_port(desc="A model connection of an LLM connector node (optional: else the server settings below)"):
+    """The LLM port of an LLM node (last, so the other ports keep their numbers)."""
+    return Port(LLM, "LLM", desc, optional=True)
+
+
+def connection_of(inputs) -> LLMConnectionPortObject | None:
+    return next((x for x in inputs or [] if isinstance(x, LLMConnectionPortObject)), None)
+
+
+def server_for(s: dict, inputs) -> dict:
+    """The server of a node: its LLM port's connection, else its settings (and the environment)."""
+    conn = connection_of(inputs)
+    return conn.server(s) if conn is not None else server(s)
+
+
 def server(s: dict) -> dict:
     provider = s.get("provider") or "Default"
     if provider == "Default":
@@ -86,11 +111,22 @@ def server(s: dict) -> dict:
     return {"provider": provider, "url": url.rstrip("/"), "model": model, "key": key}
 
 
-def _request(url: str, body: dict | None, key: str, timeout: float) -> dict:
+def _auth(srv: dict) -> dict:
+    """The headers of a server's requests (its key: Bearer, or Anthropic's x-api-key)."""
+    if srv.get("provider") == ANTHROPIC:
+        return {"x-api-key": srv.get("key") or "", "anthropic-version": ANTHROPIC_VERSION, **(srv.get("headers") or {})}
+    return {**({"Authorization": f"Bearer {srv['key']}"} if srv.get("key") else {}), **(srv.get("headers") or {})}
+
+
+def _request(url: str, body: dict | None, key: str, timeout: float, headers: dict | None = None) -> dict:
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method="POST" if body is not None else "GET")
     req.add_header("Content-Type", "application/json")
-    if key:
+    if headers is not None:
+        for k, v in headers.items():
+            if v:
+                req.add_header(k, v)
+    elif key:
         req.add_header("Authorization", f"Bearer {key}")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -105,6 +141,8 @@ def _request(url: str, body: dict | None, key: str, timeout: float) -> dict:
         raise RuntimeError(f"{e.code} from the LLM server: {detail}") from None
     except urllib.error.URLError as e:
         raise RuntimeError(f"Cannot reach the LLM server at {url.split('/api/')[0].split('/v1/')[0]}: {e.reason}") from None
+    except TimeoutError:
+        raise RuntimeError(f"The LLM server at {url.split('/api/')[0].split('/v1/')[0]} did not answer in {timeout:.0f} s") from None
 
 
 def _openai_base(url: str) -> str:
@@ -114,13 +152,35 @@ def _openai_base(url: str) -> str:
 def list_models(srv: dict, timeout: float = 3) -> list:
     if srv["provider"] == "Ollama":
         return sorted(m["name"] for m in _request(srv["url"] + "/api/tags", None, srv["key"], timeout).get("models", []))
-    return sorted(m["id"] for m in _request(_openai_base(srv["url"]) + "/models", None, srv["key"], timeout).get("data", []))
+    if srv["provider"] == LOCAL:
+        return [os.path.basename(srv["url"])]
+    if srv["provider"] == ANTHROPIC:
+        return sorted(m["id"] for m in _request(_anthropic_base(srv["url"]) + "/models", None, "", timeout, _auth(srv)).get("data", []))
+    return sorted(m["id"] for m in _request(_openai_base(srv["url"]) + "/models", None, srv["key"], timeout, _auth(srv)).get("data", []))
+
+
+def _extra(body: dict, s: dict):
+    """What a connection adds to OpenAI-style requests (extra_body: e.g. Ollama's reasoning_effort none,
+    unless the node lets the model think)."""
+    for k, v in (s.get("extra_body") or {}).items():
+        if not (k == "reasoning_effort" and s.get("think")):
+            body.setdefault(k, v)
+
+
+def _with_options(srv: dict, s: dict) -> dict:
+    """The node's settings, with what its connection sets (e.g. a temperature of its own)."""
+    return {**(s or {}), **{k: v for k, v in (srv.get("options") or {}).items() if v not in (None, "")}}
 
 
 def chat(srv: dict, messages: list, s: dict, schema: dict | None = None) -> dict:
     """One answer: {"text", "tokens_in", "tokens_out", "seconds"}."""
-    if not srv["model"]:
+    if not srv["model"] and srv["provider"] != LOCAL:
         raise InvalidSettingsError("No model: set Model, or VERKNODE_LLM_MODEL for the Jupyter server")
+    s = _with_options(srv, s)
+    if srv["provider"] == ANTHROPIC:
+        return _anthropic(srv, messages, s, schema=schema)
+    if srv["provider"] == LOCAL:
+        return _local_chat(srv, messages, s, schema)
     t0 = time.time()
     timeout = max(1, int(s.get("timeout") or 300))
     if srv["provider"] == "Ollama":
@@ -147,7 +207,8 @@ def chat(srv: dict, messages: list, s: dict, schema: dict | None = None) -> dict
         body["seed"] = int(s["seed"])
     if schema is not None:
         body["response_format"] = {"type": "json_schema", "json_schema": {"name": "answer", "schema": schema}}
-    r = _request(_openai_base(srv["url"]) + "/chat/completions", body, srv["key"], timeout)
+    _extra(body, s)
+    r = _request(_openai_base(srv["url"]) + "/chat/completions", body, srv["key"], timeout, _auth(srv))
     usage = r.get("usage") or {}
     return {"text": ((r.get("choices") or [{}])[0].get("message") or {}).get("content", ""),
             "tokens_in": usage.get("prompt_tokens"), "tokens_out": usage.get("completion_tokens"),
@@ -158,8 +219,13 @@ def chat_tools(srv: dict, messages: list, s: dict, tools: list) -> dict:
     """One step of a conversation in which the model calls tools (functions):
     {"text", "calls": [{"id", "name", "args"}], "message": the model's message (append it), "seconds"}.
     Answer each call with tool_message(srv, call, result) before the next step."""
-    if not srv["model"]:
+    if not srv["model"] and srv["provider"] != LOCAL:
         raise InvalidSettingsError("No model: set Model, or VERKNODE_LLM_MODEL for the Jupyter server")
+    s = _with_options(srv, s)
+    if srv["provider"] == ANTHROPIC:
+        return _anthropic(srv, messages, s, tools=tools)
+    if srv["provider"] == LOCAL:
+        return _local_tools(srv, messages, s, tools)
     t0 = time.time()
     timeout = max(1, int(s.get("timeout") or 300))
     specs = [{"type": "function", "function": t} for t in tools]
@@ -182,7 +248,10 @@ def chat_tools(srv: dict, messages: list, s: dict, tools: list) -> dict:
     else:
         body = {"model": srv["model"], "messages": messages, "tools": specs,
                 "temperature": float(s.get("temperature") or 0.0), "max_tokens": int(s.get("max_tokens") or 2048)}
-        r = _request(_openai_base(srv["url"]) + "/chat/completions", body, srv["key"], timeout)
+        if s.get("seed"):
+            body["seed"] = int(s["seed"])
+        _extra(body, s)
+        r = _request(_openai_base(srv["url"]) + "/chat/completions", body, srv["key"], timeout, _auth(srv))
         msg = ((r.get("choices") or [{}])[0].get("message") or {})
         raw = msg.get("tool_calls") or []
     calls = []
@@ -198,7 +267,10 @@ def chat_tools(srv: dict, messages: list, s: dict, tools: list) -> dict:
     message = {"role": "assistant", "content": msg.get("content") or ""}
     if raw:
         message["tool_calls"] = raw
-    return {"text": msg.get("content") or "", "calls": calls, "message": message, "seconds": time.time() - t0}
+    usage = r.get("usage") or {}
+    return {"text": msg.get("content") or "", "calls": calls, "message": message, "seconds": time.time() - t0,
+            "tokens_in": r.get("prompt_eval_count", usage.get("prompt_tokens")),
+            "tokens_out": r.get("eval_count", usage.get("completion_tokens"))}
 
 
 def tool_message(srv: dict, call: dict, content: str) -> dict:
@@ -206,6 +278,172 @@ def tool_message(srv: dict, call: dict, content: str) -> dict:
     if srv["provider"] == "Ollama":
         return {"role": "tool", "content": content, "tool_name": call["name"]}
     return {"role": "tool", "tool_call_id": call["id"], "content": content}
+
+
+# ---------------------------------------------------------------------------------------------------
+# Anthropic's Messages API (the conversation is kept in the OpenAI form; converted for each request)
+# ---------------------------------------------------------------------------------------------------
+def _anthropic_base(url: str) -> str:
+    url = (url or "https://api.anthropic.com").rstrip("/")
+    return url if url.endswith("/v1") else url + "/v1"
+
+
+def _args(f: dict) -> dict:
+    args = f.get("arguments") or {}
+    if isinstance(args, str):
+        try:
+            args = json.loads(args) if args.strip() else {}
+        except ValueError:
+            args = {}
+    return args if isinstance(args, dict) else {}
+
+
+def anthropic_messages(messages: list) -> tuple[str, list]:
+    """(system, messages) of a conversation for the Messages API: system prompts apart, tool calls as
+    tool_use blocks, tool answers as tool_result blocks of a user turn, turns of one role merged."""
+    system = "\n\n".join(m.get("content") or "" for m in messages if m.get("role") == "system" and m.get("content"))
+    out: list = []
+
+    def add(role, blocks):
+        if out and out[-1]["role"] == role:
+            out[-1]["content"] += blocks
+        else:
+            out.append({"role": role, "content": blocks})
+
+    for m in messages:
+        role = m.get("role")
+        if role == "system":
+            continue
+        if role == "tool":
+            add("user", [{"type": "tool_result", "tool_use_id": m.get("tool_call_id") or "", "content": m.get("content") or "(empty)"}])
+        elif role == "assistant":
+            blocks = [{"type": "text", "text": m["content"]}] if (m.get("content") or "").strip() else []
+            for c in m.get("tool_calls") or []:
+                f = c.get("function") or {}
+                blocks.append({"type": "tool_use", "id": c.get("id") or "", "name": f.get("name") or "", "input": _args(f)})
+            add("assistant", blocks or [{"type": "text", "text": "(no answer)"}])
+        else:
+            add("user", [{"type": "text", "text": m.get("content") or "(empty)"}])
+    if not out or out[0]["role"] != "user":
+        out.insert(0, {"role": "user", "content": [{"type": "text", "text": "(the conversation begins)"}]})
+    return system, out
+
+
+def _anthropic(srv: dict, messages: list, s: dict, tools: list | None = None, schema: dict | None = None) -> dict:
+    t0 = time.time()
+    system, msgs = anthropic_messages(messages)
+    body = {"model": srv["model"], "messages": msgs, "max_tokens": int(s.get("max_tokens") or 1024),
+            "temperature": float(s.get("temperature") or 0.0)}
+    if system:
+        body["system"] = system
+    if tools:
+        body["tools"] = [{"name": t["name"], "description": t.get("description") or "",
+                          "input_schema": t.get("parameters") or {"type": "object", "properties": {}}} for t in tools]
+    if schema is not None:  # (the answer as the input of a tool it must call)
+        body["tools"] = [{"name": "answer", "description": "Give the answer.", "input_schema": schema}]
+        body["tool_choice"] = {"type": "tool", "name": "answer"}
+    r = _request(_anthropic_base(srv["url"]) + "/messages", body, "", max(1, int(s.get("timeout") or 300)), _auth(srv))
+    blocks = r.get("content") or []
+    text = "".join(b.get("text") or "" for b in blocks if b.get("type") == "text")
+    uses = [b for b in blocks if b.get("type") == "tool_use"]
+    usage = r.get("usage") or {}
+    out = {"tokens_in": usage.get("input_tokens"), "tokens_out": usage.get("output_tokens"), "seconds": time.time() - t0}
+    if schema is not None:
+        return {**out, "text": json.dumps(uses[0].get("input") or {}) if uses else text}
+    calls = [{"id": b.get("id") or f"call_{i}", "name": b.get("name"), "args": b.get("input") or {}} for i, b in enumerate(uses)]
+    message = {"role": "assistant", "content": text}
+    if uses:
+        message["tool_calls"] = [{"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": json.dumps(c["args"])}}
+                                 for c in calls]
+    return {**out, "text": text, "calls": calls, "message": message}
+
+
+# ---------------------------------------------------------------------------------------------------
+# llama.cpp in this process (llama-cpp-python): a GGUF model file; tools by JSON-schema-constrained output
+# ---------------------------------------------------------------------------------------------------
+_LOCAL: dict = {}
+_LOCAL_LOCK = threading.Lock()
+
+
+def _local_model(srv: dict):
+    """The loaded model (once per file and options) and the lock its calls take (one at a time)."""
+    path = os.path.expanduser(srv["url"])
+    o = srv.get("options") or {}
+    key = (path, int(o.get("n_ctx") or 8192), int(o.get("n_gpu_layers") or 0), int(o.get("n_threads") or 0))
+    with _LOCAL_LOCK:
+        if key not in _LOCAL:
+            if not os.path.isfile(path):
+                raise InvalidSettingsError(f"There is no model file {path} (a GGUF file)")
+            try:
+                from llama_cpp import Llama
+            except ImportError:
+                raise InvalidSettingsError("Models in this process need llama-cpp-python (pip install llama-cpp-python)") from None
+            _LOCAL[key] = (Llama(model_path=path, n_ctx=key[1], n_gpu_layers=key[2], n_threads=key[3] or None,
+                                 verbose=False), threading.Lock())
+        return _LOCAL[key]
+
+
+def _local_messages(messages: list) -> list:
+    """Tool calls and answers as text (the model's chat template may know no tools)."""
+    out, names = [], {}
+    for m in messages:
+        role = m.get("role")
+        if role == "tool":
+            name = m.get("tool_name") or names.get(m.get("tool_call_id")) or "the tool"
+            out.append({"role": "user", "content": f"Result of {name}:\n{m.get('content') or ''}"})
+        elif role == "assistant" and m.get("tool_calls"):
+            names.update({c.get("id"): (c.get("function") or {}).get("name") for c in m["tool_calls"]})
+            calls = [{"tool": (c.get("function") or {}).get("name"), "args": _args(c.get("function") or {})} for c in m["tool_calls"]]
+            out.append({"role": "assistant", "content": json.dumps(calls[0] if len(calls) == 1 else calls)})
+        else:
+            out.append({"role": role if role in ("system", "user", "assistant") else "user", "content": m.get("content") or ""})
+    return out
+
+
+def _local_run(srv, messages, s, schema=None) -> dict:
+    llm, lock = _local_model(srv)
+    kw = {"temperature": float(s.get("temperature") or 0.0), "max_tokens": int(s.get("max_tokens") or 1024)}
+    if s.get("seed"):
+        kw["seed"] = int(s["seed"])
+    if schema is not None:
+        kw["response_format"] = {"type": "json_object", "schema": schema}
+    t0 = time.time()
+    with lock:
+        r = llm.create_chat_completion(messages=messages, **kw)
+    usage = r.get("usage") or {}
+    return {"text": ((r.get("choices") or [{}])[0].get("message") or {}).get("content") or "",
+            "tokens_in": usage.get("prompt_tokens"), "tokens_out": usage.get("completion_tokens"), "seconds": time.time() - t0}
+
+
+def _local_chat(srv, messages, s, schema=None) -> dict:
+    return _local_run(srv, _local_messages(messages), s, schema)
+
+
+def _local_tools(srv, messages, s, tools) -> dict:
+    listing = "\n".join(f"- {t['name']}: {t.get('description') or ''} Arguments: {json.dumps(t.get('parameters') or {})}" for t in tools)
+    msgs = _local_messages(messages)
+    note = (f"You can call these tools:\n{listing}\n\nReply with JSON only: {{\"tool\": name, \"args\": {{...}}}} to call "
+            "a tool (you then get its result), or {\"answer\": \"...\"} with your final answer.")
+    if msgs and msgs[0]["role"] == "system":
+        msgs[0] = {"role": "system", "content": msgs[0]["content"] + "\n\n" + note}
+    else:
+        msgs.insert(0, {"role": "system", "content": note})
+    schema = {"anyOf": [{"type": "object", "properties": {"tool": {"const": t["name"]},
+                                                          "args": t.get("parameters") or {"type": "object"}},
+                         "required": ["tool", "args"]} for t in tools]
+              + [{"type": "object", "properties": {"answer": {"type": "string"}}, "required": ["answer"]}]}
+    r = _local_run(srv, msgs, s, schema)
+    try:
+        j = _json_answer(r["text"])
+    except ValueError:
+        j = {"answer": r["text"]}
+    if isinstance(j, dict) and j.get("tool"):
+        call = {"id": f"call_{int(time.time() * 1000) % 100000}", "name": j["tool"], "args": j.get("args") or {}}
+        message = {"role": "assistant", "content": "", "tool_calls": [
+            {"id": call["id"], "type": "function", "function": {"name": call["name"], "arguments": json.dumps(call["args"])}}]}
+        return {**r, "text": "", "calls": [call], "message": message}
+    text = str(j.get("answer", r["text"])) if isinstance(j, dict) else r["text"]
+    return {**r, "text": text, "calls": [], "message": {"role": "assistant", "content": text}}
 
 
 def parse_fields(text: str) -> list:
@@ -280,7 +518,7 @@ class LLMPrompter(NodeModel):
         "variables of the Jupyter server, and an API key comes from an environment variable (never from "
         "the workflow). Answers depend on the model; check them before relying on them."
     )
-    in_ports = [Port(TABLE, "Rows", "A prompt for each row (optional: none = one prompt)", optional=True)]
+    in_ports = [Port(TABLE, "Rows", "A prompt for each row (optional: none = one prompt)", optional=True), llm_port()]
     out_ports = [Port(TABLE, "Answers", "The input with the answer columns")]
     fields = [
         F("system", "code", "System prompt", "You are a careful assistant. Answer briefly.",
@@ -332,7 +570,7 @@ class LLMPrompter(NodeModel):
         return [pl.Schema({**dict(spec), **cols})]
 
     def dialog_data(self, inputs, s, connected=(), context=None):
-        srv = server(s)
+        srv = server_for(s, inputs)
         out = {"placeholder": {"url": setting("VERKNODE_LLM_URL") or DEFAULT_URL,
                                "model": setting("VERKNODE_LLM_MODEL") or "(a model of the server)"}}
         try:
@@ -350,7 +588,7 @@ class LLMPrompter(NodeModel):
         limit = int(s.get("limit") or 0)
         if limit and len(rows) > limit:
             raise InvalidSettingsError(f"{len(rows)} rows, more than Rows at most ({limit}): raise it (0: all rows)")
-        srv = server(s)
+        srv = server_for(s, inputs)
         fields = parse_fields(s.get("fields")) if s.get("answer") == "JSON fields" else None
         schema = None
         if fields:
