@@ -1712,12 +1712,18 @@ class Workflow:
             if not self._inputs_ready(end):
                 end_nc.message = ("ERROR", f"Loop body failed in iteration {loop['iteration']}")
                 return
+            # time loops (timeloops.py): the start can decide after the body whether to go on
+            if loop.get("should_stop") is not None and loop["should_stop"]():
+                loop["last"] = True
             if not self._execute_single(end, loop):
                 return
             if loop["last"]:
                 end_nc.last_iterations = loop["iteration"] + 1
                 return
             loop["iteration"] += 1
+            if loop.get("time_progress") is not None:
+                end_nc.progress = loop["time_progress"]()
+                continue
             total = loop.get("total") or end_nc.last_iterations  # (from the loop start, else the last run)
             if total:
                 end_nc.progress = min(loop["iteration"] / total, 1.0)

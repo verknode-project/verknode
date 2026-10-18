@@ -17,6 +17,13 @@ services:
         restart: always
         environment:
             - SERVICENAME=verknode
+            # LLM Prompter defaults (set them in .env; see docs/llm.md)
+            - VERKNODE_LLM_URL=${VERKNODE_LLM_URL:-}
+            - VERKNODE_LLM_MODEL=${VERKNODE_LLM_MODEL:-}
+            - VERKNODE_LLM_PROVIDER=${VERKNODE_LLM_PROVIDER:-}
+        # (an Ollama on the Docker host: VERKNODE_LLM_URL=http://host.docker.internal:11434)
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
         ports:
             - "${VERKNODE_BIND:-127.0.0.1}:${VERKNODE_PORT:-8888}:8888"
         volumes:

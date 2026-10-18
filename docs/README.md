@@ -11,6 +11,8 @@
   from Python, and the Jupyter Notebook node.
 - [Chemistry](chemistry.md) - RDKit molecules, the RDKit nodes and the
   Molecule Sketcher.
+- [LLM nodes](llm.md) - prompts to Ollama or OpenAI-compatible servers,
+  one per row, and managing Ollama's models.
 - [Deployment](deployment.md) - running it locally, on a network, behind
   Traefik or another reverse proxy.
 - [Development](development.md) - working on the extension itself.

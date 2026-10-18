@@ -140,17 +140,31 @@ function ScalarEditor(props: {
         </select>
       );
     }
-    default:
+    default: {
+      // values to pick from that the node's dialog data offers (e.g. the models of an LLM server)
+      const suggestions: string[] = ctx.extra?.suggest?.[f.key] ?? [];
+      const list = suggestions.length ? `verknode-suggest-${f.key}` : undefined;
       return (
-        <input
-          className="jp-mod-styled"
-          type="text"
-          value={value ?? ''}
-          disabled={disabled}
-          placeholder={f.path ? 'path/to/file (relative to the workflow)' : ''}
-          onChange={e => onChange(e.target.value)}
-        />
+        <>
+          <input
+            className="jp-mod-styled"
+            type="text"
+            value={value ?? ''}
+            disabled={disabled}
+            list={list}
+            placeholder={f.path ? 'path/to/file (relative to the workflow)' : (ctx.extra?.placeholder?.[f.key] ?? '')}
+            onChange={e => onChange(e.target.value)}
+          />
+          {list && (
+            <datalist id={list}>
+              {suggestions.map(v => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
+          )}
+        </>
       );
+    }
   }
 }
 

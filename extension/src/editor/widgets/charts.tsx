@@ -76,6 +76,18 @@ function useBrush(
 
 const num = (v: any): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
+
+/** Labels of axis ticks: as many decimals as the step between them needs (3.141, 3.142 - not 3.1, 3.1). */
+function tickFormat(ts: number[]): (t: number) => string {
+  const step = ts.length > 1 ? Math.abs(ts[1] - ts[0]) : 0;
+  const top = Math.max(...ts.map(Math.abs));
+  if (!step || top >= 1e4) {
+    return t => compact.format(t);
+  }
+  const digits = Math.min(Math.max(0, -Math.floor(Math.log10(step) + 1e-9)), 10);
+  const f = new Intl.NumberFormat(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return t => f.format(t);
+}
 const precise = new Intl.NumberFormat(undefined, { maximumSignificantDigits: 6 });
 export const formatValue = (v: any) => (typeof v === 'number' ? precise.format(v) : v === null || v === undefined ? '–' : String(v));
 
@@ -158,13 +170,14 @@ function Tooltip({ tip, width }: { tip: Tip | null; width: number }) {
 }
 
 function YAxis({ ts, y, w }: { ts: number[]; y: (v: number) => number; w: number }) {
+  const fmt = tickFormat(ts);
   return (
     <g className="verknode-chart-axis">
       {ts.map(t => (
         <g key={t}>
           <line x1={M.left} x2={w - M.right} y1={y(t)} y2={y(t)} className={t === 0 ? 'verknode-chart-zero' : 'verknode-chart-grid'} />
           <text x={M.left - 4} y={y(t)} dy="0.32em" textAnchor="end">
-            {compact.format(t)}
+            {fmt(t)}
           </text>
         </g>
       ))}
@@ -266,7 +279,8 @@ function xScale(data: any, width: number) {
   const px = (v: number) => M.left + ((v - dlo) / (dhi - dlo || 1)) * (width - M.left - M.right);
   let labels: { at: number; text: string }[];
   if (numeric) {
-    labels = ts.map(t => ({ at: px(t), text: compact.format(t) }));
+    const fmt = tickFormat(ts);
+    labels = ts.map(t => ({ at: px(t), text: fmt(t) }));
   } else if (time) {
     const fmt = dateFormatter(hi - lo);
     labels = ticks(lo, hi, 3)

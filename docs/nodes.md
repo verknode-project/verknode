@@ -25,7 +25,10 @@ About 250 nodes, by category:
   selector, in-database row filter/GroupBy/joiner/sorter/query, reader,
   writer, insert/update/delete, SQL executor.
 - **Flow Control** – counting, chunk, group, interval, column list, window,
-  generic and recursive loops; parallel chunk loops (Parallel Chunk Start /
+  generic and recursive loops; loops in time (Every Interval Loop Start: an
+  iteration every X seconds; Timed Loop Start: one after another; both stop
+  after a number of iterations, a duration, at a time of day or a date, or
+  never); parallel chunk loops (Parallel Chunk Start /
   End: the chunks go through the nodes between them at the same time, the
   visible nodes showing the first chunk, and a temporary metanode the others
   while it runs: one port brings the table in and branches out to a copy of the
@@ -43,7 +46,13 @@ About 250 nodes, by category:
   ligands. The viewer libraries are served by the extension
   (`verknode/vendor`, copied from `node_modules` by `jlpm build:vendor`, part
   of `jlpm build`), with a CDN as the fallback.
+- **AI** – LLM Prompter: a prompt per row to Ollama or an OpenAI-compatible
+  server, answers as text or typed JSON fields; Ollama management: models,
+  loaded models and their GPU memory, model info, load / unload, download,
+  create, delete ([LLM nodes](llm.md)).
 - **Scripting** – Python Script (polars; `chem` helpers when RDKit is present),
+  Python Code Runner (the code of each row, with tests, in a separate process
+  with time and memory limits - e.g. code written by an LLM),
   Workflow Script (changes the workflow it is in), Jupyter Notebook (see [Python API and notebooks](python-api.md#jupyter-notebook-node)).
 
 Port types: black triangle = table, red circle = flow variables, blue
@@ -53,7 +62,7 @@ the `.vkf`, so only open workflow files you trust.
 
 Examples: `notebooks/examples/demo.vkf`, `chemistry.vkf`, `analytics.vkf`,
 `custom_nodes.vkf`, `widgets.vkf`, `timing.vkf`, `workflow_scripts.vkf`,
-`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses).
+`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses), `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`.
 
 ## Workflow files (.vkf)
 
