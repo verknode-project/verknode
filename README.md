@@ -15,7 +15,11 @@ molecules - and see every intermediate result. Tables flow between nodes as
 [polars](https://pola.rs) DataFrames, workflows are saved with their data,
 and everything stays scriptable from Python.
 
-![Canvas widgets: a what-if with a price slider and a bar chart you can click, and a signal generator driven by number inputs](docs/images/widgets-v3.png)
+You can also build a workflow by chatting with an agent on the canvas, or let
+your own agents build and run workflows over MCP. Any workflow exports as a
+standalone Python script that runs without Jupyter.
+
+![A workflow agent chat on the canvas: asked for a chart widget, it asked before removing its old chart, then added a Bar Chart Display; below, the pipeline it built in its own group (CSV Reader, Math Formula, GroupBy, Sorter) and the bar chart of revenue per region on the canvas](docs/images/hero-v4.png)
 
 ## Highlights
 
@@ -30,8 +34,9 @@ and everything stays scriptable from Python.
   ([editor](docs/editor.md)).
 - **Python all the way** - write nodes as Python classes, run notebooks as
   nodes, drive an open workflow from a notebook, export a workflow as a
-  script ([custom nodes](docs/custom-nodes.md),
-  [Python API](docs/python-api.md)).
+  script - also a standalone one that runs without Jupyter, from a terminal,
+  cron or CI ([custom nodes](docs/custom-nodes.md),
+  [Python API](docs/python-api.md#standalone-scripts-workflows-without-jupyter)).
 - **An agent that builds the workflow with you** - describe what you need
   in a chat on the canvas. The agent finds node types, adds, configures and
   connects nodes, and tests them on a copy in a file sandbox before anything
@@ -56,6 +61,12 @@ and everything stays scriptable from Python.
 groups outlined on the canvas:
 
 ![The workflow editor with the node repository and a workflow with a loop and an IF switch](docs/images/editor-v3.png)
+
+**Widgets on the canvas**: sliders and inputs next to their nodes, and
+charts that update as you change them; clicking a bar selects its rows for
+the rest of the workflow:
+
+![Canvas widgets: a what-if with a price slider and a bar chart you can click, and a signal generator driven by number inputs](docs/images/widgets-v3.png)
 
 **Watch them run**: every node shows its run time, progress and when it
 should be done; loops count their iterations:

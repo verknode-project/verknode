@@ -306,7 +306,10 @@ function Console(props: {
 
 /* ------------------------------------------------------------------ */
 function PythonDialog(props: { controller: WorkflowController; onClose: () => void }) {
+  const [tab, setTab] = useState<'live' | 'standalone'>('live');
   const [data, setData] = useState<{ script: string; hint: string } | null>(null);
+  const [standalone, setStandalone] = useState<{ script: string; path: string } | null>(null);
+  const [saved, setSaved] = useState<{ saved: boolean; exists?: boolean; path: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -314,7 +317,18 @@ function PythonDialog(props: { controller: WorkflowController; onClose: () => vo
       .python()
       .then(setData)
       .catch(e => setError(e.message));
+    props.controller
+      .standalonePython()
+      .then(setStandalone)
+      .catch(e => setError(e.message));
   }, []);
+  const script = tab === 'live' ? data?.script : standalone?.script;
+  const save = (overwrite: boolean) =>
+    props.controller
+      .saveStandalonePython(overwrite)
+      .then(setSaved)
+      .catch(e => setError(e.message));
+  const file = standalone?.path.split('/').pop() ?? 'workflow.py';
   return (
     <Modal
       title="Python"
@@ -323,10 +337,20 @@ function PythonDialog(props: { controller: WorkflowController; onClose: () => vo
       footer={
         <>
           {error && <div className="verknode-dialog-error">{error}</div>}
+          {tab === 'standalone' && (
+            <button
+              className="jp-Dialog-button jp-mod-accept jp-mod-styled"
+              disabled={!standalone}
+              title={`Save it as ${standalone?.path ?? ''}, next to the workflow`}
+              onClick={() => void save(!!saved?.exists)}
+            >
+              <div className="jp-Dialog-buttonLabel">{saved?.exists && !saved.saved ? `Replace ${file}` : `Save as ${file}`}</div>
+            </button>
+          )}
           <button
-            className="jp-Dialog-button jp-mod-accept jp-mod-styled"
-            disabled={!data}
-            onClick={() => data && void copyText(data.script).then(() => setCopied(true))}
+            className={`jp-Dialog-button jp-mod-styled ${tab === 'live' ? 'jp-mod-accept' : 'jp-mod-reject'}`}
+            disabled={!script}
+            onClick={() => script && void copyText(script).then(() => setCopied(true))}
           >
             <div className="jp-Dialog-buttonLabel">{copied ? 'Copied' : 'Copy script'}</div>
           </button>
@@ -336,20 +360,60 @@ function PythonDialog(props: { controller: WorkflowController; onClose: () => vo
         </>
       }
     >
-      <p className="verknode-field-help">
-        Control this live workflow from a notebook or console in this JupyterLab (changes show up here
-        immediately). Every edit you make in the editor is also shown as a <code>&gt;&gt;&gt;</code> command in
-        the console below the canvas.
-      </p>
-      {data && <pre className="verknode-python-hint">{data.hint}</pre>}
-      <p className="verknode-field-help">Script that rebuilds this workflow:</p>
-      {data && <pre className="verknode-python-script">{data.script}</pre>}
-      <p className="verknode-field-help">
-        API: <code>wf.add_node(name, x, y, **settings)</code>, <code>wf.connect(a, b, src_port=1, dst_port=1)</code>,{' '}
-        <code>node.configure(**settings)</code>, <code>node.bind(setting, variable)</code>, <code>wf.execute()</code>,{' '}
-        <code>node.table()</code>, <code>node.help()</code>, <code>verknode.nodes("search")</code>, <code>wf.undo()</code>,{' '}
-        <code>wf.save()</code>.
-      </p>
+      <div className="verknode-python-tabs">
+        <button className={tab === 'live' ? 'verknode-python-tab-on' : ''} onClick={() => (setTab('live'), setCopied(false))}>
+          Live, in this JupyterLab
+        </button>
+        <button className={tab === 'standalone' ? 'verknode-python-tab-on' : ''} onClick={() => (setTab('standalone'), setCopied(false))}>
+          Standalone script
+        </button>
+      </div>
+      {tab === 'live' ? (
+        <>
+          <p className="verknode-field-help">
+            Control this live workflow from a notebook or console in this JupyterLab (changes show up here
+            immediately). Every edit you make in the editor is also shown as a <code>&gt;&gt;&gt;</code> command in
+            the console below the canvas.
+          </p>
+          {data && <pre className="verknode-python-hint">{data.hint}</pre>}
+          <p className="verknode-field-help">Script that rebuilds this workflow:</p>
+          {data && <pre className="verknode-python-script">{data.script}</pre>}
+          <p className="verknode-field-help">
+            API: <code>wf.add_node(name, x, y, **settings)</code>, <code>wf.connect(a, b, src_port=1, dst_port=1)</code>,{' '}
+            <code>node.configure(**settings)</code>, <code>node.bind(setting, variable)</code>, <code>wf.execute()</code>,{' '}
+            <code>node.table()</code>, <code>node.help()</code>, <code>verknode.nodes("search")</code>, <code>wf.undo()</code>,{' '}
+            <code>wf.save()</code>.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="verknode-field-help">
+            The workflow as a Python script that rebuilds and runs it <b>without Jupyter</b> - from a terminal, cron, CI, a
+            container or another program. It needs the jupyterlab-verknode package (and the packages its nodes use), not a
+            Jupyter server; file paths are relative to the script's folder (saved next to the workflow, they work as they
+            are). Options: <code>--var NAME=VALUE</code> (workflow variables), <code>--out DIR</code> (write the result
+            tables; <code>--format parquet</code>), <code>--save copy.vkf</code>.
+          </p>
+          <pre className="verknode-python-hint">{`python ${file} --out results/`}</pre>
+          {saved?.saved && (
+            <p className="verknode-field-help">
+              Saved <code>{saved.path}</code>.{' '}
+              <button className="verknode-chat-link" onClick={() => openFileInLab(saved.path)}>
+                Open it
+              </button>
+            </p>
+          )}
+          {saved?.exists && !saved.saved && (
+            <p className="verknode-dialog-error">
+              {saved.path} exists already: <b>Replace {file}</b> overwrites it.
+            </p>
+          )}
+          {standalone && <pre className="verknode-python-script">{standalone.script}</pre>}
+          <p className="verknode-field-help">
+            A <code>.vkf</code> file also runs as it is: <code>python -m jupyterlab_verknode.standalone workflow.vkf --var NAME=VALUE --out results/</code>.
+          </p>
+        </>
+      )}
     </Modal>
   );
 }

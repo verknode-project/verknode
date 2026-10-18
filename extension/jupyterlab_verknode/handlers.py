@@ -19,6 +19,7 @@ from .engine.persistence import load_workflow, save_workflow
 from .agentapi import AgentAPI, LocalWorkspace, ToolError
 from .commands import Recorder, open_hint, to_python
 from .mcp_server import MCPServer
+from .standalone import to_standalone
 from .engine.workflow import Workflow, WorkflowError
 
 
@@ -351,8 +352,38 @@ class PythonHandler(BaseHandler):
     @tornado.web.authenticated
     def get(self, sid):
         wf = self.manager.get(sid)
-        self.reply({"script": to_python(wf, getattr(wf, "rel_path", None)),
-                    "hint": open_hint(getattr(wf, "rel_path", None) or "workflow.vkf")})
+        rel = getattr(wf, "rel_path", None)
+        if self.get_argument("kind", "live") == "standalone":  # (runs without Jupyter)
+            self.reply({"script": to_standalone(wf, rel), "path": _script_path(rel)})
+            return
+        self.reply({"script": to_python(wf, rel), "hint": open_hint(rel or "workflow.vkf")})
+
+
+def _script_path(rel: str | None) -> str:
+    return posixpath.splitext(rel or "workflow.vkf")[0] + ".py"
+
+
+class PythonSaveHandler(BaseHandler):
+    """The standalone script, saved next to the workflow (an existing file only with overwrite)."""
+
+    @tornado.web.authenticated
+    async def post(self, sid):
+        wf = self.manager.get(sid)
+        rel = getattr(wf, "rel_path", None)
+        if not rel:
+            raise tornado.web.HTTPError(400, "Save the workflow first")
+        path, body = _script_path(rel), self.body()
+        try:
+            await ensure_async(self.manager.cm.get(path, content=False))
+            exists = True
+        except tornado.web.HTTPError:
+            exists = False
+        if exists and not body.get("overwrite"):
+            self.reply({"saved": False, "exists": True, "path": path})
+            return
+        await ensure_async(self.manager.cm.save({"type": "file", "format": "text",
+                                                 "content": to_standalone(wf, rel)}, path))
+        self.reply({"saved": True, "path": path})
 
 
 class TableHandler(BaseHandler):
@@ -569,6 +600,7 @@ def setup_handlers(server_app):
         (url_path_join(base, "sessions", sid, "frontend", r"(?P<rid>[0-9a-f]+)"), FrontendReplyHandler),
         (url_path_join(base, "sessions", sid, "nodes"), SessionNodesHandler),
         (url_path_join(base, "sessions", sid, "python"), PythonHandler),
+        (url_path_join(base, "sessions", sid, "python", "save"), PythonSaveHandler),
         (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "dialog_data"), DialogDataHandler),
         (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "action"), DialogActionHandler),
         (url_path_join(base, "chem", "structure"), ChemStructureHandler),

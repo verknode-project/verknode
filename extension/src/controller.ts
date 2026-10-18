@@ -101,6 +101,16 @@ export class WorkflowController implements IDisposable {
     return requestAPI<{ script: string; hint: string }>(this._url('python'));
   }
 
+  /** The workflow as a standalone script (it runs without Jupyter), and where it is saved. */
+  standalonePython(): Promise<{ script: string; path: string }> {
+    return requestAPI<{ script: string; path: string }>(this._url('python') + '?kind=standalone');
+  }
+
+  /** Save the standalone script next to the workflow (an existing file only with overwrite). */
+  saveStandalonePython(overwrite: boolean): Promise<{ saved: boolean; exists?: boolean; path: string }> {
+    return requestAPI(this._url('python/save'), { method: 'POST', body: JSON.stringify({ overwrite }) });
+  }
+
   nodeView(nodeId: number): Promise<NodeViewData> {
     return requestAPI<NodeViewData>(this._url(`nodes/${nodeId}/view`));
   }

@@ -43,6 +43,51 @@ of it, and a batch that is never ended (the script stopped) ends by itself
 after two minutes without edits. Exported scripts build in a batch. In the
 engine, `Workflow.batch()` does the same.
 
+## Standalone scripts: workflows without Jupyter
+
+**Export as Python…** (in the Python menu or the console), tab **Standalone script**, turns the workflow into a Python
+script that rebuilds it and runs it in the same process. It needs no Jupyter
+server, so it runs from a terminal, cron, CI, a container or another program.
+**Save as** writes it next to the workflow, so its file paths work as they
+are; the dialog asks before replacing an existing file. It needs the
+`jupyterlab-verknode` package and the packages its nodes use.
+
+    python regional_check.py                          # run it, print the result tables
+    python regional_check.py --var threshold=150      # with other workflow variables
+    python regional_check.py --out results/ --format parquet   # write the result tables (csv, parquet, json)
+    python regional_check.py --result "Below threshold" --rows 0 --quiet
+    python regional_check.py --save copy.vkf          # write the workflow, to open it in the editor
+
+The script reads like the workflow:
+- a `VARIABLES` dict with the workflow variables;
+- a `build(wf)` function that adds each node with the settings that differ
+  from the defaults, binds settings to variables, and connects the nodes;
+- `build` returns the result nodes, by default the last table of each branch.
+
+Metanodes are flattened, and custom node folders come along (`NODE_PATHS`).
+File paths are relative to `--base-dir`, which defaults to the script's
+folder. A failing node ends the run with exit code 1 and says why.
+
+The same API builds workflows in plain Python:
+
+    from jupyterlab_verknode.standalone import Workflow
+    wf = Workflow(base_dir="data", variables={"threshold": 150.0})
+    sales = wf.add_node("CSV Reader", "Sales", path="sales.csv")
+    big = wf.add_node("Row Filter", "Big", column="amount", operator=">")
+    wf.bind(big, "value", "threshold")          # the setting from a workflow variable
+    wf.connect(sales, big)
+    wf.run(big)                                 # WorkflowRunError if a node fails
+    big.table()                                 # polars DataFrame
+    wf.save("big_sales.vkf")
+
+A `.vkf` file runs as it is, too:
+
+    python -m jupyterlab_verknode.standalone report.vkf --var threshold=150 --out results/
+
+It runs afresh by default (`--cached` keeps the results saved in the file).
+Nodes that need the editor (chats on the canvas) or a server (LLM nodes)
+need those there too.
+
 ## Jupyter Notebook node
 
 Runs a notebook as a workflow step (Scripting › Python). Its inputs

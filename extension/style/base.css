@@ -3647,3 +3647,26 @@
     box-shadow: 0 0 0 6px rgba(245, 166, 35, 0.85);
   }
 }
+
+/* the Python dialog: live API / standalone script */
+.verknode-python-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--jp-border-color2);
+}
+
+.verknode-python-tabs button {
+  padding: 4px 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--jp-ui-font-color2);
+  font-size: var(--jp-ui-font-size1);
+  cursor: pointer;
+}
+
+.verknode-python-tabs button.verknode-python-tab-on {
+  border-bottom-color: var(--jp-brand-color1);
+  color: var(--jp-ui-font-color0);
+}
