@@ -23,11 +23,11 @@ config:
 
 # rebuild the extension once (reload the browser afterwards)
 ext-build:
-	docker compose exec -w /home/jovyan/extension verknode jlpm build
+	docker compose exec -w /home/jovyan/vkn_extension verknode jlpm build
 
 # rebuild the extension continuously on source changes
 watch:
-	docker compose exec -w /home/jovyan/extension verknode jlpm watch
+	docker compose exec -w /home/jovyan/vkn_extension verknode jlpm watch
 
 login:
 	docker compose exec -u root verknode bash

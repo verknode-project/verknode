@@ -245,7 +245,7 @@ OPS = {
     "remove_metanode_port": lambda wf, a: wf.remove_metanode_port(a["id"], a["side"], a["index"]),
     "set_node_paths": lambda wf, a: wf.set_node_paths(a["paths"], a.get("autoReload")),
     "reload_nodes": lambda wf, a: wf.reload_nodes(),
-    "create_node_template": lambda wf, a: _create_node_template(wf, a.get("folder") or "nodes"),
+    "create_node_template": lambda wf, a: _create_node_template(wf, a.get("folder") or "vkn_nodes"),
     "deliver": lambda wf, a: wf.deliver(a["id"], a.get("value")),
     "begin_batch": lambda wf, a: wf.begin_batch(),
     "end_batch": lambda wf, a: wf.end_batch(),
@@ -257,7 +257,7 @@ def _create_node_template(wf: Workflow, folder: str) -> dict:
     from .engine.custom import create_template
 
     if os.path.isabs(folder) or ".." in folder.split("/"):
-        raise WorkflowError("Use a folder inside the workflow's directory, e.g. 'nodes'")
+        raise WorkflowError("Use a folder inside the workflow's directory, e.g. 'vkn_nodes'")
     path = create_template(os.path.join(wf.base_dir, folder))
     if folder not in wf.node_paths:
         wf.set_node_paths(wf.node_paths + [folder])

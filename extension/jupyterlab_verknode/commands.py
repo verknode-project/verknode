@@ -159,7 +159,7 @@ class Recorder:
             extra = f", auto_reload={bool(a['autoReload'])}" if a.get("autoReload") is not None else ""
             return [f"wf.set_node_paths({wf.node_paths!r}{extra})"]
         if op == "create_node_template":
-            return [f"wf.create_node_template({(a.get('folder') or 'nodes')!r})  # -> {result['file']}"]
+            return [f"wf.create_node_template({(a.get('folder') or 'vkn_nodes')!r})  # -> {result['file']}"]
         if op == "paste":
             return self._paste_lines(result)
         return []

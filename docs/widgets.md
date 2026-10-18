@@ -69,7 +69,7 @@ True` with `select` adds the Selection port); `control = "html"` /
 `renderer = "html"` show a page of their own in a sandboxed frame (an input
 page calls `verknode.setValue(v)`):
 
-    # widget_nodes/my_widgets.py
+    # vkn_widget_nodes/my_widgets.py
     from verknode.node import F, InputWidget
 
     class ColourInput(InputWidget):
@@ -85,6 +85,6 @@ slider into a bar chart and a total; clicked bars into a table), a signal
 generator (inputs as flow variables of a Python Script, line and scatter
 charts whose selections feed value displays), molecule properties, an image
 display of a chart node, simple inputs, and custom widgets from
-`notebooks/examples/widget_nodes/` (a date input reusing the text box, a
+`notebooks/examples/vkn_widget_nodes/` (a date input reusing the text box, a
 colour picker and a gauge with pages of their own). The base classes are
 documented in `extension/jupyterlab_verknode/engine/widgets.py`.

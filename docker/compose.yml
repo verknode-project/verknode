@@ -28,7 +28,10 @@ services:
             - "${VERKNODE_BIND:-127.0.0.1}:${VERKNODE_PORT:-8888}:8888"
         volumes:
             - ../notebooks:/home/jovyan/notebooks
-            # JupyterLab extension source, dev-installed at container start
-            - ../extension:/home/jovyan/extension
+            # JupyterLab extension source, dev-installed at container start (vkn_: verknode's own files -
+            # not to be touched unless working on verknode)
+            - ../extension:/home/jovyan/vkn_extension
+            # its start hook from here (not the image's copy): changes need no rebuild
+            - ./before-notebook.d/10-verknode-extension.sh:/usr/local/bin/before-notebook.d/10-verknode-extension.sh:ro
         env_file:
             - credentials_norepo.env

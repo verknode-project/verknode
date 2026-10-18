@@ -2,7 +2,15 @@
 
 ## Extension development
 
-`./extension` is mounted at `/home/jovyan/extension`. On every container
+Files and folders verknode itself puts into the JupyterLab file browser have a
+`vkn_` prefix, so users can tell them from their own work and leave them alone
+unless they work on verknode:
+- `vkn_extension/` - the extension source (this repository's `extension/`);
+- `vkn_nodes/` - the node folders made by *Create example node file*, and the
+  examples' `vkn_custom_nodes/` and `vkn_widget_nodes/`;
+- `vkn_runtime/` - the parts of verknode inside an export folder.
+
+`./extension` is mounted at `/home/jovyan/vkn_extension`. On every container
 start `docker/before-notebook.d/10-verknode-extension.sh` runs `jlpm install` /
 `jlpm build` (first time only), `pip install -e .` and
 `jupyter labextension develop`, so the extension is live in JupyterLab.

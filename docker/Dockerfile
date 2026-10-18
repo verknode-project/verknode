@@ -21,9 +21,6 @@ RUN curl -fsSL -o /tmp/ketcher.zip \
     && mkdir -p /opt/ketcher && unzip -q /tmp/ketcher.zip -d /opt/ketcher && rm /tmp/ketcher.zip
 ENV VERKNODE_KETCHER_DIR=/opt/ketcher
 
-# dev-installs the bind-mounted extension source on every container start
-COPY before-notebook.d/ /usr/local/bin/before-notebook.d/
-
 USER ${NB_UID}
 
 # workflow engine data libraries (polars, RDKit) + JupyterLab extension build backend
@@ -39,5 +36,9 @@ RUN pip install --no-cache-dir \
         editables \
         "hatch-nodejs-version>=0.3.2" \
         "hatch-jupyter-builder>=0.5"
+
+# dev-installs the bind-mounted extension source on every container start (last: changing it
+# rebuilds only this layer; compose.yml also mounts it)
+COPY before-notebook.d/ /usr/local/bin/before-notebook.d/
 
 CMD ["start-notebook.py"]

@@ -34,8 +34,9 @@ From a terminal:
 
     report_export/
       report.py              the workflow (run it: python report.py --var NAME=VALUE --out output/)
-      jupyterlab_verknode/   the engine and only the node modules the workflow uses
-      verknode/node.py       the node API (custom node folders come along too)
+      vkn_runtime/           the parts of verknode it runs on (not to be edited):
+        jupyterlab_verknode/   the engine and only the node modules the workflow uses
+        verknode/node.py       the node API (custom node folders come along, next to the script)
       data/                  the files it reads (Data files: copied, settings pointed here)
       output/                where the files it writes go
       requirements.txt       only what it needs, with the versions it was tested with

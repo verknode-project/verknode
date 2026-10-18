@@ -1,8 +1,11 @@
 # Custom nodes (Python)
 
-Write nodes as Python classes in a folder next to the workflow:
+Write nodes as Python classes in a folder next to the workflow. verknode
+names its node folders with a `vkn_` prefix (the example node file goes into
+`vkn_nodes/` by default), so in the file browser they stand apart from your
+data and notebooks:
 
-    # nodes/my_nodes.py
+    # vkn_nodes/my_nodes.py
     import polars as pl
     from verknode.node import F, NodeModel, Port, TABLE
 
@@ -33,11 +36,11 @@ Write nodes as Python classes in a folder next to the workflow:
   API and sibling modules, and are discovered the same way — read them as
   examples (base classes are marked `abstract = True`).
 - Example: `notebooks/examples/custom_nodes.vkf` uses the separate folder
-  `notebooks/examples/custom_nodes/` (a source node, a node with a view that
+  `notebooks/examples/vkn_custom_nodes/` (a source node, a node with a view that
   pushes a flow variable, and a node using a private helper module
   `_text.py`), mixed with standard nodes.
-- Python: `wf.set_node_paths(["nodes"])`, `wf.reload_nodes()`,
-  `wf.create_node_template("nodes")`, `wf.node_types("search")`.
+- Python: `wf.set_node_paths(["vkn_nodes"])`, `wf.reload_nodes()`,
+  `wf.create_node_template("vkn_nodes")`, `wf.node_types("search")`.
 - Custom node code runs inside the Jupyter server when a workflow that
   references the folder is opened — only open workflows you trust.
 

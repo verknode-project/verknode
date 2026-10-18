@@ -34,6 +34,7 @@ import polars as pl
 PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 VERKNODE_DIR = os.path.join(os.path.dirname(PACKAGE_DIR), "verknode")
 PATH_KEYS = ("path", "file", "filename", "file_path", "folder", "directory")
+RUNTIME = "vkn_runtime"  # (the folder of the bundled verknode packages in an export)
 NOT_BUNDLED = {"handlers", "mcp_server", "agentapi", "export"}  # (server / authoring parts)
 
 
@@ -467,8 +468,8 @@ def export_bundle(wf, out_dir: str, name: str | None = None, group: str | None =
     # the runtime
     files, external = runtime_files(e)
     root = os.path.dirname(PACKAGE_DIR)
-    for rel in files:
-        dest = os.path.join(out_dir, rel)
+    for rel in files:  # (in vkn_runtime/: the parts of verknode - not to be edited)
+        dest = os.path.join(out_dir, RUNTIME, rel)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         if rel == os.path.join("jupyterlab_verknode", "__init__.py"):
             open(dest, "w").write(f'"""verknode runtime, exported with the workflow {stem}."""\n'
@@ -486,7 +487,7 @@ def export_bundle(wf, out_dir: str, name: str | None = None, group: str | None =
                 if f.endswith(".py"):
                     external |= _imports(os.path.join(src, f))[1]
     e.node_paths = [os.path.basename(p.rstrip("/")) for p in e.node_paths]
-    code = to_standalone(e, f"{script}.vkf", notes=notes)
+    code = to_standalone(e, f"{script}.vkf", notes=notes, runtime=RUNTIME)
     with open(os.path.join(out_dir, f"{script}.py"), "w") as f:
         f.write(code)
     # requirements: what the modules import when loaded, and what the run imports

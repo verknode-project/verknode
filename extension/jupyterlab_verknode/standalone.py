@@ -374,7 +374,7 @@ def _identifier(label: str, taken: set) -> str:
     return name
 
 
-def to_standalone(wf: _Engine, path: str | None = None, notes=()) -> str:
+def to_standalone(wf: _Engine, path: str | None = None, notes=(), runtime: str | None = None) -> str:
     """A Python script that rebuilds the workflow with this module's API and runs it (no Jupyter)."""
     from .commands import _lit, _changed_settings
 
@@ -449,13 +449,19 @@ def to_standalone(wf: _Engine, path: str | None = None, notes=()) -> str:
         "",
         *(f"    {c.ljust(width)}# {d}" for c, d in usage),
         "",
-        "File paths are relative to --base-dir (default: this script's folder). It needs the",
-        "jupyterlab-verknode package (and the packages its nodes use) - not a Jupyter server.",
+        *(["File paths are relative to --base-dir (default: this script's folder). It runs on the parts of",
+           f"verknode in {runtime}/ (not to be edited) and needs only the packages in requirements.txt."] if runtime else
+          ["File paths are relative to --base-dir (default: this script's folder). It needs the",
+           "jupyterlab-verknode package (and the packages its nodes use) - not a Jupyter server."]),
         f"Exported by verknode on {time.strftime('%Y-%m-%d')}" + (":" if notes else "."),
         *(f"- {n}" for n in notes),
         '"""',
         "import os",
+        *(["import sys", "",
+           f"sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), {runtime!r}))"
+           "  # (the parts of verknode this export runs on)"] if runtime else []),
         "",
+        "from jupyterlab_verknode.standalone import cli  # noqa: E402" if runtime else
         "from jupyterlab_verknode.standalone import cli",
         "",
         f"VARIABLES = {_lit(variables)}  # workflow variables (--var NAME=VALUE)",

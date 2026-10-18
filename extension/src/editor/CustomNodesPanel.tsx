@@ -11,7 +11,7 @@ import { copyText } from './clipboard';
 export function CustomNodesPanel(props: { controller: WorkflowController }) {
   const { controller } = props;
   const view = controller.view;
-  const [paths, setPaths] = useState<string[]>(view?.nodePaths.length ? [...view.nodePaths] : ['nodes']);
+  const [paths, setPaths] = useState<string[]>(view?.nodePaths.length ? [...view.nodePaths] : ['vkn_nodes']);
   const [autoReload, setAutoReload] = useState(view?.autoReload ?? true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -32,7 +32,7 @@ export function CustomNodesPanel(props: { controller: WorkflowController }) {
   const reload = () => run(() => controller.op('reload_nodes'));
   const example = () =>
     run(async () => {
-      const v = await controller.op('create_node_template', { folder: paths[0] || 'nodes' });
+      const v = await controller.op('create_node_template', { folder: paths[0] || 'vkn_nodes' });
       setPaths(v.nodePaths);
     });
 

@@ -519,7 +519,7 @@ class Workflow:
         """Re-import the custom node files; nodes switch to the new code (changed ones are reset)."""
         return self._report(self._op("reload_nodes")["report"])
 
-    def create_node_template(self, folder: str = "nodes") -> str:
+    def create_node_template(self, folder: str = "vkn_nodes") -> str:
         """Create `folder` with an example custom node file, add it to the node folders; returns the file."""
         result = self._op("create_node_template", folder=folder)["template"]
         self._report(result["report"])
