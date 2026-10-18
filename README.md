@@ -37,6 +37,11 @@ and everything stays scriptable from Python.
   connects nodes, and tests them on a copy in a file sandbox before anything
   changes. It works only in its own group and asks before removing anything
   ([workflow agent](docs/llm.md#a-workflow-agent-build-the-workflow-in-a-chat)).
+- **For your agents, too** - an MCP server (stdio, or live inside JupyterLab)
+  lets Claude Code, Claude Desktop or any LLM build, run and read workflows:
+  pipelines you can open and check rather than throwaway scripts, and
+  reviewed workflows that agents run as tools with other parameters
+  ([agents](docs/agents.md)).
 - **LLMs in the workflow** - prompt a local Ollama or any OpenAI-compatible
   server for every row: classify, summarize, extract typed fields; a chatbot
   on the canvas; a small coding agent that writes code until hidden tests
@@ -118,6 +123,7 @@ Other setups (network, reverse proxy, without Docker):
 See [docs/](docs/README.md): the [editor](docs/editor.md),
 [nodes](docs/nodes.md), [widgets](docs/widgets.md),
 [custom nodes](docs/custom-nodes.md), [Python API](docs/python-api.md),
+[agents and MCP](docs/agents.md),
 [chemistry](docs/chemistry.md), [deployment](docs/deployment.md) and
 [development](docs/development.md).
 

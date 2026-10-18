@@ -16,7 +16,9 @@ from jupyter_server.utils import ensure_async, url_path_join
 from . import nodes  # noqa: F401 - registers the built-in nodes
 from .engine.node import NODE_REGISTRY
 from .engine.persistence import load_workflow, save_workflow
+from .agentapi import AgentAPI, LocalWorkspace, ToolError
 from .commands import Recorder, open_hint, to_python
+from .mcp_server import MCPServer
 from .engine.workflow import Workflow, WorkflowError
 
 
@@ -477,10 +479,77 @@ class KetcherStatusHandler(BaseHandler):
         self.reply({"available": os.path.isfile(os.path.join(KETCHER_DIR, "index.html"))})
 
 
+class LiveWorkspace(LocalWorkspace):
+    """The agent API on the Jupyter server's open workflows (agentapi): what an agent changes, the open
+    editors show at once (and the other way round). Saved by save_workflow, as the editor saves."""
+
+    live = True
+
+    def __init__(self, manager: SessionManager):
+        super().__init__(manager.root_dir, autosave=False)
+        self.manager = manager
+        self.url_prefix = ""  # (where JupyterLab is, for links: set from the request)
+
+    async def open(self, path: str, create: bool = False) -> Workflow:
+        key = self.rel(path)
+        sid = self.manager.by_path.get(key)
+        if sid is None:
+            try:
+                sid = await self.manager.open(key, create=create)  # (held while the server runs)
+            except tornado.web.HTTPError as e:
+                if e.status_code == 404:
+                    raise ToolError(f"There is no workflow {key} (create_workflow makes one)") from None
+                raise
+        wf = self.manager.get(sid)
+        wf.rel_path = key
+        return wf
+
+    async def save(self, path: str, to: str | None = None) -> str:
+        key = self.rel(path)
+        await self.open(key)
+        dest = self.rel(to) if to else key
+        await self.manager.save(self.manager.by_path[key], dest)
+        return dest
+
+    def link(self, key: str) -> str | None:
+        return f"{self.url_prefix}lab/tree/{key}" if self.url_prefix else None
+
+
+class MCPHandler(BaseHandler):
+    """MCP over HTTP (Streamable HTTP, JSON responses): POST a JSON-RPC message, get the answer."""
+
+    @tornado.web.authenticated
+    async def post(self):
+        server: MCPServer = self.settings["verknode_mcp"]
+        server.api.ws.url_prefix = f"{self.request.protocol}://{self.request.host}{self.base_url}"
+        try:
+            msg = json.loads(self.request.body or b"null")
+        except ValueError:
+            self.reply({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}})
+            return
+        if isinstance(msg, list):
+            replies = [r for r in [await server.handle(m) for m in msg] if r is not None]
+            reply = replies or None
+        else:
+            reply = await server.handle(msg)
+        if reply is None:  # (notifications only)
+            self.set_status(202)
+            self.finish()
+            return
+        self.reply(reply)
+
+    @tornado.web.authenticated
+    def get(self):  # (no server-sent events: answers come with the POST)
+        self.set_status(405)
+        self.set_header("Allow", "POST")
+        self.finish()
+
+
 def setup_handlers(server_app):
     web_app = server_app.web_app
     cm = web_app.settings["contents_manager"]
-    web_app.settings["verknode_manager"] = SessionManager(cm, os.path.abspath(cm.root_dir))
+    manager = web_app.settings["verknode_manager"] = SessionManager(cm, os.path.abspath(cm.root_dir))
+    web_app.settings["verknode_mcp"] = MCPServer(AgentAPI(LiveWorkspace(manager)))
     base = url_path_join(web_app.settings["base_url"], "verknode", "api")
     sid = r"(?P<sid>[0-9a-f]+)"
     handlers = [
@@ -504,6 +573,8 @@ def setup_handlers(server_app):
         (url_path_join(base, "sessions", sid, "nodes", r"(?P<nid>\d+)", "action"), DialogActionHandler),
         (url_path_join(base, "chem", "structure"), ChemStructureHandler),
         (url_path_join(base, "chem", "ketcher"), KetcherStatusHandler),
+        # MCP for agents (agentapi, live on the open workflows)
+        (url_path_join(web_app.settings["base_url"], "verknode", "mcp"), MCPHandler),
         # Ketcher editor app (embedded by the Molecule Sketcher dialog)
         (url_path_join(web_app.settings["base_url"], "verknode", "ketcher", "(.*)"), KetcherFileHandler,
          {"path": KETCHER_DIR, "default_filename": "index.html"}),

@@ -18,6 +18,7 @@ files when what was built runs - wait for the user's OK (Yes / No in the chat).
 from __future__ import annotations
 
 import difflib
+import html
 import json
 import os
 import re
@@ -115,6 +116,10 @@ class Edit:
         return nid
 
     def type_of(self, name):
+        # ("CSV Reader (IO/Read)", as find_node_types lists it: the name)
+        m = re.fullmatch(r"\s*(.+?)\s*\(([^()]*)\)\s*", str(name or ""))
+        if m and any(t["name"] == m.group(1) and t["category"] == m.group(2) for t in self.wf.node_types()):
+            name = m.group(1)
         for t in self.wf.node_types():
             if name in (t["name"], t["factory"]):
                 return t["factory"]
@@ -264,6 +269,9 @@ def node_line(wf, nid, analysis=None, settings=True) -> str:
     line = f"#{nid} [{nc.name}] \"{nc.annotation}\" in: {ins}; out: {outs}"
     if settings:
         line += f"\n    settings: {_short(nc.settings, 500)}"
+        bound = {k: b["used"] for k, b in (nc.var_settings or {}).items() if b.get("used")}
+        if bound:
+            line += f"\n    settings from workflow variables: {_short(bound, 200)}"
     if nc.message and nc.message[0] == "ERROR":
         line += f"\n    ERROR: {nc.message[1][:300]}"
     elif not a.get("ok"):
@@ -331,10 +339,30 @@ def type_specs(wf, names) -> str:
             sub = f" each item: {{{', '.join(x['key'] + ': ' + x['type'] for x in f.get('fields') or [])}}}" if f.get("fields") else ""
             fields.append(f"    {f['key']} ({f['type']}) default={_short(f.get('default'), 120)}{extra}{sub}"
                           + (f" - {f['description'][:200]}" if f.get("description") else ""))
-        desc = re.sub(r"<[^>]+>", "", t.get("description") or "")[:5000]  # (e.g. the functions of expressions)
+        desc = html.unescape(re.sub(r"<[^>]+>", "", t.get("description") or ""))[:5000]  # (e.g. expression functions)
         out.append(f"[{t['name']}] {t['shortDescription']}\n  {desc}\n  in ports: {ins}\n  out ports: {outs}\n"
                    "  settings:\n" + ("\n".join(fields) or "    (none)"))
     return "\n\n".join(out)
+
+
+def search_types(wf, query="", limit=12) -> str:
+    """The node types that match the words of a query best (name, category, descriptions)."""
+    words = [w for w in re.findall(r"\w+", str(query).lower()) if len(w) > 1]
+    scored = []
+    for t in wf.node_types():
+        if t["name"].startswith("Metanode"):
+            continue
+        name, short = t["name"].lower(), f"{t['category']} {t['shortDescription']}".lower()
+        long = (t.get("description") or "").lower()
+        # (the name counts most, then the category and short description, then the description)
+        score = sum(6 * (w in name) + 3 * (w in short) + min(long.count(w), 2) for w in words)
+        score += 4 * sum(1 for a, b in zip(words, words[1:]) if f"{a} {b}" in f"{name} {short}")
+        if score:
+            scored.append((score, t))
+    scored.sort(key=lambda x: -x[0])
+    if not scored:
+        return "No node type matches; try other words."
+    return "\n".join(f"- {t['name']} ({t['category']}): {t['shortDescription']}" for _, t in scored[:limit])
 
 
 def clone(wf):
@@ -745,19 +773,7 @@ class AgentSession:
         return nid
 
     def t_find_node_types(self, query=""):
-        words = [w for w in re.findall(r"\w+", str(query).lower()) if len(w) > 1]
-        scored = []
-        for t in self.test.node_types():
-            if t["name"].startswith("Metanode"):
-                continue
-            hay = f"{t['name']} {t['name']} {t['category']} {t['shortDescription']} {t.get('description') or ''}".lower()
-            score = sum(hay.count(w) + 3 * (w in t["name"].lower()) for w in words)
-            if score:
-                scored.append((score, t))
-        scored.sort(key=lambda x: -x[0])
-        if not scored:
-            return "No node type matches; try other words."
-        return "\n".join(f"- {t['name']} ({t['category']}): {t['shortDescription']}" for _, t in scored[:12])
+        return search_types(self.test, query)
 
     def t_node_type_help(self, types=()):
         if isinstance(types, str):

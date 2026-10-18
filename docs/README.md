@@ -13,6 +13,9 @@
   Molecule Sketcher.
 - [LLM nodes](llm.md) - prompts to Ollama or OpenAI-compatible servers,
   one per row, and managing Ollama's models.
+- [Agents: API and MCP server](agents.md) - tools for agents (Claude Code,
+  Claude Desktop, any LLM) to build, run and read workflows; workflows as
+  reusable tools.
 - [Deployment](deployment.md) - running it locally, on a network, behind
   Traefik or another reverse proxy.
 - [Development](development.md) - working on the extension itself.
