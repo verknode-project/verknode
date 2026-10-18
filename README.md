@@ -62,6 +62,19 @@ from SMILES (NGL):
 
 ![Canvas widgets: a table of indinavir poses drawn as structures, the selected poses in HIV-1 protease in Mol*, and HIV protease inhibitors from SMILES in 2D and in 3D with NGL](docs/images/structures-v1.png)
 
+**Chat with a model** right on the canvas: a Chat Loop Start waits for your
+message, a local LLM answers (here with Ollama), and the conversation goes
+round the loop again - it keeps growing, and answers can come from your
+tables:
+
+![Two chats on the canvas: a general assistant and a shop assistant answering from a product table, each a Chat Loop Start, LLM Chat, Concatenate and Recursive Loop End](docs/images/llm-chat-v1.png)
+
+**Let a model write code** until hidden tests pass: a small coding agent made
+of ordinary nodes - the model writes the code, the Python Code Runner tests
+it, and each failing case goes back to the model:
+
+![A coding agent: a recursive loop of LLM Prompter and Python Code Runner, with the attempts and the failing test case of each](docs/images/llm-agent-v1.png)
+
 ## Quick start
 
 With Docker:
