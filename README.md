@@ -172,6 +172,11 @@ it, and each failing case goes back to the model:
 
 ## Quick start
 
+**Try it in your browser**, with nothing to install:
+[verknode-project.github.io/verknode](https://verknode-project.github.io/verknode/lab/index.html?path=examples/demo.vkf).
+It's the JupyterLite build: the first start takes 20 to 40 seconds, and
+some nodes need a full install ([what works there](docs/jupyterlite.md)).
+
 With Docker. The image needs only pip and no conda: JupyterLab and verknode
 on `python:3.13-slim`.
 

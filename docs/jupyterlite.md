@@ -12,6 +12,11 @@ workflows.
 
 ![verknode in JupyterLite: the GIS example opened and run in the browser, with no server - the capitals by territory on a Leaflet map, the territories, the selected rows and the nearest-neighbour table, all computed by the engine in a Pyodide kernel](images/jupyterlite-v1.png)
 
+**Try it:** [verknode-project.github.io/verknode](https://verknode-project.github.io/verknode/lab/index.html?path=examples/demo.vkf).
+A GitHub Actions workflow (`.github/workflows/pages.yml`) builds this site
+with `docker/lite/Dockerfile`, on each push to `main` that changes the
+extension, the examples or the lite build, and publishes it on GitHub Pages.
+
 ## Building and opening it
 
 From `docker/`:

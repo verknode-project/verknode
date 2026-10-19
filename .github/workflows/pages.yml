@@ -1,0 +1,45 @@
+# verknode in the browser on GitHub Pages: builds the JupyterLite site (docker/lite/Dockerfile, docs/jupyterlite.md)
+# and publishes it at https://verknode-project.github.io/verknode/
+name: Try it in the browser (GitHub Pages)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "extension/**"
+      - "notebooks/examples/**"
+      - "lite/**"
+      - "docker/lite/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the JupyterLite site
+        run: docker buildx build -f docker/lite/Dockerfile --target site --output type=local,dest=_site .
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
