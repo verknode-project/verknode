@@ -16,6 +16,8 @@ import zipfile
 
 import polars as pl
 
+from .compat import read_parquet, write_parquet
+
 from .. import __version__
 from .flowvars import FlowVariable, stack_from_json, stack_to_json
 from .node import FLOWVAR, FLOWVARIABLE, INACTIVE, TABLE, Port, PortObject
@@ -59,7 +61,7 @@ def save_workflow(wf: Workflow) -> bytes:
                     elif isinstance(obj, pl.DataFrame):
                         z.writestr(f"{folder}/{loc}/spec.json", _dump({"columns": spec_to_json(obj.schema)}))
                         pq = io.BytesIO()
-                        obj.write_parquet(pq)
+                        write_parquet(obj, pq)
                         z.writestr(f"{folder}/{loc}/data.parquet", pq.getvalue(), compress_type=zipfile.ZIP_STORED)
                     ports.append(entry)
             settings = {
@@ -236,7 +238,7 @@ def _load_outputs(z, names, folder, nc: NodeContainer, s: dict):
             path = f"{folder}/{entry.get('port_dir_location', f'port_{i}')}/data.parquet"
             if path not in names:
                 return  # incomplete data: load node as not executed
-            outputs.append(pl.read_parquet(io.BytesIO(z.read(path))))
+            outputs.append(read_parquet(io.BytesIO(z.read(path))))
     nc.outputs = outputs
     nc.inactive = bool(s.get("inactive"))
     nc.out_stack = stack_from_json(s.get("flow_stack", []))

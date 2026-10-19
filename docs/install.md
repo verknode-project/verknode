@@ -6,6 +6,7 @@
 |---|---|---|
 | **Docker, pip** (`docker/dist/Dockerfile`) | `python:3.13-slim`, JupyterLab and verknode from pip. No conda, and no Node.js in the image. | **Using verknode.** Smaller and simpler; choose what is installed with `EXTRAS`. |
 | **Docker, development** (`docker/Dockerfile`, `docker/compose.yml`) | `quay.io/jupyter/scipy-notebook` (conda), with the extension source mounted and installed in development mode | Working on verknode ([development](development.md), [deployment](deployment.md)) |
+| **In the browser** (`docker/lite/Dockerfile`, `make lite`) | A JupyterLite site: static files, no server; the engine runs in a Pyodide kernel in the page | Trying verknode, teaching, sharing workflows: open a link ([what works there](jupyterlite.md)) |
 | **pip** | `pip install "./extension[all]"` into your own JupyterLab 4 (building from source needs Node.js) | An existing Python / JupyterLab setup |
 
 ### Docker, pip

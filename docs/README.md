@@ -29,6 +29,8 @@
 - [Agents: API and MCP server](agents.md) - tools for agents (Claude Code,
   Claude Desktop, any LLM) to build, run and read workflows; workflows as
   reusable tools.
+- [verknode in the browser](jupyterlite.md) - a JupyterLite site: no server,
+  the engine in a Pyodide kernel, the files in the browser.
 - [Installing](install.md) - the pip-based Docker image (all extras, or a
   smaller core), pip, and what each node needs.
 - [Deployment](deployment.md) - running it locally, on a network, behind

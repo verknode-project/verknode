@@ -4,6 +4,8 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 
+from jupyterlab_verknode.engine.compat import is_in, join_nulls
+
 from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE, require_column
 from verknode.node import compile_rules, rules_expression
 from verknode.node import CELL_DTYPES, dtype_kind, is_numeric_kind
@@ -33,8 +35,8 @@ def _split_by_index(df: pl.DataFrame, idx) -> tuple[pl.DataFrame, pl.DataFrame]:
     """(rows at idx in that order, all other rows in input order)."""
     idx = pl.Series(IDX, sorted(set(int(i) for i in idx)) if idx is not None else [], dtype=pl.UInt32)
     numbered = df.with_row_index(IDX)
-    first = numbered.filter(pl.col(IDX).is_in(idx.implode())).drop(IDX)
-    rest = numbered.filter(~pl.col(IDX).is_in(idx.implode())).drop(IDX)
+    first = numbered.filter(is_in(pl.col(IDX), idx)).drop(IDX)
+    rest = numbered.filter(~is_in(pl.col(IDX), idx)).drop(IDX)
     return first, rest
 
 
@@ -79,7 +81,7 @@ class RowSplitter(NodeModel):
     def execute(self, inputs, s, ctx):
         df = inputs[0].with_row_index(IDX)
         match = RowFilter().execute([df], dict(s, mode="Include"), ctx)[0]
-        hit = pl.col(IDX).is_in(match[IDX].implode())
+        hit = is_in(pl.col(IDX), match[IDX])
         return [df.filter(hit).drop(IDX), df.filter(~hit).drop(IDX)]
 
 
@@ -129,9 +131,9 @@ class ReferenceRowFilter(NodeModel):
         values = ref[rcol].drop_nulls().unique()
         if values.dtype != df.schema[col]:
             values = values.cast(pl.String)
-            cond = pl.col(col).cast(pl.String).is_in(values.implode())
+            cond = is_in(pl.col(col).cast(pl.String), values)
         else:
-            cond = pl.col(col).is_in(values.implode())
+            cond = is_in(pl.col(col), values)
         cond = cond.fill_null(False)
         return [df.filter(cond if s["mode"] == "Include" else ~cond)]
 
@@ -160,7 +162,7 @@ class NominalValueRowFilter(NodeModel):
         col = require_column(s, "column", df.schema)
         values = pl.Series("v", [r.get("value") or "" for r in s["values"] if r.get("value") not in (None, "")],
                            dtype=pl.String)
-        cond = pl.col(col).cast(pl.String).is_in(values.implode())
+        cond = is_in(pl.col(col).cast(pl.String), values)
         cond = cond.fill_null(bool(s["include_missing"]))
         return [df.filter(cond if s["mode"] == "Include" else ~cond)]
 
@@ -241,7 +243,7 @@ class BootstrapSampling(NodeModel):
             counts = pl.Series(IDX, draws, dtype=pl.UInt32).value_counts(name="__n__")
             sample = sample.join(counts, on=IDX, how="left").rename({"__n__": s["count_column"] or "Occurrences"})
             sample = sample.with_columns(pl.col(s["count_column"] or "Occurrences").cast(pl.Int32))
-        holdout = numbered.filter(~pl.col(IDX).is_in(pl.Series(draws, dtype=pl.UInt32).implode()))
+        holdout = numbered.filter(~is_in(pl.col(IDX), pl.Series(draws, dtype=pl.UInt32)))
         return [sample.drop(IDX), holdout.drop(IDX)]
 
 
@@ -315,7 +317,7 @@ class TopKRowFilter(NodeModel):
             top = ordered.head(k)
         else:
             keys = ordered.select(cols).unique(maintain_order=True).head(k)
-            top = ordered.join(keys, on=cols, how="semi", nulls_equal=True)
+            top = ordered.join(keys, on=cols, how="semi", **join_nulls())
         if s["output_order"] == "Keep input order":
             top = top.sort(IDX)
         return [top.drop(IDX)]
@@ -396,7 +398,7 @@ class Pivot(NodeModel):
             ctx.check_canceled()
             part = long.filter(pl.col("__pivot__") == v).select(
                 keys + [pl.col(n).alias(self._name(s, v, n)) for n, _ in aggs])
-            pivot_table = pivot_table.join(part, on=keys, how="left", nulls_equal=True)
+            pivot_table = pivot_table.join(part, on=keys, how="left", **join_nulls())
         if not groups:
             pivot_table = pivot_table.drop("__one__")
         group_totals = self._totals(df, groups, aggs)

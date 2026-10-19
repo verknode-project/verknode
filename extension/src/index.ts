@@ -12,6 +12,7 @@ import { setFavicon, WorkflowDocument, WorkflowFactory, workflowIcon } from './d
 import { EditorSettings } from './settings';
 import { setLabHost } from './editor/labViews';
 import { setNotebookFinder } from './liveNotebook';
+import { setLiteServices } from './lite';
 
 const FACTORY = 'Verknode Workflow Editor';
 const FILE_TYPE = 'vkf';
@@ -34,6 +35,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     notebooks: INotebookTracker | null
   ) => {
     setFavicon();
+    setLiteServices(app.serviceManager);
     // Jupyter Notebook nodes can run in their notebook when it is open (liveNotebook.ts)
     setNotebookFinder(path => notebooks?.find(panel => panel.context.path === path) ?? null);
     let pluginSettings: ISettingRegistry.ISettings | null = null;

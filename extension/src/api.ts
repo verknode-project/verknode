@@ -1,10 +1,15 @@
 import { URLExt } from '@jupyterlab/coreutils';
 import { ServerConnection } from '@jupyterlab/services';
 
+import { isLite, liteRequest } from './lite';
+
 /**
  * Call the workflow engine REST API (/verknode/api/...).
  */
 export async function requestAPI<T>(endPoint: string, init: RequestInit = {}): Promise<T> {
+  if (isLite()) {
+    return liteRequest<T>(endPoint, init); // (JupyterLite: the engine runs in a kernel in the browser)
+  }
   const settings = ServerConnection.makeSettings();
   const url = URLExt.join(settings.baseUrl, 'verknode', 'api', endPoint);
   const response = await ServerConnection.makeRequest(url, init, settings);

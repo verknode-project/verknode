@@ -1,0 +1,9 @@
+{
+  "LiteBuildConfig": {
+    "contents": ["contents"],
+    "ignore_contents": [
+      "/output/", "_export/", "\\.ipynb_checkpoints", "__pycache__", "chemistry_node20\\.ipynb", "/mcp/top_products\\.vkf"
+    ],
+    "output_dir": "/site"
+  }
+}

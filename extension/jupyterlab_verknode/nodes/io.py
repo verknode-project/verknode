@@ -7,6 +7,7 @@ import polars as pl
 
 from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE
 from verknode.node import CELL_DTYPES, CELL_TYPES, dtype_kind, parse_cell
+from jupyterlab_verknode.engine.compat import read_parquet, write_parquet
 
 PATH_HELP = "Absolute path, or relative to the folder containing the workflow (.vkf) file."
 
@@ -77,7 +78,7 @@ class ParquetReader(NodeModel):
         return [pl.Schema(pl.read_parquet_schema(_existing(ctx, s["path"])))]
 
     def execute(self, inputs, s, ctx):
-        return [pl.read_parquet(_existing(ctx, s["path"]))]
+        return [read_parquet(_existing(ctx, s["path"]))]
 
 
 class _Writer(NodeModel):
@@ -145,7 +146,7 @@ class ParquetWriter(_Writer):
     ]
 
     def write(self, df, p, s):
-        df.write_parquet(p, compression=s["compression"])
+        write_parquet(df, p, compression=s["compression"])
 
 
 class TableCreator(NodeModel):

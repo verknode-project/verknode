@@ -38,3 +38,11 @@ dist:
 
 dist-core:
 	cd .. && docker build -f docker/dist/Dockerfile --build-arg EXTRAS= -t verknode-core .
+
+# verknode in the browser (JupyterLite): static files in lite/_output, no server (docs/jupyterlite.md)
+.PHONY: lite lite-serve
+lite:
+	cd .. && docker build -f docker/lite/Dockerfile --target site --output type=local,dest=lite/_output .
+
+lite-serve:
+	python3 -m http.server 8000 -d ../lite/_output

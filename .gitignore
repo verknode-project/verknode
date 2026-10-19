@@ -18,3 +18,6 @@ extension/.yarn/
 *.egg-info/
 __pycache__/
 notebooks/examples/output/
+
+# the JupyterLite site (make lite)
+lite/_output/

@@ -72,6 +72,9 @@ standalone Python script that runs without Jupyter.
   hill climbing on their instructions, multi-arm model comparison with
   bandits, and ablation studies ([agents](docs/agents-build-evaluate.md));
   an LLM harness built as a workflow ([harness](docs/llm-harness.md)).
+- **Runs in the browser, too** - a JupyterLite build with no server: the
+  engine in WebAssembly Python, for trying, teaching and sharing
+  ([in the browser](docs/jupyterlite.md)).
 - **Chemistry built in** - RDKit molecules as a column type, drawn as
   structures, with a structure sketcher; proteins and ligands in 3D with
   NGL or Mol*, in node views and on the canvas ([chemistry](docs/chemistry.md)).
@@ -188,6 +191,12 @@ setup: `cd docker && make build && make up`, based on the conda
 Open `examples/demo.vkf` (more examples next to it:
 `widgets.vkf`, `timing.vkf`, `analytics.vkf`, `chemistry.vkf`,
 `structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`, `mermaid.vkf`, `llm_connections.vkf`, `data_query_agent.vkf`, `agent_improvement.vkf`, `llm_harness.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
+
+**In the browser, with no server:** `cd docker && make lite && make lite-serve`
+builds a JupyterLite site of static files. The workflow engine runs in a
+Pyodide kernel in the page, and your files stay in the browser. Most nodes
+work there; chats, RDKit, SQLite files and nodes that need processes do
+not ([in the browser](docs/jupyterlite.md)).
 
 Other setups: pip into your own JupyterLab, the image's variants and what
 each node needs are in [installing](docs/install.md); a network or a

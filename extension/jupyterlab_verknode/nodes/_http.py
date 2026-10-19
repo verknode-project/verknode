@@ -85,7 +85,8 @@ def request(method: str, url: str, params=None, headers=None, data: bytes | str 
         req = urllib.request.Request(url, data=body, method=method.upper(), headers=hdrs)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
-                return Response(r.status, dict(r.headers), r.read(), r.geturl(), time.time() - t0)
+                final = getattr(r, "url", None) or url  # (the browser's responses (pyodide_http) know no final URL)
+                return Response(r.status, dict(r.headers), r.read(), final, time.time() - t0)
         except urllib.error.HTTPError as e:
             content = e.read()
             if e.code in (429, 500, 502, 503, 504) and attempt < retries:
