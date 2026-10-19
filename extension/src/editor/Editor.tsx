@@ -1,4 +1,4 @@
-import { InputDialog } from '@jupyterlab/apputils';
+import { Dialog, InputDialog, showDialog } from '@jupyterlab/apputils';
 import {
   Background,
   BackgroundVariant,
@@ -1171,7 +1171,11 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     index: number;
     x: number;
     y: number;
+    /** where the picked node goes (flow coordinates), when there is no source: the pointer's place */
+    at?: { x: number; y: number };
   } | null>(null);
+  /** the pointer's last place over the canvas (client coordinates), null when it is elsewhere */
+  const pointer = useRef<{ x: number; y: number } | null>(null);
   const quickSource = quick && quick.source !== null ? (byId.get(quick.source) ?? null) : null;
   // output ports of the source: explicit ports first, the flow variable port last
   const quickPorts = useMemo(
@@ -1214,10 +1218,16 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     }
     let x = r.width / 2 - 140;
     let y = r.height / 3;
+    let at: { x: number; y: number } | undefined;
     if (source) {
       const p = flow.flowToScreenPosition({ x: source.x + 110, y: source.y });
       x = p.x - r.left;
       y = p.y - r.top;
+    } else if (!selected.length && pointer.current) {
+      // nothing selected: the list opens at the pointer, and the node goes there
+      x = pointer.current.x - r.left;
+      y = pointer.current.y - r.top;
+      at = flow.screenToFlowPosition(pointer.current);
     }
     savedRepoQuery.current = repoQuery;
     setQuick({
@@ -1226,7 +1236,8 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       query: '',
       index: 0,
       x: Math.max(8, Math.min(x, r.width - 300)),
-      y: Math.max(8, Math.min(y, r.height - 330))
+      y: Math.max(8, Math.min(y, r.height - 330)),
+      at
     });
     setRepoQuery('');
   };
@@ -1240,6 +1251,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   const pickQuickAdd = (node: NodeDescription) => {
     const source = quickSource;
     const port = quickPort;
+    const at = quick?.at;
     closeQuickAdd();
     void run(async () => {
       let x: number;
@@ -1252,6 +1264,9 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         while (taken(x, y)) {
           y += 110;
         }
+      } else if (at) {
+        x = at.x - 45;
+        y = at.y - 30;
       } else {
         const r = wrapper.current!.getBoundingClientRect();
         const p = flow.screenToFlowPosition({ x: r.left + r.width / 2, y: r.top + r.height / 3 });
@@ -1281,6 +1296,32 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     const n = byId.get(id);
     if (n) {
       setDescribed(repoByFactory.get(n.factory) ?? null);
+    }
+  };
+
+  /** Ctrl+A: every node of the shown level, with the widgets on the canvas. */
+  const selectAll = () => {
+    setNodes(ns => ns.map(n => ({ ...n, selected: true })));
+    widgetSel.setExplicit(
+      Array.from(wrapper.current?.querySelectorAll<HTMLElement>('.verknode-widget-dock[data-widget]') ?? []).map(el =>
+        Number(el.dataset.widget)
+      )
+    );
+  };
+
+  /** The Reset button: the selected nodes; Ctrl/Cmd+click resets every node, once confirmed. */
+  const resetButton = async (e: React.MouseEvent) => {
+    const ids = selectedIds();
+    if (ids.length && !(e.ctrlKey || e.metaKey)) {
+      return reset(ids);
+    }
+    const result = await showDialog({
+      title: 'Reset all nodes?',
+      body: 'This resets every node of the workflow and discards their results.',
+      buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'Reset all' })]
+    });
+    if (result.button.accept) {
+      await reset();
     }
   };
 
@@ -2138,7 +2179,10 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       void cancel();
     } else if (e.ctrlKey || e.metaKey) {
       const key = e.key.toLowerCase();
-      if (key === 'c') {
+      if (key === 'a') {
+        handled();
+        selectAll();
+      } else if (key === 'c') {
         handled();
         void copySelection();
       } else if (key === 'x') {
@@ -2436,7 +2480,12 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         <button className="verknode-tb" disabled={!view?.executing} onClick={cancel} title="Cancel all (F9)">
           <span className="verknode-tb-stop">■</span> Cancel
         </button>
-        <button className="verknode-tb" disabled={!sel.length} onClick={() => reset(sel)} title="Reset selected nodes (F8)">
+        <button
+          className="verknode-tb"
+          disabled={!sel.length && !view?.nodes.some(n => n.state === 'EXECUTED')}
+          onClick={e => void resetButton(e)}
+          title="Reset selected nodes (F8); Ctrl+click, or with nothing selected: reset all nodes (Shift+F8)"
+        >
           ↺ Reset
         </button>
         <span className="verknode-tb-sep" />
@@ -2488,6 +2537,8 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         <div
           className={`verknode-canvas verknode-drag-${prefs.dragBehavior}`}
           ref={wrapper}
+          onMouseMove={e => (pointer.current = { x: e.clientX, y: e.clientY })}
+          onMouseLeave={() => (pointer.current = null)}
           onDoubleClickCapture={e => {
             // on the blank canvas inside a bubble (or on its label): Ctrl+double-click selects
             // the nodes of the innermost bubble (loop, try/catch, switch or group), double-click

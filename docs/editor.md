@@ -19,6 +19,8 @@ Create one from the Launcher ("Workflow") or the command palette
 - F6 configure, F7 execute (Shift: all), F8 reset (Shift: all), F9 cancel,
   Shift+F10 execute and open view, Del delete. Ctrl+S saves (including
   executed data).
+- Ctrl+click the toolbar's ↺ Reset (or click it with nothing selected) to
+  reset every node, after a confirmation.
 - Double-click an output port (triangle, square or circle) to open its table
   / port object / flow variables (the context menu lists them too). Port
   tables and node views open in a separate browser window that can be moved
@@ -97,7 +99,7 @@ Create one from the Launcher ("Workflow") or the command palette
   down (also filters the Node Repository; acronyms like `gb` work), ↑ / ↓ to
   choose, Tab / Shift+Tab to pick another output port of the current node,
   Enter to add and connect, Esc to cancel. With nothing selected it suggests
-  source nodes. The new node becomes current, so Tab again continues the chain.
+  source nodes, and opens at the pointer: the new node goes there. The new node becomes current, so Tab again continues the chain.
   Inside an open scope (a loop, try/catch, IF/CASE switch, cross-validation)
   its closing node is suggested first (innermost scope first). Scope-opening
   nodes declare their closers with the class attribute `closed_by`
@@ -164,7 +166,8 @@ Create one from the Launcher ("Workflow") or the command palette
   Shift + drag draws a selection rectangle (Ctrl + Shift + drag adds to the
   selection); Ctrl/Shift + click adds or removes a node from the selection.
   (≡ Settings can switch left-drag to selecting instead.) Ctrl + double-click on a node selects it and
-  everything downstream, Shift + double-click everything upstream.
+  everything downstream, Shift + double-click everything upstream. Ctrl+A
+  selects every node and widget on the canvas.
 - Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste nodes with their settings and
   the connections between them (also between workflows); Ctrl+Z undo,
   Ctrl+Shift+Z / Ctrl+Y redo (edits only; execution is not undone, and

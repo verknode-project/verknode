@@ -9,6 +9,11 @@
   <b>Visual, node-based data workflows for Python, inside JupyterLab.</b>
 </p>
 
+<p align="center">
+  <a href="https://verknode-project.github.io/verknode/lab/index.html?path=examples/demo.vkf"><b>▶ Try the live demo</b></a>
+  - in your browser, nothing to install (<a href="docs/jupyterlite.md">JupyterLite</a>)
+</p>
+
 Build data pipelines by connecting nodes on a canvas: read files, clean and
 reshape tables, run statistics and machine learning, draw charts, work with
 molecules - and see every intermediate result. Tables flow between nodes as
