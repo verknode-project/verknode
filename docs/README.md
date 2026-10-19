@@ -20,6 +20,9 @@
 - [Building and evaluating agents](agents-build-evaluate.md) - data query
   agents with verknode's tool loop, LangGraph or Deep Agents; rubric-based
   evaluation, hill climbing, multi-arm model comparison, ablation studies.
+- [An LLM harness as a workflow](llm-harness.md) - model, tools (SQL,
+  sandboxed Python, verknode workflows, HTTP), policy and context management
+  as nodes in a loop.
 - [Export](export.md) - workflows (or groups of them) as standalone scripts
   or self-contained folders with minimal requirements, a Dockerfile and an
   HTTP API; headless exports without widgets.

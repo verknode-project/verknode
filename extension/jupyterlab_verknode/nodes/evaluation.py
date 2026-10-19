@@ -411,7 +411,18 @@ means, how to compute a measure, the order of aggregation and joins, the dates t
 finding, each with the correct way. Do not stop at a guess: run queries until one gives the reference number \
 (within rounding) - try other definitions of the measure (e.g. a unit price times a quantity instead of the price \
 alone), aggregating before a join, the dates that are really in the data - and report only what you verified. \
-Do not report the reference numbers themselves."""
+You also get the questions the agent got right, with its SQL: that SQL gave the reference answers, so it shows \
+what already works. A finding must agree with it - if a finding would make a passing question wrong (e.g. it \
+changes a definition the passing SQL used), it is wrong: drop it. When the failures are only slips (rounding, a \
+copied number) and no general error explains them, say so - do not invent a rule. Do not report the reference \
+numbers themselves."""
+
+
+def _passes(ev: dict, n: int = 6) -> str:
+    """The questions the agent got right, with its SQL: what a finding must not contradict."""
+    good = [r for r in ev["rows"] if (r.get("correct") if r.get("correct") is not None else r["score"]) >= 0.999][:n]
+    return "\n\n".join(f"Q: {r['question']}\nReference: {r['reference']}\nIts answer: {r['answer'][:300]}\n"
+                       f"Its SQL: {r['sql'][:500]}" for r in good) or "(none)"
 
 
 def investigate(srv: dict, agent: AgentPortObject, ev: dict, ctx, steps: int = 24) -> str:
@@ -422,7 +433,8 @@ def investigate(srv: dict, agent: AgentPortObject, ev: dict, ctx, steps: int = 2
 
     tables = _tables(agent)
     msgs = [{"role": "system", "content": INVESTIGATE},
-            {"role": "user", "content": f"The tables:\n{_tables_text(agent)}\n\nThe failures:\n{_failures(ev)}"}]
+            {"role": "user", "content": f"The agent's instructions:\n{agent.instructions}\n\nThe tables:\n{_tables_text(agent)}"
+             f"\n\nThe failures:\n{_failures(ev)}\n\nThe questions it got right (its SQL gave the reference):\n{_passes(ev)}"}]
     for _ in range(steps):
         ctx.check_canceled()
         r = chat_tools(srv, msgs, {"temperature": 0.2, "max_tokens": 4000, "timeout": 900, "think": True}, TABLE_TOOLS)

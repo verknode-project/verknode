@@ -70,7 +70,8 @@ standalone Python script that runs without Jupyter.
 - **Agents you can measure** - data query agents built in the workflow with
   verknode's tool loop, LangGraph or Deep Agents; rubric-based evaluation,
   hill climbing on their instructions, multi-arm model comparison with
-  bandits, and ablation studies ([agents](docs/agents-build-evaluate.md)).
+  bandits, and ablation studies ([agents](docs/agents-build-evaluate.md));
+  an LLM harness built as a workflow ([harness](docs/llm-harness.md)).
 - **Chemistry built in** - RDKit molecules as a column type, drawn as
   structures, with a structure sketcher; proteins and ligands in 3D with
   NGL or Mol*, in node views and on the canvas ([chemistry](docs/chemistry.md)).
@@ -138,12 +139,20 @@ it; draw tables and LLM answers as Mermaid diagrams
 
 **Build agents, then measure and improve them**: a data query agent as
 nodes (verknode's tool loop, LangGraph or Deep Agents), scored with a
-rubric. In this run, hill climbing took it from 0.75 to 0.98: the proposer
+rubric. In this run, hill climbing took it from 0.75 to 0.99: the proposer
 found, with SQL, that revenue is amount × quantity. Multi-arm evaluation
 compares models, and an ablation study shows what each part of the agent
 is worth ([agents](docs/agents-build-evaluate.md)):
 
-![Rubric evaluation of a baseline data query agent (0.7455) and hill climbing on its instructions, rising to 0.9777; the table of proposed changes](docs/images/agent-improvement-v1.png)
+![Rubric evaluation of a baseline data query agent (0.7455) and hill climbing on its instructions, rising to 0.9866; the table of proposed changes](docs/images/agent-improvement-v1.png)
+
+**An LLM harness as a workflow**: the loop around a model as nodes. LLM
+Step calls the model; Tool Policy allows or denies its tool calls; Tool
+Executor runs SQL, sandboxed Python, reviewed verknode workflows and HTTP as
+tools; Context Window keeps the context within budget. The trace is a table
+([harness](docs/llm-harness.md)):
+
+![An LLM harness as a verknode workflow: a loop of Context Window, LLM Step, Tool Policy and Tool Executor; the answer, the trace, tool calls per tool and tokens per turn; the policy denying an os import, a DROP TABLE and an unknown tool](docs/images/llm-harness-v1.png)
 
 **Chat with a model** right on the canvas: a Chat Loop Start waits for your
 message, a local LLM answers (here with Ollama), and the conversation goes
@@ -178,7 +187,7 @@ setup: `cd docker && make build && make up`, based on the conda
 
 Open `examples/demo.vkf` (more examples next to it:
 `widgets.vkf`, `timing.vkf`, `analytics.vkf`, `chemistry.vkf`,
-`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`, `mermaid.vkf`, `llm_connections.vkf`, `data_query_agent.vkf`, `agent_improvement.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
+`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`, `mermaid.vkf`, `llm_connections.vkf`, `data_query_agent.vkf`, `agent_improvement.vkf`, `llm_harness.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
 
 Other setups: pip into your own JupyterLab, the image's variants and what
 each node needs are in [installing](docs/install.md); a network or a
