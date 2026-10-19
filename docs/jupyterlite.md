@@ -26,9 +26,13 @@ From `docker/`:
 
 Open `http://localhost:8000/lab/index.html`, and a workflow in `examples/`.
 
-- **The first start** takes 20 to 40 seconds. The browser loads Pyodide and
-  the Python packages (numpy, polars, pyarrow, about 40 MB) from Pyodide's
-  CDN, and caches them for later visits.
+- **The first start** takes 15 to 30 seconds while the browser loads Pyodide
+  and the Python packages (numpy, polars, pyarrow, about 40 MB), then caches
+  them for later visits.
+- **No CDN:** Pyodide and every package come from the site itself, not from
+  a CDN. Networks that block cdn.jsdelivr.net or PyPI work too. Only the map
+  tiles come from outside (OpenStreetMap), plus the web services and LLM
+  servers a workflow calls.
 - **Hosting** needs no server-side code. The host must serve `.wasm` files
   with their MIME type, and the page must be on HTTPS or `localhost`: the
   service worker that lets the kernel read the browser's files requires it.
@@ -39,6 +43,23 @@ The build (`docker/lite/Dockerfile`) has two stages:
    jupyterlite-pyodide-kernel 0.6.1. That kernel brings Pyodide 0.27, the
    last Pyodide with polars (1.18). The examples
    (`notebooks/examples`) become the site's files.
+3. `lite/bundle_pyodide.py` puts Pyodide 0.27.6 into the site (`static/pyodide`).
+   That's the core runtime plus 48 packages, about 120 MB. They are:
+   - what the kernel needs at start;
+   - what verknode loads at start: numpy, polars, pyarrow, pandas, pyodide-http;
+   - what its nodes load on demand: scikit-learn, scipy, statsmodels,
+     matplotlib, lxml, requests;
+   - all their dependencies.
+
+   Each package is checked against Pyodide's checksums. The lock file is
+   cut to the bundled packages.
+4. The site's own wheel index gets the pure-Python packages that Pyodide
+   doesn't have: comm (for the kernel), openpyxl, jsonpath-ng, xlsxwriter.
+   PyPI is not used (`disablePyPIFallback` in `lite/jupyter-lite.json`),
+   so a missing package fails at once instead of waiting on a blocked
+   network.
+
+The site is about 200 MB.
 
 ## How it works
 
@@ -46,15 +67,15 @@ The editor talks to the workflow engine through one REST API, the same as
 with the Jupyter server. In JupyterLite there is no server. Instead:
 
 1. **The calls go to a kernel.** The editor (`src/lite.ts`) starts a Pyodide
-   kernel of its own, installs numpy, polars and pyarrow from Pyodide and
-   verknode's wheel, and sends each call to a bridge there
+   kernel of its own, installs numpy, polars and pyarrow (from the site's
+   Pyodide) and verknode's wheel, and sends each call to a bridge there
    (`jupyterlab_verknode/lite.py`). The bridge does what the server's
    handlers do, on the browser's files (`/drive` in the kernel).
 2. **There are no threads in the browser.** A run executes before its call
    returns, so the canvas shows the result when the run is done, not while
    it runs. Thread pools run one task after another.
 3. **Packages load on demand.** Before a run, the bridge loads what its
-   nodes need from Pyodide's packages, such as scikit-learn, scipy, pandas
+   nodes need from the bundled packages, such as scikit-learn, scipy, pandas
    or matplotlib. A run that still misses a module loads it and runs the
    failed nodes once more.
 4. **Some polars and pyarrow behaviour is patched.** Pyodide's polars 1.18
