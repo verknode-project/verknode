@@ -18,11 +18,13 @@ From the repository root:
     docker build -f docker/dist/Dockerfile --build-arg EXTRAS=chem,formats -t verknode-chem .
 
     docker run --rm -p 8888:8888 -e JUPYTER_TOKEN=a-long-secret \
-        -v "$PWD/work:/home/jovyan/work" verknode
+        -v "$PWD/work:/home/jovyan/work" -v "$HOME/.verknode:/home/jovyan/.verknode" verknode
 
 JupyterLab is at `http://localhost:8888/lab?token=a-long-secret`. The
 examples are in `examples/`. Keep your work in a mounted folder (`work/`
-above), because the container's own files go when it does. The image runs
+above), because the container's own files go when it does. The same goes
+for [your verknode folder](#your-verknode-folder): mounting `~/.verknode`
+shares it with an install on the host. The image runs
 as user `jovyan` (uid 1000), and Ketcher for the Molecule Sketcher is
 included.
 
@@ -34,6 +36,28 @@ The build has two stages:
 **The core variant has no compromise for the nodes it has.** It leaves out
 the packages of the extras below, and the editor shows the nodes that need
 them dimmed, with the package they need.
+
+## Your verknode folder
+
+verknode keeps your own setup in `~/.verknode`, the Jupyter server user's
+home folder. Set `VERKNODE_HOME` to use another folder.
+
+| In it | What |
+|---|---|
+| `llm.env` | LLM settings as `KEY=VALUE` lines: `VERKNODE_LLM_URL`, `VERKNODE_LLM_MODEL`, API keys ([LLM nodes](llm.md#the-server)) |
+| `defaults.json` | the node defaults of ≡ Settings › Node defaults, such as your [saved LLM servers](llm.md#saved-llm-servers) |
+| `nodes/` | your node folder: custom nodes that every workflow you open can use ([custom nodes](custom-nodes.md)) |
+| `models/` | model files that the Local Model (llama.cpp) connector downloads |
+
+- **Not in workflows:** none of it is saved in a workflow, so a shared
+  workflow carries no addresses or keys.
+- **Older places:** files from earlier versions in `~/.config/verknode`
+  (`llm.env`, `defaults.json`) and `~/.cache/verknode/models` are still
+  read while the new folder has none. A save of the node defaults goes to
+  `~/.verknode`.
+- **Docker:** the development setup keeps the folder in the
+  `verknode-home` volume. With `docker run`, mount it as above.
+- **In the browser:** the folder is `.verknode` in the browser's files.
 
 ## What the nodes need
 

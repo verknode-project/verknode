@@ -30,7 +30,7 @@ import polars as pl
 
 from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE
 
-from .llm import chat, chat_tools, llm_port, server_fields, server_for, tool_message
+from .llm import LLMNode, chat, chat_tools, llm_port, server_fields, server_for, tool_message
 
 CAT = "AI/Harness"
 CONV = {"role": pl.String, "content": pl.String, "tool_calls": pl.String, "tool_call_id": pl.String,
@@ -93,7 +93,7 @@ def tool_specs(tools: pl.DataFrame | None) -> list[dict]:
 # ---------------------------------------------------------------------------------------------------
 # the model
 # ---------------------------------------------------------------------------------------------------
-class LLMStep(NodeModel):
+class LLMStep(LLMNode, NodeModel):
     factory = "verknode.harness.LLMStep"
     name = "LLM Step"
     category = CAT
@@ -114,11 +114,7 @@ class LLMStep(NodeModel):
     fields = [
         F("system", "code", "System prompt", "You are a careful assistant. Use the tools when they help; answer "
           "briefly when you are done.", "Used when the conversation has no system message."),
-        F("temperature", "float", "Temperature", 0.0),
-        F("max_tokens", "int", "Longest answer (tokens)", 2000),
-        *server_fields()[:4],
-        F("think", "bool", "Let reasoning models think first", False),
-        F("timeout", "int", "Timeout per request (s)", 300),
+        *server_fields(temperature=0.0, max_tokens=2000),
     ]
 
     def configure(self, in_specs, s, ctx):
@@ -388,12 +384,12 @@ class ToolExecutor(NodeModel):
 STRATEGIES = ["Shorten old tool results", "Drop the oldest turns", "Summarize the oldest turns (LLM)"]
 
 
-class ContextWindow(NodeModel):
+class ContextWindow(LLMNode, NodeModel):
     factory = "verknode.harness.ContextWindow"
     name = "Context Window"
     category = CAT
     icon = "⧖"
-    in_ports = [Port(TABLE, "Conversation"), llm_port("For summaries (optional: the server settings)")]
+    in_ports = [Port(TABLE, "Conversation"), llm_port("The model for summaries: a connection of an LLM connector node (optional: else the Model settings)")]
     out_ports = [Port(TABLE, "Conversation", "Within the token budget")]
     short_description = "Keeps a conversation within a token budget: shortens old tool results, drops or summarizes old turns."
     description = (
@@ -409,7 +405,7 @@ class ContextWindow(NodeModel):
         F("keep_turns", "int", "Last turns kept as they are", 2),
         F("strategy", "enum", "Over budget", STRATEGIES[0], options=STRATEGIES),
         F("short", "int", "Shortened tool results (characters)", 300),
-        *server_fields()[:3],
+        *server_fields(temperature=0.0, max_tokens=500),
     ]
 
     def configure(self, in_specs, s, ctx):
@@ -451,7 +447,7 @@ class ContextWindow(NodeModel):
                     summ = chat(srv, [{"role": "system", "content": "Summarize this part of a conversation between a user, "
                                        "an assistant and its tools in a few bullets: what was asked, found and decided, "
                                        "with the numbers that matter."}, {"role": "user", "content": text}],
-                                {"temperature": 0, "max_tokens": 500})["text"].strip()
+                                s)["text"].strip()
                     at = (first_user + 1) if first_user is not None else len(fixed)
                     rest.insert(min(at, len(rest)), {"role": "user", "content": f"(Summary of earlier turns)\n{summ}", "tool_calls": None,
                                                      "tool_call_id": None, "name": None, "turn": dropped[0]["turn"],

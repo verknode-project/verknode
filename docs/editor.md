@@ -13,8 +13,10 @@ Create one from the Launcher ("Workflow") or the command palette
   mouse wheel zoom/pan, where
   views open (window / tab / dialog), flow variable ports, snap to grid,
   minimap, Python commands in the console — stored per user in JupyterLab's
-  settings (also in Settings › Settings Editor); and the workflow's custom
-  node folders.
+  settings (also in Settings › Settings Editor); the node defaults (setup
+  that nodes share across workflows, such as your saved LLM servers, see
+  [LLM nodes](llm.md#saved-llm-servers)); and the workflow's custom node
+  folders.
 - Traffic light: red = not configured, yellow = configured, green = executed.
 - F6 configure, F7 execute (Shift: all), F8 reset (Shift: all), F9 cancel,
   Shift+F10 execute and open view, Del delete. Ctrl+S saves (including
@@ -90,7 +92,7 @@ Create one from the Launcher ("Workflow") or the command palette
   (`3/6`; `~6`: the count of the last run when the loop start cannot tell).
   The **Delay** node (Flow Control › Wait) passes its table on after some
   seconds (plus per row, optionally varied at random, with steady, slow-start
-  or no progress) to try this out: `notebooks/examples/timing.vkf`.
+  or no progress) to try this out: `notebooks/examples/loops_and_scripting/timing.vkf`.
 - Settings can be bound to flow variables in the dialog's "Flow Variables"
   tab; workflow variables are set from the toolbar.
 - **Tab** adds a node after the current one: a list of likely next nodes

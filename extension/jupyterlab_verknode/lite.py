@@ -22,6 +22,8 @@ import traceback
 import uuid
 from urllib.parse import parse_qs
 
+from .engine import defaults
+
 WASM = sys.platform == "emscripten"
 
 
@@ -195,16 +197,19 @@ class Bridge:
         from . import nodes  # noqa: F401 - registers the built-in nodes
 
         self.root = root
-        # the LLM settings (VERKNODE_LLM_URL ...): no server environment here - an llm.env in the browser's files
-        for cand in (".verknode/llm.env", "llm.env"):
-            if os.path.isfile(os.path.join(root, cand)) and not os.environ.get("VERKNODE_LLM_CONFIG"):
-                os.environ["VERKNODE_LLM_CONFIG"] = os.path.join(root, cand)
+        # the user's setup (engine/home.py): .verknode in the browser's files - llm.env, defaults.json, nodes/
+        os.environ.setdefault("VERKNODE_HOME", os.path.join(root, ".verknode"))
+        # (the LLM settings: also an llm.env at the top of the files)
+        if not os.path.isfile(os.path.join(root, ".verknode", "llm.env")) and os.path.isfile(os.path.join(root, "llm.env")):
+            os.environ.setdefault("VERKNODE_LLM_CONFIG", os.path.join(root, "llm.env"))
         self.sessions: dict = {}
         self.by_path: dict[str, str] = {}
         self.refs: dict[str, int] = {}
         self.mtimes: dict[str, float | None] = {}
         self.routes = [
             ("GET", r"nodes", self.nodes),
+            ("GET", r"defaults", lambda q, b: defaults.describe()),
+            ("POST", r"defaults", lambda q, b: defaults.save(b.get("values") or {})),
             ("POST", r"sessions", self.open),
             ("GET", rf"sessions/{SID}", self.view),
             ("DELETE", rf"sessions/{SID}", self.close),

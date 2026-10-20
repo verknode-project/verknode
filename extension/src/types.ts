@@ -27,6 +27,10 @@ export interface FieldInfo {
   show_if?: Record<string, any>;
   /** sketcher fields: settings whose change invalidates edits ("structure" / "name") */
   depends?: Record<string, 'structure' | 'name'>;
+  /** a heading above the first field of a section (e.g. the LLM nodes' "Model") */
+  section?: string;
+  /** enum: also the values of a column of a records setting (e.g. the names of saved servers) */
+  options_from?: { field: string; key: string };
 }
 
 export interface NodeDescription {
@@ -226,6 +230,8 @@ export interface WorkflowView {
   canUndo: boolean;
   canRedo: boolean;
   nodePaths: string[];
+  /** the user's node folder (~/.verknode/nodes): loaded in every workflow, if it exists */
+  userNodes?: { path: string; exists: boolean };
   autoReload: boolean;
   registryVersion: number;
   customReport: CustomReport | null;

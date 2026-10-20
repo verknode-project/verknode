@@ -21,6 +21,7 @@ import polars as pl
 
 from .custom import CustomNodes, capture_print, discard_print
 from .flowvars import FlowVariable, coerce, make, stack_to_json
+from .home import home, display as _display, user_nodes
 from .node import (
     FLOWVAR,
     FLOWVARIABLE,
@@ -1071,8 +1072,11 @@ class Workflow:
         return out
 
     def resolved_node_paths(self) -> list:
-        return [os.path.normpath(p if os.path.isabs(p) else os.path.join(self.base_dir, p))
-                for p in self.node_paths]
+        """The node folders: the user's (~/.verknode/nodes, if there is one), then the workflow's own."""
+        own = [os.path.normpath(os.path.expanduser(p) if p.startswith("~") or os.path.isabs(p)
+                                else os.path.join(self.base_dir, p)) for p in self.node_paths]
+        user = user_nodes()
+        return ([user] if user and user not in own else []) + own
 
     def set_node_paths(self, paths: list, auto_reload: bool | None = None) -> dict:
         self._require_idle()
@@ -1438,7 +1442,7 @@ class Workflow:
     # ------------------------------------------------------------------
     def execute(self, ids=None, wait=False):
         self._require_idle()
-        if self.auto_reload and self.node_paths and self.custom.changed(self.resolved_node_paths()):
+        if self.auto_reload and self.custom.changed(self.resolved_node_paths()):
             self.reload_nodes(reason="changed files")
         with self._lock:
             targets = list(self.nodes) if ids is None else sorted(self.expand_ids(ids))
@@ -2445,6 +2449,7 @@ class Workflow:
             "executing": self.executing,
             "canUndo": self.can_undo,
             "nodePaths": self.node_paths,
+            "userNodes": {"path": _display(os.path.join(home(), "nodes")), "exists": user_nodes() is not None},
             "autoReload": self.auto_reload,
             "registryVersion": self.registry_version,
             "customReport": self.custom_report,

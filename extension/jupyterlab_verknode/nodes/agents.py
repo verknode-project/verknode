@@ -23,7 +23,7 @@ from jupyterlab_verknode.engine.node import CanceledExecutionError
 
 from .data_chat import TOOLS as TABLE_TOOLS
 from .data_chat import Tables, _slug
-from .llm import chat_tools, connection_of, llm_port, server, server_fields, tool_message
+from .llm import LLMNode, chat_tools, connection_of, llm_port, server, server_fields, tool_message
 
 CAT = "AI/Agents"
 TOOL_NAMES = [t["name"] for t in TABLE_TOOLS]
@@ -324,18 +324,16 @@ def agent_fields(default_name="Data query agent"):
         F("verify", "bool", "Numbers must come from SQL", True,
           "An answer with numbers but no query for the question is sent back once or twice."),
         F("steps", "int", "Model calls per question at most", 12),
-        F("temperature", "float", "Temperature", 0.0),
-        F("max_tokens", "int", "Longest answer (tokens)", 1500),
     ]
 
 
-class _AgentBuilder(NodeModel):
+class _AgentBuilder(LLMNode, NodeModel):
     """Makes an AgentPortObject of its settings, tables and LLM connection. (Name starts with "_".)"""
 
     category = CAT
     node_type = "Learner"
     framework = "builtin"
-    in_ports = [*DATA_IN, llm_port("The model (an LLM connector node); none: the server settings below")]
+    in_ports = [*DATA_IN, llm_port()]
     out_ports = [Port(AGENT, "Agent", "The agent: for Agent Runner and the evaluation nodes"),
                  Port(TABLE, "Graph", "One row: the agent's graph as Mermaid (for Mermaid Display)")]
     extra_fields: list = []
@@ -343,7 +341,7 @@ class _AgentBuilder(NodeModel):
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
         if "fields" not in cls.__dict__:
-            cls.fields = [*agent_fields(), *cls.extra_fields, *server_fields()[:4]]
+            cls.fields = [*agent_fields(), *cls.extra_fields, *server_fields(temperature=0.0, max_tokens=1500)]
 
     def _names(self, ctx, n) -> list[str]:
         out = [f"table{i + 1}" for i in range(n)]
@@ -369,11 +367,15 @@ class _AgentBuilder(NodeModel):
         conn = connection_of(inputs)
         if conn is None:
             srv = server(s)
-            url = (s.get("url") or "").strip() or "${VERKNODE_LLM_URL}"  # (resolved when used: not saved)
+            # (resolved when used, so the saved workflow keeps no address: a saved server's name, or the variable)
+            url = ("${saved:%s}" % srv["saved"] if srv.get("saved")
+                   else (s.get("url") or "").strip() or "${VERKNODE_LLM_URL}")
+            label = f"{srv['saved']} · {srv['model']}" if srv.get("saved") else f"{srv['provider']} · {srv['model']}"
             conn = LLMConnectionPortObject(srv["provider"], url, srv["model"],
-                                           (s.get("api_key_env") or "").strip(), f"{srv['provider']} · {srv['model']}")
+                                           srv.get("key_env") or (s.get("api_key_env") or "").strip(), label)
         tools = [t for t in (s.get("tools") or TOOL_NAMES) if t in TOOL_NAMES]
-        settings = {k: s.get(k) for k in ("overview", "verify", "steps", "temperature", "max_tokens") if k in s}
+        settings = {k: s.get(k) for k in ("overview", "verify", "steps", "temperature", "max_tokens", "seed", "think",
+                                          "timeout") if k in s}
         settings.update({f.key: s.get(f.key) for f in self.extra_fields})
         return AgentPortObject(self.framework, conn, s.get("instructions") or "", tools, tables, s.get("examples") or "",
                                settings, (s.get("agent_name") or "agent").strip())
@@ -400,7 +402,7 @@ class DataQueryAgent(_AgentBuilder):
     description = (
         "Makes an agent from its instructions, tools and the tables connected to it: it answers questions by "
         "looking at the tables and computing with SQL (polars), in verknode's own tool loop - no framework to "
-        "install. Its model comes from the LLM port (an LLM connector) or the server settings. Ask it questions "
+        "install. Its model comes from the LLM port (an LLM connector) or its Model settings. Ask it questions "
         "with Agent Runner; score it with Agent Evaluation; improve it with Hill Climbing; compare models with "
         "Multi-Arm Evaluation; see what its parts are worth with Ablation Study. LangGraph Agent and Deep Agent "
         "make the same agent with those frameworks."
@@ -446,14 +448,16 @@ class AgentRunner(NodeModel):
     icon = "▶🤖"
     node_type = "Predictor"
     in_ports = [Port(AGENT, "Agent", "An agent (Data Query Agent, LangGraph Agent, Deep Agent, Hill Climbing...)"),
-                Port(TABLE, "Questions", "A question per row")]
+                Port(TABLE, "Questions", "A question per row"),
+                llm_port("The model to run the agent with: a connection of an LLM connector node (optional: the agent's own)")]
     out_ports = [Port(TABLE, "Answers", "The questions with the answers, the SQL the agent ran, steps, time")]
     short_description = "Asks an agent a table of questions: its answers, the SQL it ran, steps and time."
     description = (
         "Runs the agent on each question (a column of the input): the answer, the number of model calls and tool "
         "calls, the SQL queries it ran (JSON), seconds, tokens and the error if any - and, if wanted, its trace "
         "(the messages, for LangGraph and Deep Agents also their todos and files). Several questions at a time "
-        "with Parallel questions (if the model server takes parallel requests)."
+        "with Parallel questions (if the model server takes parallel requests). A connection on the LLM port runs "
+        "the agent with that model instead of its own."
     )
     fields = [
         F("column", "column", "Question column", None, "Empty: question, else the first text column.", port=2, kinds=["string"]),
@@ -472,6 +476,9 @@ class AgentRunner(NodeModel):
 
     def execute(self, inputs, s, ctx):
         agent, df = inputs[0], inputs[1]
+        conn = connection_of(inputs[2:])
+        if conn is not None:
+            agent = agent.with_changes(connection=conn)
         col = s.get("column") or ("question" if "question" in df.columns else next(
             (c for c, t in df.schema.items() if t == pl.String), None))
         if not col or col not in df.columns:

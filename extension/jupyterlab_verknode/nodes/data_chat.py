@@ -20,7 +20,7 @@ import polars as pl
 from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE
 from jupyterlab_verknode.engine.node import CanceledExecutionError
 
-from .llm import chat, chat_tools, llm_port, server, server_fields, server_for, tool_message
+from .llm import LLMNode, chat, chat_tools, llm_port, server, server_fields, server_for, tool_message
 
 CONVERSATION = {"role": pl.String, "content": pl.String}
 
@@ -233,7 +233,7 @@ def _history(msgs, memory):
     return out
 
 
-class DataQAChat(NodeModel):
+class DataQAChat(LLMNode, NodeModel):
     factory = "verknode.llm.DataChat"
     name = "Data Q&A Chat"
     category = "AI/LLM"
@@ -339,7 +339,7 @@ class DataQAChat(NodeModel):
                              schema=CONVERSATION)]
 
 
-class LLMSummarizer(NodeModel):
+class LLMSummarizer(LLMNode, NodeModel):
     factory = "verknode.llm.Summarize"
     name = "LLM Summarizer"
     category = "AI/LLM"

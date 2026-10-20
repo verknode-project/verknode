@@ -1069,6 +1069,33 @@
   min-height: 0;
 }
 
+/* a section heading among a node's settings (e.g. the LLM nodes' Model) */
+.verknode-field-section {
+  margin: 14px 0 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--verknode-border);
+  font-weight: 600;
+  color: var(--jp-ui-font-color1);
+}
+
+.verknode-node-defaults-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.verknode-error-text {
+  color: var(--jp-error-color1);
+}
+
+.verknode-field-section-note {
+  margin-top: 2px;
+  font-weight: normal;
+  font-size: 0.92em;
+  color: var(--jp-ui-font-color2);
+}
+
 .verknode-tab-body .verknode-desc {
   border: none;
 }

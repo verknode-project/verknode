@@ -36,19 +36,46 @@ on them. The example below does this for chemical structures.
 
 ## The server
 
-Each node can name its server URL and model; empty settings use these
-environment variables of the Jupyter server:
+Every node that calls a model is set up the same way. Where its model comes
+from, first match wins:
+
+1. **Its LLM port** (the purple square, its last input; optional). A
+   connection from an LLM connector node (below): Ollama, an inference
+   server, a commercial API, Anthropic, or a model run in this process.
+2. **Its Model settings**, the *Model* section of its dialog. Either a
+   saved server, picked by name (see [saved LLM servers](#saved-llm-servers)),
+   or its own:
+   - server type (Ollama, OpenAI-compatible, Anthropic);
+   - URL;
+   - model;
+   - API key variable.
+
+   With the LLM port connected, the dialog hides them and names the
+   connection instead.
+3. **Your default saved server**, if you picked one.
+4. **The Jupyter server's environment** (the variables below), for empty
+   settings, else Ollama on this machine.
+
+The *Generation* section applies either way: temperature, the longest
+answer, a seed, thinking, the timeout. A connector's own temperature wins.
+
+So the same workflow runs in different setups: leave the settings empty
+and set the environment once per machine, or put a connector in front and
+change it there, or save your servers once and pick them by name. A node
+that cannot reach a model says so, and names the ways to set one up.
+
+These are the environment variables:
 
 | Variable | Meaning | Default |
 |---|---|---|
 | `VERKNODE_LLM_URL` | server URL | `http://localhost:11434` |
 | `VERKNODE_LLM_MODEL` | model, e.g. `llama3.2`, `qwen3:8b` | - |
-| `VERKNODE_LLM_PROVIDER` | `ollama` or `openai` (OpenAI-compatible) | `ollama` |
-| `VERKNODE_LLM_API_KEY` | key sent as a Bearer token, if the server needs one | - |
+| `VERKNODE_LLM_PROVIDER` | `ollama`, `openai` (OpenAI-compatible) or `anthropic` | `ollama` |
+| `VERKNODE_LLM_API_KEY` | key sent as a Bearer token, if the server needs one (Anthropic: else `ANTHROPIC_API_KEY`) | - |
 
 A variable that is not set in the environment is read from
-`~/.config/verknode/llm.env` (the Jupyter server's user; `KEY=VALUE` lines;
-another file: `VERKNODE_LLM_CONFIG`) - handy for a server that is already
+`~/.verknode/llm.env` (in [your verknode folder](install.md#your-verknode-folder);
+`KEY=VALUE` lines; another file: `VERKNODE_LLM_CONFIG`) - handy for a server that is already
 running: the file is read each time a node runs.
 
 The configure dialog lists the models of the server. API keys are read
@@ -73,14 +100,52 @@ With Docker, set the variables in `docker/.env` (gitignored), for example:
 then `make up` (the container is created again with them). An Ollama on the
 Docker host must listen on more than localhost (`OLLAMA_HOST=0.0.0.0`).
 
+## Saved LLM servers
+
+Instead of typing a server's address and model into each node, save the
+servers you use once: **≡ Settings › Node defaults › LLM servers**. Give each
+server the following:
+- a name;
+- a server type: Ollama, OpenAI-compatible or Anthropic;
+- a URL, which may name a setting such as `${VERKNODE_LLM_URL}`;
+- a model;
+- the variable that holds its API key.
+
+Optionally, pick one of them as the **default server**.
+
+- **In a node:** *Model › Server* lists the saved servers. Picking one hides
+  the address settings; *Model* may name another model of that server.
+  *Default* keeps the node's own settings below.
+- **The default server** serves every LLM node that names no server or URL
+  itself, before the environment. It also serves the Ollama nodes, when it
+  is an Ollama.
+- **On LLM ports:** the **Saved LLM Server** connector passes a saved server
+  to the nodes it connects to.
+- **The workflow keeps the name only.** The address and the key variable
+  stay in your node defaults, and are read when a model is called. So a
+  shared workflow names "Lab GPU", and each machine sets up its own "Lab
+  GPU". A name that is missing on a machine fails with a message that says
+  where to add it.
+
+The order is: the LLM port, then the node's saved server or own settings,
+then the default saved server, then the environment, then Ollama on this
+machine.
+
 ## Model connections: the LLM port
 
 Instead of the server settings above, an LLM node can take its model from
 an **LLM connector** node (AI › LLM › Connect). The connector's purple
-square port goes to the LLM port of LLM Prompter, LLM Chat, LLM Summarizer,
-Data Q&A Chat, the workflow agents, the agent nodes and the evaluation
-nodes. One connector then serves many nodes, and switching models means
-switching one connection.
+square port goes to the LLM port of every LLM node:
+- LLM Prompter, LLM Chat, LLM Summarizer and Data Q&A Chat;
+- the workflow agents;
+- the agent nodes, and Agent Runner (which then runs the agent with that
+  model);
+- the harness nodes (LLM Step, Context Window);
+- the evaluation nodes: their Judge port, and Hill Climbing's Proposer;
+- the Ollama nodes, which take an Ollama connection for their server.
+
+One connector then serves many nodes, and switching models means switching
+one connection.
 
 | Connector | For | Key |
 |---|---|---|
@@ -89,9 +154,10 @@ switching one connection.
 | **LLM API Connector** | OpenAI, Google Gemini, Mistral, Groq, OpenRouter, Together AI, DeepSeek, xAI, Fireworks | `OPENAI_API_KEY`, `GEMINI_API_KEY`, ... |
 | **Anthropic Connector** | Claude, through Anthropic's Messages API (with tool use) | `ANTHROPIC_API_KEY` |
 | **Local Model (llama.cpp)** | a GGUF model run in the Jupyter server's process (llama-cpp-python), downloaded from Hugging Face if wanted | - |
+| **Saved LLM Server** | one of your [saved LLM servers](#saved-llm-servers), by name | its key variable |
 
 - **Keys** are never stored. A connection names the environment variable
-  (or the `~/.config/verknode/llm.env` setting) that holds the key, and the
+  (or the `~/.verknode/llm.env` setting) that holds the key, and the
   key is read when a model is called.
 - **Checks:** when a connector runs, it asks the server for its models. A
   wrong address, key or model fails there, not in the nodes after it.
@@ -108,7 +174,7 @@ switching one connection.
 
 ![LLM connectors on the canvas: Ollama, an inference server and a local llama.cpp model, each passing its connection to an LLM Prompter, the answers side by side; below, OpenAI, Anthropic and Gemini connectors ready for their keys](images/llm-connections-v1.png)
 
-`notebooks/examples/llm_connections.vkf` sends the same prompts three ways:
+`notebooks/examples/llm/llm_connections.vkf` sends the same prompts three ways:
 - Ollama;
 - an inference server (Ollama's OpenAI API stands in for vLLM and the like);
 - a model in this process.
@@ -181,7 +247,7 @@ It starts from its *Greeting* (or a conversation table at its optional
 input), shows the conversation on the canvas each time round and waits for
 your message; *End chat* ends the loop by itself (no end variable needed).
 
-`notebooks/examples/chatbot.vkf` has three: a plain chat and a shop
+`notebooks/examples/llm/chatbot.vkf` has three: a plain chat and a shop
 assistant that answers from a product table ("What could I get for under
 50 EUR?"), both with a Chat Loop Start, and the same loop built from a
 Recursive Loop Start and a Chat. Nodes can wait for the canvas like the Chat does with
@@ -225,9 +291,9 @@ asked and built. It builds in a group of its own, and uses the earlier
 group's nodes by connecting from them.
 
 Tell it what to build, a step at a time or all at once. Some examples:
-- "read agent/sales.csv, add revenue = amount * quantity and give me the
+- "read data/sales.csv, add revenue = amount * quantity and give me the
   total revenue per region, largest first";
-- "join it with agent/regions.csv and show the amount as percent of target";
+- "join it with data/regions.csv and show the amount as percent of target";
 - "make that a bar chart";
 - "change the threshold to 200";
 - "remove the chart".
@@ -303,10 +369,10 @@ things.
 
 It never touches the loop it runs in or anything connected to it.
 
-`notebooks/examples/workflow_agent.vkf` has two chats:
+`notebooks/examples/agents/workflow_agent.vkf` has two chats:
 - **Chat 1** builds the revenue per region, largest first, and a bar chart.
 - **Chat 2**, fed by chat 1's output, goes on from that conversation. It joins
-  the result with the regions' targets and adds the percent of target. The example data is in `notebooks/examples/agent/`:
+  the result with the regions' targets and adds the percent of target. The example data is in `notebooks/examples/agents/data/`:
 `sales.csv`, `regions.csv` and `customers_raw.csv`.
 
 ## Questions about the results: Data Q&A Chat
@@ -353,7 +419,7 @@ further.
 
 ## A coding agent
 
-`notebooks/examples/coding_agent.vkf` is a small coding agent made of
+`notebooks/examples/agents/coding_agent.vkf` is a small coding agent made of
 ordinary nodes, with one built for it - **Python Code Runner** (Scripting):
 
     Tasks -> Recursive Loop Start -> LLM Prompter -> Python Code Runner -> Recursive Loop End
@@ -387,7 +453,7 @@ but it is not a sandbox - run code you would run yourself.
 
 ## Examples
 
-`notebooks/examples/llm.vkf` (set `VERKNODE_LLM_MODEL` first, or a model on
+`notebooks/examples/llm/llm.vkf` (set `VERKNODE_LLM_MODEL` first, or a model on
 each LLM node):
 
 - **Classify** customer reviews: sentiment and score as JSON fields, shown
@@ -398,15 +464,15 @@ each LLM node):
 - **Names to structures**: the model's SMILES for drug names, parsed by
   RDKit and compared with known structures - models get some of them wrong.
 
-`notebooks/examples/coding_agent.vkf`: the coding agent above - four text
+`notebooks/examples/agents/coding_agent.vkf`: the coding agent above - four text
 manipulation tasks whose hidden cases ask for more than the task says, so
 the agent learns from the failing cases, one per attempt.
 
-`notebooks/examples/chatbot.vkf`: the two chats above.
+`notebooks/examples/llm/chatbot.vkf`: the two chats above.
 
-`notebooks/examples/workflow_agent.vkf`: the workflow agent above (one node).
+`notebooks/examples/agents/workflow_agent.vkf`: the workflow agent above (one node).
 
-`notebooks/examples/data_chat.vkf` has the sales results: revenue per region
+`notebooks/examples/agents/data_chat.vkf` has the sales results: revenue per region
 against the targets, and per region and product. On top of them:
 - **Data Q&A Chat** with three questions answered from the data, each
   computed with SQL: East did best with 267% of its target; headlamps are
@@ -415,12 +481,12 @@ against the targets, and per region and product. On top of them:
   bullet per region with its manager, revenue and percent of target, and
   the region to watch), shown on the canvas in a **Text Display**.
 
-`notebooks/examples/llm_connections.vkf`: the connectors above.
-`notebooks/examples/data_query_agent.vkf` and `agent_improvement.vkf`: data
+`notebooks/examples/llm/llm_connections.vkf`: the connectors above.
+`notebooks/examples/agents/data_query_agent.vkf` and `agent_improvement.vkf`: data
 query agents with LangGraph and Deep Agents, and their evaluation and
 improvement ([agents](agents-build-evaluate.md)).
 
-`notebooks/examples/ollama.vkf`:
+`notebooks/examples/llm/ollama.vkf`:
 
 - **Models**: the server's models with their details; click rows in the
   table to load those models (switch the node to Unload to free the memory).

@@ -1,8 +1,8 @@
 """Ollama management nodes: the models of an Ollama server, what is loaded (and how much of it sits in
 GPU memory), model details, loading / unloading, downloading, creating and deleting models.
 
-The server: the node's URL, else the VERKNODE_LLM_URL environment variable, else
-http://localhost:11434 (see llm.py and docs/llm.md).
+The server: an Ollama connection on the node's LLM port (Ollama Connector), else the node's URL, else
+the VERKNODE_LLM_URL environment variable, else http://localhost:11434 (see llm.py and docs/llm.md).
 """
 from __future__ import annotations
 
@@ -18,12 +18,41 @@ import polars as pl
 
 from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE, dtype_kind
 
-from .llm import DEFAULT_URL, setting
+from .llm import DEFAULT, DEFAULT_URL, connection_of, default_server_name, llm_port, saved_server, saved_servers, setting
 
 CAT = "AI/Ollama"
 GB = 1e9
 URL_HELP = f"Empty: the VERKNODE_LLM_URL environment variable of the Jupyter server, else {DEFAULT_URL}."
 UTC = pl.Datetime("us", "UTC")
+
+
+LLM_IN = llm_port("An Ollama connection (Ollama Connector): its server (optional: else the Ollama URL)")
+
+
+def ollama_settings(s: dict, inputs) -> dict:
+    """The node's settings with its server: the Ollama connection on its LLM port, else its saved server, else
+    its URL, else the default saved server (an Ollama)."""
+    conn = connection_of(inputs)
+    if conn is None:
+        name = (s.get("server") or DEFAULT).strip()
+        if name == DEFAULT:
+            if (s.get("url") or "").strip():
+                return s
+            name = default_server_name()  # (the default saved server, if it is an Ollama)
+            r = saved_servers().get(name) if name else None
+            if r is None or (r.get("provider") or "Ollama") != "Ollama":
+                return s
+        srv = saved_server(name)
+        if srv["provider"] != "Ollama":
+            raise InvalidSettingsError(f"The saved server {name} is not an Ollama server")
+        return {**s, "url": srv["url"], "_key": srv["key"]}
+    srv = conn.server()
+    url = srv["url"]
+    if srv["provider"] != "Ollama":
+        if not (conn.label.startswith("Ollama") and url.endswith("/v1")):
+            raise InvalidSettingsError(f"{conn.label} is not an Ollama server: connect an Ollama Connector")
+        url = url[:-3]  # (Ollama's OpenAI API: the server itself)
+    return {**s, "url": url, "_key": srv["key"]}
 
 
 def base_url(s: dict) -> str:
@@ -34,6 +63,8 @@ def call(s: dict, method: str, path: str, body: dict | None = None, timeout: flo
     url = base_url(s) + path
     req = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None, method=method)
     req.add_header("Content-Type", "application/json")
+    if s.get("_key"):
+        req.add_header("Authorization", f"Bearer {s['_key']}")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             text = r.read().decode("utf-8")
@@ -64,8 +95,14 @@ def _time(text):
         return None
 
 
+SERVER_FIELD = F("server", "enum", "Server", DEFAULT, "Used when the LLM port is not connected. A saved Ollama server "
+                 "(Settings › Node defaults › LLM servers), or Default: the URL below, else the default saved "
+                 "server if it is an Ollama, else VERKNODE_LLM_URL.", options=[DEFAULT], section="Server")
+
+
 def url_field():
-    return F("url", "string", "Ollama URL", "", URL_HELP)
+    return F("url", "string", "Ollama URL", "", URL_HELP + " Used when the LLM port is not connected.", section="Server",
+             show_if={"server": DEFAULT})
 
 
 def model_fields(what="Models"):
@@ -115,6 +152,37 @@ def suggest_models(s, keys=("models",)) -> dict:
     return out
 
 
+class _OllamaNode(NodeModel):
+    """An Ollama node: its server from the LLM port, else its URL. (Name starts with "_": not a node.)"""
+
+    abstract = True
+    suggest_keys: tuple = ()  # (settings the dialog offers the server's models for)
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        if "fields" in cls.__dict__:  # (the server last, under its heading: a saved server, else the URL)
+            url = [f for f in cls.fields if f.key == "url"]
+            cls.fields = [f for f in cls.fields if f.key not in ("url", "server")] + ([SERVER_FIELD, *url] if url else [])
+
+    def dialog_data(self, inputs, s, connected=(), context=None):
+        port = len(self.in_ports) - 1
+        used = 0 <= port < len(connected) and connected[port]
+        try:
+            s = ollama_settings(s, inputs)
+        except InvalidSettingsError as e:
+            return {"error": str(e)}
+        out = suggest_models(s, self.suggest_keys) if self.suggest_keys else {
+            "placeholder": {"url": setting("VERKNODE_LLM_URL") or DEFAULT_URL}}
+        names = [n for n, r in saved_servers().items() if (r.get("provider") or "Ollama") == "Ollama"]
+        current = (s.get("server") or DEFAULT).strip()
+        out["options"] = {"server": [DEFAULT, *names, *([current] if current not in (DEFAULT, *names) else [])]}
+        if used:
+            conn = connection_of(inputs)
+            out["hide"] = ["server", "url"]
+            out["notes"] = {"Server": f"From the LLM port: {conn.label if conn else 'the connector node (run it to see which)'}."}
+        return out
+
+
 def _source_configure(schema):
     return [pl.Schema(schema)]
 
@@ -134,7 +202,7 @@ def _billions(text):
     return float(m.group(1)) * {"K": 1e-6, "M": 1e-3, "B": 1, "T": 1e3}[m.group(2)]
 
 
-class OllamaModels(NodeModel):
+class OllamaModels(_OllamaNode):
     factory = "verknode.ollama.Models"
     name = "Ollama Models"
     category = CAT
@@ -144,6 +212,7 @@ class OllamaModels(NodeModel):
     description = ("One row per model on the Ollama server: family, parameters, quantization, size on disk, when "
                    "it changed, and whether it is loaded. Details adds what each model can do (completion, vision, "
                    "tools, thinking, embedding) and its context length (one more request per model).")
+    in_ports = [LLM_IN]
     out_ports = [Port(TABLE, "Models")]
     fields = [url_field(), F("details", "bool", "Details (capabilities, context length)", False)]
 
@@ -154,6 +223,7 @@ class OllamaModels(NodeModel):
         return _source_configure(self._schema(s))
 
     def execute(self, inputs, s, ctx):
+        s = ollama_settings(s, inputs)
         if ctx.dry:
             return [pl.DataFrame(schema=self._schema(s))]
         models = call(s, "GET", "/api/tags").get("models", [])
@@ -179,7 +249,7 @@ RUNNING = {"Model": pl.String, "Size (GB)": pl.Float64, "GPU memory (GB)": pl.Fl
            "On GPU (%)": pl.Float64, "Context length": pl.Int64, "Unloads at": UTC, "Unloads in (min)": pl.Float64}
 
 
-class OllamaRunning(NodeModel):
+class OllamaRunning(_OllamaNode):
     factory = "verknode.ollama.Running"
     name = "Ollama Running Models"
     category = CAT
@@ -190,6 +260,7 @@ class OllamaRunning(NodeModel):
                    "(VRAM) and how much in CPU memory, the share on the GPU, its context length and when it unloads. "
                    "Pushes the flow variables ollama_gpu_memory_gb, ollama_cpu_memory_gb and ollama_loaded_models. "
                    "(Ollama reports the memory of its models, not the use of the GPU as a whole.)")
+    in_ports = [LLM_IN]
     out_ports = [Port(TABLE, "Loaded models")]
     fields = [url_field()]
 
@@ -197,6 +268,7 @@ class OllamaRunning(NodeModel):
         return _source_configure(RUNNING)
 
     def execute(self, inputs, s, ctx):
+        s = ollama_settings(s, inputs)
         if ctx.dry:
             return [pl.DataFrame(schema=RUNNING)]
         now = dt.datetime.now(dt.timezone.utc)
@@ -222,7 +294,7 @@ INFO = {"Model": pl.String, "Capabilities": pl.String, "Context length": pl.Int6
         "System prompt": pl.String, "License": pl.String, "Error": pl.String}
 
 
-class OllamaModelInfo(NodeModel):
+class OllamaModelInfo(_OllamaNode):
     factory = "verknode.ollama.ModelInfo"
     name = "Ollama Model Info"
     category = CAT
@@ -233,17 +305,17 @@ class OllamaModelInfo(NodeModel):
                    "embedding length, parameter count, family, quantization, default parameters (temperature, ...), "
                    "system prompt and the first line of its license. Models come from the setting and / or a column "
                    "of the input table (e.g. of Ollama Models).")
-    in_ports = [Port(TABLE, "Models", "A table with a model column (optional)", optional=True)]
+    in_ports = [Port(TABLE, "Models", "A table with a model column (optional)", optional=True), LLM_IN]
     out_ports = [Port(TABLE, "Model info")]
     fields = [url_field(), *model_fields()]
 
     def configure(self, in_specs, s, ctx):
         return _source_configure(INFO)
 
-    def dialog_data(self, inputs, s, connected=(), context=None):
-        return suggest_models(s)
+    suggest_keys = ("models",)
 
     def execute(self, inputs, s, ctx):
+        s = ollama_settings(s, inputs)
         if ctx.dry:
             return [pl.DataFrame(schema=INFO)]
         rows = []
@@ -281,19 +353,18 @@ def _result(model, action, status, seconds=None):
     return {"Model": model, "Action": action, "Status": status, "Seconds": seconds}
 
 
-class _Action(NodeModel):
+class _Action(_OllamaNode):
     abstract = True
     icon = "OL"
     sandbox_unsafe = True  # (changes the Ollama server)
     node_type = "Manipulator"
-    in_ports = [Port(TABLE, "Models", "A table with a model column (optional)", optional=True)]
+    in_ports = [Port(TABLE, "Models", "A table with a model column (optional)", optional=True), LLM_IN]
     out_ports = [Port(TABLE, "Results", "Model, action, status (OK or the error) and the time it took")]
 
     def configure(self, in_specs, s, ctx):
         return _source_configure(RESULT)
 
-    def dialog_data(self, inputs, s, connected=(), context=None):
-        return suggest_models(s, ("models", "base"))
+    suggest_keys = ("models", "base")
 
     action = ""  # (what the Action column says)
 
@@ -302,6 +373,7 @@ class _Action(NodeModel):
         raise NotImplementedError
 
     def execute(self, inputs, s, ctx):
+        s = ollama_settings(s, inputs)
         if ctx.dry:
             return [pl.DataFrame(schema=RESULT)]
         models = wanted_models(inputs[0], s)
@@ -336,6 +408,7 @@ class OllamaLoad(_Action):
                 "requests: e.g. 10m, 2h; -1: until unloaded.", show_if={"mode": "Load"})]
 
     def execute(self, inputs, s, ctx):
+        s = ollama_settings(s, inputs)
         self.action = s.get("mode") or "Load"
         return super().execute(inputs, s, ctx)
 
@@ -404,7 +477,7 @@ class OllamaCreate(_Action):
     description = ("Creates a model (e.g. my-assistant) from a base model with a system prompt and parameters of its "
                    "own - like a Modelfile with FROM, SYSTEM and PARAMETER. It shares the base model's weights. "
                    + APPLY_HELP)
-    in_ports = []
+    in_ports = [LLM_IN]
     fields = [url_field(),
               F("models", "string", "New model", "my-assistant"),
               F("base", "string", "From (base model)", "", "A model of the server, e.g. llama3.2."),
@@ -414,9 +487,10 @@ class OllamaCreate(_Action):
               F("apply", "bool", "Make the change", True, APPLY_HELP)]
 
     def execute(self, inputs, s, ctx):
+        s = ollama_settings(s, inputs)
         if not (s.get("base") or "").strip():
             raise InvalidSettingsError("Set From (base model)")
-        return super().execute([None], s, ctx)
+        return super().execute([None, *inputs], s, ctx)
 
     def run(self, model, s, ctx, i, n):
         params = {}

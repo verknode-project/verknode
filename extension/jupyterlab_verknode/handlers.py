@@ -14,6 +14,7 @@ from jupyter_server.base.handlers import APIHandler
 from jupyter_server.utils import ensure_async, url_path_join
 
 from . import nodes  # noqa: F401 - registers the built-in nodes
+from .engine import defaults
 from .engine.node import NODE_REGISTRY
 from .engine.persistence import load_workflow, save_workflow
 from .agentapi import AgentAPI, LocalWorkspace, ToolError
@@ -181,6 +182,22 @@ class NodesHandler(BaseHandler):
     @tornado.web.authenticated
     def get(self):
         self.reply([cls.describe() for cls in NODE_REGISTRY.values()])
+
+
+class DefaultsHandler(BaseHandler):
+    """The global node defaults (engine/defaults.py): GET them, POST {section: {key: value}} to save."""
+
+    @tornado.web.authenticated
+    def get(self):
+        self.reply(defaults.describe())
+
+    @tornado.web.authenticated
+    def post(self):
+        try:
+            self.reply(defaults.save(self.body().get("values") or {}))
+        except (ValueError, OSError) as e:
+            self.set_status(400)
+            self.reply({"message": str(e)})
 
 
 class SessionsHandler(BaseHandler):
@@ -567,6 +584,7 @@ def setup_handlers(server_app):
     sid = r"(?P<sid>[0-9a-f]+)"
     handlers = [
         (url_path_join(base, "nodes"), NodesHandler),
+        (url_path_join(base, "defaults"), DefaultsHandler),
         (url_path_join(base, "sessions"), SessionsHandler),
         (url_path_join(base, "sessions", sid), SessionHandler),
         (url_path_join(base, "sessions", sid, "save"), SaveHandler),

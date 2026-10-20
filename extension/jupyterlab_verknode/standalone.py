@@ -210,7 +210,7 @@ class Workflow:
         with open(path, "rb") as f:
             engine = load_workflow(f.read(), os.path.dirname(os.path.abspath(path)))
         engine.path = os.path.abspath(path)
-        if engine.node_paths:
+        if engine.resolved_node_paths():
             engine.reload_nodes(reason="load")
         return cls(engine=engine)
 

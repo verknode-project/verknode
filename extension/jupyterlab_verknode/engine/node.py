@@ -119,7 +119,7 @@ class ImagePortObject(PortObject):
 class LLMConnectionPortObject(PortObject):
     """Where a language model is and which one: made by the LLM connector nodes, used by the LLM nodes
     (their LLM port) instead of their own server settings. Keys are not in it: the name of the
-    environment variable (or ~/.config/verknode/llm.env setting) that holds the key is."""
+    environment variable (or ~/.verknode/llm.env setting) that holds the key is."""
 
     port_type = LLM
 
@@ -137,9 +137,15 @@ class LLMConnectionPortObject(PortObject):
         """The server dict of nodes/llm.py (the key read now, from the environment)."""
         import re
 
-        from jupyterlab_verknode.nodes.llm import DEFAULT_URL, setting
+        from jupyterlab_verknode.nodes.llm import DEFAULT_URL, saved_server, setting
 
         model = self.model or ((s or {}).get("model") or "").strip()
+        saved = re.fullmatch(r"\$\{saved:(.+)\}", self.url or "")
+        if saved:  # (a saved LLM server: its address is read now, from the node defaults - not saved here)
+            srv = saved_server(saved.group(1), model)
+            key_env = self.key_env or srv["key_env"]
+            return {**srv, "key": setting(key_env) if key_env else "", "options": dict(self.options),
+                    "headers": dict(self.headers), "label": self.label}
         # (${VERKNODE_LLM_URL}: the server's setting, read now - so a workflow keeps no private address)
         url = re.sub(r"\$\{(\w+)\}", lambda m: setting(m.group(1)) or (DEFAULT_URL if m.group(1) == "VERKNODE_LLM_URL" else ""), self.url)
         return {"provider": self.provider, "url": url.rstrip("/"), "model": model,
@@ -303,6 +309,8 @@ class Field:
     show_if: dict | None = None  # {"key": value-or-list} visibility condition
     # sketcher fields: other settings whose change invalidates edits, {"column": "structure"|"name"}
     depends: dict | None = None
+    section: str | None = None  # a heading above the first field of a section (e.g. the LLM nodes' "Model")
+    options_from: dict | None = None  # enum: also these values of a records setting, {"field": ..., "key": ...}
 
     def to_json(self) -> dict:
         d = {
@@ -312,7 +320,7 @@ class Field:
             "default": self.default,
             "description": self.description,
         }
-        for k in ("options", "kinds", "language", "show_if", "depends"):
+        for k in ("options", "kinds", "language", "show_if", "depends", "section", "options_from"):
             v = getattr(self, k)
             if v is not None:
                 d[k] = v

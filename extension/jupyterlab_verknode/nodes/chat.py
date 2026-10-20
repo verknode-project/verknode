@@ -19,7 +19,7 @@ from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE
 from jupyterlab_verknode.engine.widgets import OutputWidget
 
 from .flow_extra import RecursiveLoopStart, _state
-from .llm import chat, llm_port, server, server_fields, server_for
+from .llm import LLMNode, chat, llm_port, server, server_fields, server_for
 
 ROLES = ("user", "assistant", "system")
 
@@ -177,7 +177,7 @@ def _context_text(df: pl.DataFrame, s: dict) -> str:
     return "\n".join(f"- {line}" for line in lines) + more
 
 
-class LLMChat(NodeModel):
+class LLMChat(LLMNode, NodeModel):
     factory = "verknode.llm.Chat"
     name = "LLM Chat"
     category = "AI/LLM"
@@ -189,8 +189,8 @@ class LLMChat(NodeModel):
         "system prompt, and outputs its answer as one row (role assistant, content, model, seconds, tokens) - "
         "to be added to the conversation (Concatenate). Only the last messages are sent (Memory). An optional "
         "second table is given to the model as information to answer from (one line per row, or the "
-        "information column): a chat about your data. The server settings are those of the LLM Prompter "
-        "(empty: VERKNODE_LLM_URL / VERKNODE_LLM_MODEL)."
+        "information column): a chat about your data. The model: a connection on the LLM port, else the "
+        "Model settings (empty: VERKNODE_LLM_URL / VERKNODE_LLM_MODEL), as for every LLM node."
     )
     in_ports = [Port(TABLE, "Conversation", "role and content columns"),
                 Port(TABLE, "Information", "Rows the model answers from (optional)", optional=True), llm_port()]

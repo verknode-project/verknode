@@ -40,6 +40,10 @@ Reference
 - Canvas widgets: subclass ``InputWidget`` (a control on the node whose value
   it outputs) or ``OutputWidget`` (shows the input on the node); see
   jupyterlab_verknode/engine/widgets.py and the standard ones in nodes/widgets.py.
+- Global defaults: setup shared by nodes across workflows (a list of servers, an
+  address) - ``register_defaults(key, title, fields, description)`` once in the
+  module; the editor's Settings › Node defaults edits it (saved per user in
+  ~/.verknode/defaults.json); ``node_defaults(key)`` reads the values.
 - Optional class attributes: factory (stable id), node_type (Source, Sink,
   Manipulator, Learner, Predictor, Visualizer, Other), icon (<= 4 chars),
   short_description, description (HTML), has_view, closed_by (factory ids
@@ -49,6 +53,7 @@ Reference
 from jupyterlab_verknode.engine import views  # noqa: F401 - chart/table helpers for node views
 from jupyterlab_verknode.engine.flowvars import VAR_TYPES, FlowVariable, coerce, infer_type, make  # noqa: F401
 from jupyterlab_verknode.engine.custom import capture_stdout  # noqa: F401 - this thread's print() into a buffer
+from jupyterlab_verknode.engine.defaults import node_defaults, register_defaults  # noqa: F401 - global setup
 from jupyterlab_verknode.engine.helpers import selected_columns, substitute_variables  # noqa: F401
 from jupyterlab_verknode.engine.node import (  # noqa: F401
     DB_DATA,

@@ -37,7 +37,7 @@ OPS = {
     "remove_metanode_port": lambda wf, a: wf.remove_metanode_port(a["id"], a["side"], a["index"]),
     "set_node_paths": lambda wf, a: wf.set_node_paths(a["paths"], a.get("autoReload")),
     "reload_nodes": lambda wf, a: wf.reload_nodes(),
-    "create_node_template": lambda wf, a: _create_node_template(wf, a.get("folder") or "vkn_nodes"),
+    "create_node_template": lambda wf, a: _create_node_template(wf, a.get("folder") or "~"),
     "deliver": lambda wf, a: wf.deliver(a["id"], a.get("value")),
     "begin_batch": lambda wf, a: wf.begin_batch(),
     "end_batch": lambda wf, a: wf.end_batch(),
@@ -45,9 +45,15 @@ OPS = {
 
 
 def _create_node_template(wf: Workflow, folder: str) -> dict:
-    """Create `folder` (relative to the workflow) with an example node file and use it."""
+    """Create `folder` (relative to the workflow) with an example node file and use it - or, for "~" (the
+    default), an example in the user's node folder (~/.verknode/nodes), which every workflow loads."""
     from .engine.custom import create_template
+    from .engine.home import home
 
+    if folder in ("", "~", "user"):
+        path = create_template(os.path.join(home(), "nodes"))
+        wf.reload_nodes(reason="example created")
+        return {"file": path, "report": wf.custom.report()}
     if os.path.isabs(folder) or ".." in folder.split("/"):
         raise WorkflowError("Use a folder inside the workflow's directory, e.g. 'vkn_nodes'")
     path = create_template(os.path.join(wf.base_dir, folder))

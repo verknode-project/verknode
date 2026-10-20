@@ -139,7 +139,7 @@ def load_workflow(data: bytes, base_dir: str | None = None) -> Workflow:
         custom = workflow.get("custom_nodes") or {}
         wf.node_paths = list(custom.get("paths") or [])
         wf.auto_reload = bool(custom.get("auto_reload", True))
-        if wf.node_paths:
+        if wf.resolved_node_paths():  # (its own node folders, and the user's)
             wf.reload_nodes(reason="workflow opened")
         dropped = []  # saved as executed, but the results could not be used
         for entry in workflow.get("nodes", []):

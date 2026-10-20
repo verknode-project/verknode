@@ -46,7 +46,7 @@ returns:
 - if wanted, the trace: the messages, and for a Deep Agent its todos and
   files.
 
-`notebooks/examples/data_query_agent.vkf` builds one agent in each
+`notebooks/examples/agents/data_query_agent.vkf` builds one agent in each
 framework. The three answer the same questions about sales and targets:
 
 With a short *Data notes* section (revenue is amount × quantity; aggregate before joining the targets), all three answer all three correctly. For example, East reached 266.99% of its target.
@@ -66,6 +66,10 @@ scored 0-1 and weighted:
 - **LLM judge (1-5):** a judge model scores criteria such as *grounded*
   (every number is supported by the SQL results the agent saw), *complete*
   or *concise*. It writes feedback first, then the scores.
+
+  The judge is the model on the node's Judge port, else the node's Model
+  settings, else the agent's own model (Rubric Judge: else the
+  environment's, see [the server](llm.md#the-server)).
 
 The weighted mean is the answer's score. **Rubric Judge** scores any table
 of answers this way, for example an LLM Prompter's. **Agent Evaluation**
@@ -130,9 +134,9 @@ is worth:
 
 Run each variant more than once (*Repeats*): models vary from run to run.
 
-`notebooks/examples/agent_improvement.vkf` puts it together on the sales
+`notebooks/examples/agents/agent_improvement.vkf` puts it together on the sales
 data, with an evaluation set of 8 questions with reference answers.
-`notebooks/examples/agent_improvement.ipynb` reruns it from Python and documents each stage. The numbers
+`notebooks/examples/agents/agent_improvement.ipynb` reruns it from Python and documents each stage. The numbers
 below come from that run, with gemma4:26b on Ollama.
 
 1. **Rubric evaluation of the baseline.** The baseline has the default

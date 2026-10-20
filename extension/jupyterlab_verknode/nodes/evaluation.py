@@ -26,7 +26,7 @@ from verknode.node import AGENT, LLM, F, AgentPortObject, InvalidSettingsError, 
 from jupyterlab_verknode.engine.node import CanceledExecutionError
 
 from .agents import join_sections, run_agent, sections
-from .llm import _json_answer, chat, server
+from .llm import LLMNode, _json_answer, chat, has_server_settings, llm_port, model_fields, server
 
 CAT = "AI/Evaluation"
 KINDS = ["LLM judge (1-5)", "Numbers match the reference", "Contains the reference", "Not empty"]
@@ -50,11 +50,12 @@ def rubric_field():
                  F("weight", "float", "Weight", 1.0), F("description", "string", "What it means", "")])
 
 
-def judge_fields():
+def judge_fields(what="judge"):
     return [rubric_field(),
             F("tolerance", "float", "Numbers: relative tolerance", 0.005, "0.005: within 0.5%."),
             F("judge_notes", "code", "Judge instructions", "", "More for the judge (e.g. what counts as grounded)."),
-            F("workers", "int", "Parallel runs", 2, "Questions run (and judged) at a time.")]
+            F("workers", "int", "Parallel runs", 2, "Questions run (and judged) at a time."),
+            *model_fields(what)]
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -242,34 +243,39 @@ def rows_frame(rows: list[dict], criteria: list[dict]) -> pl.DataFrame:
                         schema={**schema, **{k: pl.String for k in extra}}, strict=False)
 
 
-def judge_server(inputs, agent: AgentPortObject | None, port: int):
-    """The judge: the connection on its port, else the agent's model."""
+def judge_server(inputs, agent: AgentPortObject | None, port: int, s: dict | None = None):
+    """The judge: the connection on its port, else the node's Model settings, else the agent's model (else
+    the environment's)."""
     conn = inputs[port] if len(inputs) > port and isinstance(inputs[port], LLMConnectionPortObject) else None
     if conn is not None:
         return conn.server()
+    if s and has_server_settings(s):
+        return server(s)
     if agent is not None and agent.connection is not None:
         return agent.connection.server()
-    return server({})
+    return server(s or {})
 
 
 EVAL_COLS = [F("question_column", "column", "Question column", None, "Empty: question.", port=2, kinds=["string"]),
              F("reference_column", "column", "Reference answer column", None, "Empty: reference (if any).", port=2, kinds=["string"])]
 AGENT_IN = Port(AGENT, "Agent", "The agent to evaluate")
 EVAL_IN = Port(TABLE, "Evaluation set", "Questions, with reference answers")
-JUDGE_IN = Port(LLM, "Judge", "The judge model (optional: the agent's own)", optional=True)
+JUDGE_IN = llm_port("The judge model: a connection of an LLM connector node (optional: else the Model settings, "
+                    "else the agent's own model)", name="Judge")
 
 
 def summary_frame(rows: list[dict]) -> pl.DataFrame:
     return pl.DataFrame(rows, infer_schema_length=None, strict=False)
 
 
-class RubricJudge(NodeModel):
+class RubricJudge(LLMNode, NodeModel):
     factory = "verknode.eval.RubricJudge"
     name = "Rubric Judge"
     category = CAT
     icon = "⚖"
     in_ports = [Port(TABLE, "Answers", "Questions and answers (and reference answers) to score"),
-                Port(LLM, "Judge", "The judge model (optional: the server settings of LLM Prompter's defaults)", optional=True)]
+                llm_port("The judge model: a connection of an LLM connector node (optional: else the Model settings)",
+                         name="Judge")]
     out_ports = [Port(TABLE, "Scores", "The input with a column per criterion (0-1), the score and the judge's feedback")]
     short_description = "Scores answers against a rubric: reference checks and an LLM judge, into one weighted score."
     description = (
@@ -302,7 +308,7 @@ class RubricJudge(NodeModel):
         if not ac:
             raise InvalidSettingsError("Pick the answer column")
         conn = inputs[1] if len(inputs) > 1 and isinstance(inputs[1], LLMConnectionPortObject) else None
-        srv = conn.server() if conn is not None else (server({}) if any(c["kind"] == KINDS[0] for c in crit) else None)
+        srv = conn.server() if conn is not None else (server(s) if any(c["kind"] == KINDS[0] for c in crit) else None)
         rows = df.to_dicts()
 
         def one(r):
@@ -317,7 +323,7 @@ class RubricJudge(NodeModel):
         return [pl.concat([df.drop([c for c in add.columns if c in df.columns]), add], how="horizontal")]
 
 
-class AgentEvaluation(NodeModel):
+class AgentEvaluation(LLMNode, NodeModel):
     factory = "verknode.eval.AgentEvaluation"
     name = "Agent Evaluation"
     category = CAT
@@ -343,7 +349,7 @@ class AgentEvaluation(NodeModel):
         crit = _criteria(s)
         if ctx.dry:
             return [rows_frame([], crit), pl.DataFrame()]
-        ev = evaluate(agent, items, s, judge_server(inputs, agent, 2), ctx, agent.name)
+        ev = evaluate(agent, items, s, judge_server(inputs, agent, 2, s), ctx, agent.name)
         summary = {"agent": agent.name, "model": agent.connection.label if agent.connection else "", "questions": len(items),
                    "score": ev["score"], **ev["criteria"], "seconds_per_question": ev["seconds"], "tokens": ev["tokens"],
                    "errors": ev["errors"]}
@@ -464,14 +470,15 @@ def propose(srv: dict, agent: AgentPortObject, ev: dict, k: int, temperature: fl
             "examples": str(j.get("examples") if j.get("examples") is not None else agent.examples)}
 
 
-class HillClimbing(NodeModel):
+class HillClimbing(LLMNode, NodeModel):
     factory = "verknode.eval.HillClimbing"
     name = "Hill Climbing"
     category = CAT
     icon = "⛰"
     node_type = "Learner"
     in_ports = [AGENT_IN, EVAL_IN, JUDGE_IN,
-                Port(LLM, "Proposer", "The model that proposes changes (optional: the judge)", optional=True)]
+                llm_port("The model that proposes changes: a connection of an LLM connector node (optional: the judge's)",
+                         name="Proposer")]
     out_ports = [Port(AGENT, "Best agent", "The agent with the best score found"),
                  Port(TABLE, "History", "Every candidate: step, the change, its score, accepted"),
                  Port(TABLE, "Best results", "The best agent's results on the evaluation set")]
@@ -493,7 +500,8 @@ class HillClimbing(NodeModel):
               F("investigate", "bool", "Investigate the failures first", True,
                 "The proposer reproduces the reference answers with the table tools and reports what the agent got "
                 "wrong, before it proposes changes."),
-              *judge_fields()]
+              *judge_fields("judge, proposer")]
+    llm_settings_port = 2
 
     def configure(self, in_specs, s, ctx):
         return [in_specs[0], None, None]
@@ -504,7 +512,7 @@ class HillClimbing(NodeModel):
         items = eval_set(df, s)
         if ctx.dry:
             return [agent, pl.DataFrame(), rows_frame([], crit)]
-        jsrv = judge_server(inputs, agent, 2)
+        jsrv = judge_server(inputs, agent, 2, s)
         psrv = inputs[3].server() if len(inputs) > 3 and isinstance(inputs[3], LLMConnectionPortObject) else jsrv
         hold = max(0, min(int(s.get("holdout") or 0), len(items) - 1))
         rng = random.Random(int(s.get("seed") or 1))
@@ -595,7 +603,7 @@ class HillClimbing(NodeModel):
 STRATEGIES = ["All arms on every question", "UCB1 (bandit)", "Thompson sampling (bandit)"]
 
 
-class MultiArmEvaluation(NodeModel):
+class MultiArmEvaluation(LLMNode, NodeModel):
     factory = "verknode.eval.MultiArmEvaluation"
     name = "Multi-Arm Evaluation"
     category = CAT
@@ -624,6 +632,7 @@ class MultiArmEvaluation(NodeModel):
               F("budget", "int", "Pulls (bandits)", 24),
               F("seed", "int", "Seed", 1),
               *judge_fields()]
+    llm_settings_port = 6
 
     def configure(self, in_specs, s, ctx):
         return [None, None, None]
@@ -652,7 +661,7 @@ class MultiArmEvaluation(NodeModel):
             return [pl.DataFrame(), pl.DataFrame(), pl.DataFrame()]
         items = eval_set(df, s)
         arms = self._arms(inputs, agent, s)
-        jsrv = judge_server(inputs, agent, 6)
+        jsrv = judge_server(inputs, agent, 6, s)
         crit = _criteria(s)
         rng = random.Random(int(s.get("seed") or 1))
         strategy = s.get("strategy") or STRATEGIES[0]
@@ -745,7 +754,7 @@ def variants(agent: AgentPortObject, families: list[str]) -> list[tuple[str, str
     return out
 
 
-class AblationStudy(NodeModel):
+class AblationStudy(LLMNode, NodeModel):
     factory = "verknode.eval.AblationStudy"
     name = "Ablation Study"
     category = CAT
@@ -776,7 +785,7 @@ class AblationStudy(NodeModel):
         if ctx.dry:
             return [pl.DataFrame(), rows_frame([], crit)]
         items = eval_set(df, s)
-        jsrv = judge_server(inputs, agent, 2)
+        jsrv = judge_server(inputs, agent, 2, s)
         vs = variants(agent, s.get("families") or FAMILIES)
         reps = max(1, int(s.get("repeats") or 1))
         out, results = [], []

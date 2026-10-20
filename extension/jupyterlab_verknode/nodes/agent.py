@@ -30,7 +30,7 @@ from verknode.node import F, InvalidSettingsError, NodeModel, Port, TABLE
 from jupyterlab_verknode.engine.node import CanceledExecutionError
 
 from .chat import _check_conversation
-from .llm import chat_tools, llm_port, server, server_fields, server_for, tool_message
+from .llm import LLMNode, chat_tools, llm_port, server, server_fields, server_for, tool_message
 
 ANSWER = {"role": pl.String, "content": pl.String, "model": pl.String, "seconds": pl.Float64, "tokens": pl.Int64,
           "confirm": pl.Boolean}
@@ -979,7 +979,7 @@ AGENT_FIELDS = [
 ]
 
 AGENT_DESCRIPTION = (
-    "Tell it what to build: \"read agent/sales.csv\", \"keep the rows with amount over 100\", \"sum the revenue "
+    "Tell it what to build: \"read data/sales.csv\", \"keep the rows with amount over 100\", \"sum the revenue "
     "per region as a bar chart\". For each message the model works with tools - it finds node types and reads "
     "their help, adds, configures and connects nodes, runs and previews them - on a copy of the workflow, which "
     "runs in a file <b>sandbox</b> (files are copied in when used, nothing real is written; scripts and custom "
@@ -1020,7 +1020,7 @@ class _GroupNodes(list):
         return True
 
 
-class WorkflowAgentChat(NodeModel):
+class WorkflowAgentChat(LLMNode, NodeModel):
     factory = "verknode.llm.WorkflowAgentChat"
     name = "Workflow Agent Chat"
     category = "AI/LLM"
@@ -1161,7 +1161,7 @@ class WorkflowAgentChat(NodeModel):
                              schema=CONVERSATION)]
 
 
-class WorkflowAgent(NodeModel):
+class WorkflowAgent(LLMNode, NodeModel):
     factory = "verknode.llm.WorkflowAgent"
     name = "Workflow Agent"
     category = "AI/LLM"

@@ -4,7 +4,7 @@ nodes use: chat() and chat_tools(), for Ollama, OpenAI-compatible servers and AP
 Messages API and models run in this process with llama.cpp.
 
 An LLM node's LLM port takes a connection of an LLM connector node (nodes/llm_connect.py) instead of
-its own server settings (server_for).
+its own Model settings (server_for).
 
 Where the server is comes from the node, or else from the environment of the Jupyter server:
 
@@ -13,7 +13,7 @@ Where the server is comes from the node, or else from the environment of the Jup
     VERKNODE_LLM_PROVIDER  ollama | openai (when the node says "Default")
     VERKNODE_LLM_API_KEY   the key for servers that need one (never stored in the workflow)
 
-Without the environment variable, a setting is read from ~/.config/verknode/llm.env (KEY=VALUE
+Without the environment variable, a setting is read from ~/.verknode/llm.env (KEY=VALUE
 lines; another file: VERKNODE_LLM_CONFIG) - e.g. for a server that is already running.
 """
 from __future__ import annotations
@@ -29,7 +29,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 import polars as pl
 
-from verknode.node import F, InvalidSettingsError, LLM, LLMConnectionPortObject, NodeModel, Port, TABLE
+from jupyterlab_verknode.engine.home import LEGACY_CONFIG, user_path
+
+from verknode.node import (F, InvalidSettingsError, LLM, LLMConnectionPortObject, NodeModel, Port, TABLE,
+                           node_defaults, register_defaults)
 
 CAT = "AI/LLM"
 DEFAULT_URL = "http://localhost:11434"
@@ -45,7 +48,11 @@ SERVER_HELP = ("Empty: the VERKNODE_LLM_URL environment variable of the Jupyter 
                f"{DEFAULT_URL} (Ollama on this machine).")
 
 
-CONFIG = os.path.join("~", ".config", "verknode", "llm.env")
+CONFIG = "~/.verknode/llm.env"  # (where it is shown; engine/home.py: the folder, and the older place)
+SETUP_HINT = ("Connect an LLM connector node to the node's LLM port, pick a saved server or set the node's Model "
+              "settings, save a default server (Settings › Node defaults › LLM servers), or set VERKNODE_LLM_URL "
+              "and VERKNODE_LLM_MODEL for the Jupyter server (or in ~/.verknode/llm.env).")
+NO_MODEL = "No model: " + SETUP_HINT[0].lower() + SETUP_HINT[1:]
 
 
 def setting(name: str) -> str:
@@ -53,7 +60,8 @@ def setting(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if value:
         return value
-    path = os.path.expanduser(os.environ.get("VERKNODE_LLM_CONFIG", "").strip() or CONFIG)
+    path = os.path.expanduser(os.environ.get("VERKNODE_LLM_CONFIG", "").strip()
+                              or user_path("llm.env", legacy=os.path.join(LEGACY_CONFIG, "llm.env")))
     try:
         with open(path, encoding="utf-8") as fh:
             for line in fh:
@@ -65,29 +73,172 @@ def setting(name: str) -> str:
     return ""
 
 
-def server_fields():
+# Every LLM node is set up the same way (docs/llm.md):
+# 1. its LLM port (optional, the last input): a connection of an LLM connector node - Ollama, an inference
+#    server, a commercial API, Anthropic or a model run in this process - which it uses when connected;
+# 2. else its "Model" settings (model_fields): server type, URL, model, API key variable;
+# 3. empty settings: the Jupyter server's environment (VERKNODE_LLM_URL, _MODEL, _PROVIDER, _API_KEY or
+#    ~/.verknode/llm.env), else Ollama on this machine.
+# Nodes that generate text add the "Generation" settings (generation_fields), which apply either way.
+MODEL = "Model"
+GENERATION = "Generation"
+PROVIDERS = ["Default", "Ollama", "OpenAI-compatible", ANTHROPIC]
+SERVER_KEYS = ("server", "provider", "url", "model", "api_key_env")
+DEFAULT = "Default"
+NO_DEFAULT = "(none: the environment)"
+
+# ---------------------------------------------------------------------------------------------------
+# saved LLM servers: a list in the global node defaults (Settings › Node defaults), picked by name in the
+# LLM nodes and the Saved LLM Server connector - set up once, not copied into each node. The workflow keeps
+# the name only: the address and the key's variable stay in ~/.verknode/defaults.json.
+# ---------------------------------------------------------------------------------------------------
+SERVER_TYPES = ["Ollama", "OpenAI-compatible", ANTHROPIC]
+
+
+def _check_servers(values: dict):
+    names = [(r.get("name") or "").strip() for r in values.get("servers") or []]
+    if any(not n for n in names):
+        raise ValueError("LLM servers: give each server a name")
+    if DEFAULT in names:
+        raise ValueError(f"LLM servers: {DEFAULT!r} is taken (a node's own settings): name the server otherwise")
+    twice = sorted({n for n in names if names.count(n) > 1})
+    if twice:
+        raise ValueError(f"LLM servers: the name {twice[0]!r} is used twice")
+
+
+register_defaults("llm", "LLM servers", [
+    F("servers", "records", "Servers", [], "Name each server once; LLM nodes then pick it by name (Model › Server), "
+      "and the Saved LLM Server connector passes it to LLM ports. API keys: the name of the environment variable "
+      "that holds the key (of the Jupyter server, or ~/.verknode/llm.env), never the key.", fields=[
+          F("name", "string", "Name", ""),
+          F("provider", "enum", "Server type", "Ollama", options=SERVER_TYPES),
+          F("url", "string", "URL", "", "Empty: Ollama on this machine, api.anthropic.com for Anthropic"),
+          F("model", "string", "Model", "", "Its default model (a node can name another)"),
+          F("api_key_env", "string", "API key variable", ""),
+      ]),
+    F("default", "enum", "Default server", NO_DEFAULT,
+      "What LLM nodes use when they name no server or URL themselves. None: the environment (VERKNODE_LLM_URL, "
+      "VERKNODE_LLM_MODEL ...), else Ollama on this machine.", options=[NO_DEFAULT],
+      options_from={"field": "servers", "key": "name"}),
+], description="The LLM servers you use, set up once for all workflows.", order=10, check=_check_servers)
+
+
+def saved_servers() -> dict:
+    """The saved LLM servers, by name."""
+    return {r["name"].strip(): r for r in node_defaults("llm").get("servers") or []
+            if (r.get("name") or "").strip() not in ("", DEFAULT)}
+
+
+def default_server_name() -> str:
+    name = (node_defaults("llm").get("default") or "").strip()
+    return "" if name == NO_DEFAULT else name
+
+
+def saved_server(name: str, model: str = "") -> dict:
+    """The server dict of a saved server (its key read now)."""
+    r = saved_servers().get(name)
+    if r is None:
+        raise InvalidSettingsError(f"No saved LLM server {name!r} here: add it in Settings › Node defaults › LLM "
+                                   "servers, or pick another server")
+    provider = r.get("provider") or "Ollama"
+    # (${VAR}: a setting of the Jupyter server, e.g. ${VERKNODE_LLM_URL})
+    url = re.sub(r"\$\{(\w+)\}", lambda m: setting(m.group(1)), (r.get("url") or "").strip())
+    url = url or ("https://api.anthropic.com" if provider == ANTHROPIC else DEFAULT_URL)
+    key_env = (r.get("api_key_env") or "").strip() or ("ANTHROPIC_API_KEY" if provider == ANTHROPIC else "")
+    return {"provider": provider, "url": url.rstrip("/"), "model": model or (r.get("model") or "").strip(),
+            "key": setting(key_env) if key_env else "", "key_env": key_env, "saved": name}
+
+
+def model_fields(what: str = "") -> list:
+    """Where the model is, when the LLM port is not connected (the "Model" section of the dialog)."""
+    sec = MODEL if not what else f"{MODEL} ({what})"
+    own = {"server": DEFAULT}
     return [
-        F("provider", "enum", "Server type", "Default", "Default: VERKNODE_LLM_PROVIDER, else Ollama. "
-          "OpenAI-compatible: llama.cpp, vLLM, LM Studio, OpenAI and the like (/v1/chat/completions).",
-          options=["Default", "Ollama", "OpenAI-compatible"]),
-        F("url", "string", "Server URL", "", SERVER_HELP),
-        F("model", "string", "Model", "", "Empty: VERKNODE_LLM_MODEL. The dialog lists the server's models."),
+        F("server", "enum", "Server", DEFAULT, "Used when the LLM port is not connected. A saved server (Settings › "
+          "Node defaults › LLM servers), or Default: the settings below, else the default saved server, else the "
+          "environment of the Jupyter server.", options=[DEFAULT], section=sec),
+        F("provider", "enum", "Server type", "Default", "Default: VERKNODE_LLM_PROVIDER of the Jupyter server, else "
+          "Ollama. OpenAI-compatible: llama.cpp's llama-server, vLLM, LM Studio, OpenAI and the like "
+          "(/v1/chat/completions). Anthropic: Claude (Messages API). For more (presets, a model run in this "
+          "process), connect an LLM connector node to the LLM port.", options=PROVIDERS, section=sec, show_if=own),
+        F("url", "string", "Server URL", "", SERVER_HELP, section=sec, show_if=own),
+        F("model", "string", "Model", "", "Empty: the saved server's model, else VERKNODE_LLM_MODEL. The dialog lists "
+          "the server's models.", section=sec),
         F("api_key_env", "string", "API key variable", "VERKNODE_LLM_API_KEY",
-          "Environment variable of the Jupyter server with the key (sent as a Bearer token if set). "
-          "Keys are never stored in the workflow."),
-        F("temperature", "float", "Temperature", 0.2, "0: the most likely answer; higher: more varied."),
-        F("max_tokens", "int", "Longest answer (tokens)", 1024),
-        F("seed", "int", "Seed", 0, "Same seed, same prompt: the same answer (if the server supports it). 0: none."),
-        F("think", "bool", "Let reasoning models think first", False,
-          "Off: ask for the answer directly (faster). On: models that reason (e.g. qwen3, deepseek-r1) "
-          "think before answering; the thinking is not part of the answer."),
-        F("timeout", "int", "Timeout per request (s)", 300),
+          "Environment variable of the Jupyter server (or setting of ~/.verknode/llm.env) with the key. "
+          "Keys are never stored in the workflow.", section=sec, show_if=own),
     ]
 
 
-def llm_port(desc="A model connection of an LLM connector node (optional: else the server settings below)"):
+def generation_fields(temperature: float = 0.2, max_tokens: int = 1024) -> list:
+    """How the model answers (the "Generation" section), with the LLM port connected or not."""
+    g = GENERATION
+    return [
+        F("temperature", "float", "Temperature", temperature, "0: the most likely answer; higher: more varied. "
+          "A connection with a temperature of its own overrides it.", section=g),
+        F("max_tokens", "int", "Longest answer (tokens)", max_tokens, section=g),
+        F("seed", "int", "Seed", 0, "Same seed, same prompt: the same answer (if the server supports it). 0: none.",
+          section=g),
+        F("think", "bool", "Let reasoning models think first", False,
+          "Off: ask for the answer directly (faster). On: models that reason (e.g. qwen3, deepseek-r1) "
+          "think before answering; the thinking is not part of the answer.", section=g),
+        F("timeout", "int", "Timeout per request (s)", 300, section=g),
+    ]
+
+
+def server_fields(temperature: float = 0.2, max_tokens: int = 1024) -> list:
+    """The settings of an LLM node: Model, then Generation."""
+    return [*model_fields(), *generation_fields(temperature, max_tokens)]
+
+
+def llm_port(desc="The model: a connection of an LLM connector node (optional: else the Model settings)", name="LLM"):
     """The LLM port of an LLM node (last, so the other ports keep their numbers)."""
-    return Port(LLM, "LLM", desc, optional=True)
+    return Port(LLM, name, desc, optional=True)
+
+
+def has_server_settings(s: dict) -> bool:
+    """Does the node name a server or model itself (else: its default - the environment, or the agent's)?"""
+    return ((s.get("server") or DEFAULT) != DEFAULT or (s.get("provider") or "Default") != "Default"
+            or bool((s.get("url") or "").strip() or (s.get("model") or "").strip()))
+
+
+def llm_dialog(node, inputs, s: dict, connected=()) -> dict:
+    """The dialog data of an LLM node: the server's models to pick from, the environment's defaults as
+    placeholders - or, with its LLM port connected, the Model settings hidden and the connection named."""
+    ports = [i for i, p in enumerate(node.in_ports) if p.type == LLM]
+    # (the port the Model settings stand in for: the LLM port, or e.g. an evaluation's judge)
+    port = getattr(node, "llm_settings_port", ports[-1] if ports else None)
+    sections = [f.section for f in node.fields if f.key == "provider" and f.section]
+    names = list(saved_servers())
+    current = (s.get("server") or DEFAULT).strip()
+    default = default_server_name()
+    out: dict = {"placeholder": {"url": setting("VERKNODE_LLM_URL") or DEFAULT_URL,
+                                 "model": setting("VERKNODE_LLM_MODEL") or "(a model of the server)"},
+                 "options": {"server": [DEFAULT, *names, *([current] if current not in (DEFAULT, *names) else [])]}}
+    if current != DEFAULT or (default and not (s.get("url") or "").strip()):
+        try:
+            r = saved_server(current if current != DEFAULT else default)
+            out["placeholder"]["model"] = r["model"] or out["placeholder"]["model"]
+        except InvalidSettingsError as e:
+            out["error"] = str(e)
+    if port is not None and port < len(connected) and connected[port]:
+        conn = inputs[port] if port < len(inputs) else None
+        what = conn.label if isinstance(conn, LLMConnectionPortObject) else "the connector node's (run it to see which)"
+        out["hide"] = list(SERVER_KEYS)
+        out["notes"] = {sec: f"From the {node.in_ports[port].name} port: {what}." for sec in sections}
+        return out
+    try:
+        out["suggest"] = {"model": list_models(server(s))}
+    except Exception as e:  # noqa: BLE001 - the dialog opens anyway
+        out["error"] = str(e)
+    return out
+
+
+class LLMNode:
+    """Mixin of the LLM nodes (before NodeModel in the bases): the dialog of llm_dialog."""
+
+    def dialog_data(self, inputs, s, connected=(), context=None):
+        return llm_dialog(self, inputs, s, connected)
 
 
 def connection_of(inputs) -> LLMConnectionPortObject | None:
@@ -101,13 +252,28 @@ def server_for(s: dict, inputs) -> dict:
 
 
 def server(s: dict) -> dict:
+    """Where a node's model is, without a connection: its saved server; else its own settings; else the
+    default saved server (if it names no URL); else the environment; else Ollama on this machine."""
+    model = (s.get("model") or "").strip()
+    name = (s.get("server") or DEFAULT).strip()
+    if name != DEFAULT:
+        return saved_server(name, model)
+    default = default_server_name()
+    if default and (s.get("provider") or "Default") == "Default" and not (s.get("url") or "").strip():
+        return saved_server(default, model)
+    env = setting("VERKNODE_LLM_PROVIDER").lower()
+    default = ("OpenAI-compatible" if env in ("openai", "openai-compatible", "llamacpp", "llama.cpp", "vllm")
+               else ANTHROPIC if env in ("anthropic", "claude") else "Ollama")
     provider = s.get("provider") or "Default"
     if provider == "Default":
-        provider = "OpenAI-compatible" if setting("VERKNODE_LLM_PROVIDER").lower() in (
-            "openai", "openai-compatible", "llamacpp", "llama.cpp", "vllm") else "Ollama"
-    url = (s.get("url") or "").strip() or setting("VERKNODE_LLM_URL") or DEFAULT_URL
+        provider = default
+    # (VERKNODE_LLM_URL is the default provider's: another server type has its own default address)
+    url = ((s.get("url") or "").strip() or (setting("VERKNODE_LLM_URL") if provider == default else "")
+           or ("https://api.anthropic.com" if provider == ANTHROPIC else DEFAULT_URL))
     model = (s.get("model") or "").strip() or setting("VERKNODE_LLM_MODEL")
     key = setting((s.get("api_key_env") or "").strip() or "VERKNODE_LLM_API_KEY")
+    if not key and provider == ANTHROPIC:
+        key = setting("ANTHROPIC_API_KEY")
     return {"provider": provider, "url": url.rstrip("/"), "model": model, "key": key}
 
 
@@ -140,7 +306,8 @@ def _request(url: str, body: dict | None, key: str, timeout: float, headers: dic
             pass
         raise RuntimeError(f"{e.code} from the LLM server: {detail}") from None
     except urllib.error.URLError as e:
-        raise RuntimeError(f"Cannot reach the LLM server at {url.split('/api/')[0].split('/v1/')[0]}: {e.reason}") from None
+        raise RuntimeError(f"Cannot reach the LLM server at {url.split('/api/')[0].split('/v1/')[0]}: {e.reason}. "
+                           + SETUP_HINT) from None
     except TimeoutError:
         raise RuntimeError(f"The LLM server at {url.split('/api/')[0].split('/v1/')[0]} did not answer in {timeout:.0f} s") from None
 
@@ -175,7 +342,7 @@ def _with_options(srv: dict, s: dict) -> dict:
 def chat(srv: dict, messages: list, s: dict, schema: dict | None = None) -> dict:
     """One answer: {"text", "tokens_in", "tokens_out", "seconds"}."""
     if not srv["model"] and srv["provider"] != LOCAL:
-        raise InvalidSettingsError("No model: set Model, or VERKNODE_LLM_MODEL for the Jupyter server")
+        raise InvalidSettingsError(NO_MODEL)
     s = _with_options(srv, s)
     if srv["provider"] == ANTHROPIC:
         return _anthropic(srv, messages, s, schema=schema)
@@ -220,7 +387,7 @@ def chat_tools(srv: dict, messages: list, s: dict, tools: list) -> dict:
     {"text", "calls": [{"id", "name", "args"}], "message": the model's message (append it), "seconds"}.
     Answer each call with tool_message(srv, call, result) before the next step."""
     if not srv["model"] and srv["provider"] != LOCAL:
-        raise InvalidSettingsError("No model: set Model, or VERKNODE_LLM_MODEL for the Jupyter server")
+        raise InvalidSettingsError(NO_MODEL)
     s = _with_options(srv, s)
     if srv["provider"] == ANTHROPIC:
         return _anthropic(srv, messages, s, tools=tools)
@@ -500,7 +667,7 @@ def _cast(v, kind: str):
     return v if isinstance(v, str) else json.dumps(v)
 
 
-class LLMPrompter(NodeModel):
+class LLMPrompter(LLMNode, NodeModel):
     factory = "verknode.llm.Prompter"
     name = "LLM Prompter"
     category = CAT
@@ -513,10 +680,11 @@ class LLMPrompter(NodeModel):
         "you name (e.g. <code>sentiment, score:number</code>; types string, number, integer, boolean): "
         "one column per field, the model held to that shape where the server supports it (Ollama, "
         "llama.cpp). Without an input table the prompt is sent once. Requests run several at a time. "
-        "The server: an Ollama URL (default " + DEFAULT_URL + ") or an OpenAI-compatible one; empty "
-        "settings use the VERKNODE_LLM_URL / VERKNODE_LLM_MODEL / VERKNODE_LLM_PROVIDER environment "
-        "variables of the Jupyter server, and an API key comes from an environment variable (never from "
-        "the workflow). Answers depend on the model; check them before relying on them."
+        "The model, as for every LLM node: a connection on the LLM port (an LLM connector node), else the "
+        "Model settings (Ollama, default " + DEFAULT_URL + "; an OpenAI-compatible server; Anthropic), "
+        "else the VERKNODE_LLM_URL / VERKNODE_LLM_MODEL / VERKNODE_LLM_PROVIDER environment variables of "
+        "the Jupyter server. An API key comes from an environment variable (never from the workflow). "
+        "Answers depend on the model; check them before relying on them."
     )
     in_ports = [Port(TABLE, "Rows", "A prompt for each row (optional: none = one prompt)", optional=True), llm_port()]
     out_ports = [Port(TABLE, "Answers", "The input with the answer columns")]
@@ -568,16 +736,6 @@ class LLMPrompter(NodeModel):
             raise InvalidSettingsError(f"The input already has the column(s) {', '.join(clash)} "
                                        "(or turn on Replace answer columns)")
         return [pl.Schema({**dict(spec), **cols})]
-
-    def dialog_data(self, inputs, s, connected=(), context=None):
-        srv = server_for(s, inputs)
-        out = {"placeholder": {"url": setting("VERKNODE_LLM_URL") or DEFAULT_URL,
-                               "model": setting("VERKNODE_LLM_MODEL") or "(a model of the server)"}}
-        try:
-            out["suggest"] = {"model": list_models(srv)}
-        except Exception as e:  # noqa: BLE001 - the dialog opens anyway
-            out["error"] = str(e)
-        return out
 
     # -- running --------------------------------------------------------------
     def execute(self, inputs, s, ctx):

@@ -1,5 +1,5 @@
 """LLM connector nodes: where a language model is and which one, as a connection on an LLM port
-(purple square) for the LLM nodes - instead of each node's server settings.
+(purple square) for the LLM nodes - instead of each node's Model settings.
 
 - Ollama: the local model runner (or an Ollama server elsewhere).
 - Inference Server: an OpenAI-compatible inference server or engine - vLLM, SGLang, llama.cpp's
@@ -9,9 +9,10 @@
 - Anthropic (Claude): Anthropic's Messages API.
 - Local Model (llama.cpp): a GGUF model file run in this process (llama-cpp-python), downloaded
   from Hugging Face if wanted.
+- Saved LLM Server: one of the servers saved in Settings › Node defaults › LLM servers.
 
 Keys are never stored: a connection names the environment variable (or the
-~/.config/verknode/llm.env setting) that holds the key, and it is read when a model is called.
+~/.verknode/llm.env setting) that holds the key, and it is read when a model is called.
 """
 from __future__ import annotations
 
@@ -21,7 +22,9 @@ import urllib.request
 
 from verknode.node import F, InvalidSettingsError, LLM, LLMConnectionPortObject, NodeModel, Port
 
-from .llm import ANTHROPIC, DEFAULT_URL, LOCAL, list_models, setting
+from jupyterlab_verknode.engine.home import LEGACY_CACHE, user_path
+
+from .llm import ANTHROPIC, DEFAULT_URL, LOCAL, default_server_name, list_models, saved_server, saved_servers, setting
 
 CAT = "AI/LLM/Connect"
 OUT = [Port(LLM, "LLM", "The model connection: for the LLM ports of LLM, agent and evaluation nodes")]
@@ -51,7 +54,7 @@ APIS = {  # name: (base URL, key variable)
     "Fireworks": ("https://api.fireworks.ai/inference/v1", "FIREWORKS_API_KEY"),
 }
 
-KEY_HELP = ("The environment variable of the Jupyter server (or setting of ~/.config/verknode/llm.env) with the "
+KEY_HELP = ("The environment variable of the Jupyter server (or setting of ~/.verknode/llm.env) with the "
             "key. Keys are never stored in the workflow.")
 
 
@@ -107,7 +110,7 @@ class _Connector(NodeModel):
         srv = conn.server()
         if conn.key_env and not srv["key"]:
             raise InvalidSettingsError(f"No API key: set {conn.key_env} in the environment of the Jupyter server "
-                                       f"(or {conn.key_env}=... in ~/.config/verknode/llm.env)")
+                                       f"(or {conn.key_env}=... in ~/.verknode/llm.env)")
         try:
             models = list_models(srv, timeout=15)
         except RuntimeError as e:
@@ -134,7 +137,7 @@ class OllamaConnector(_Connector):
     description = (
         "Connects to an Ollama server - the default runs on this machine at http://localhost:11434 - and a model "
         "of it (the dialog lists them). Connect its LLM port to LLM, agent and evaluation nodes: they then use "
-        "this model instead of their own server settings. Ollama Models / Pull Model manage the models."
+        "this model instead of their own Model settings. Ollama Models / Pull Model manage the models."
     )
     fields = [
         F("url", "string", "Ollama URL", "", "Empty: VERKNODE_LLM_URL of the Jupyter server, else " + DEFAULT_URL),
@@ -238,7 +241,42 @@ class AnthropicConnector(_Connector):
                                        f"Anthropic · {model}{_t(s)}", _options(s))
 
 
-MODELS_DIR = os.path.join("~", ".cache", "verknode", "models")
+class SavedServerConnector(_Connector):
+    factory = "verknode.llm.SavedServerConnector"
+    name = "Saved LLM Server"
+    icon = "★AI"
+    short_description = "One of your saved LLM servers (Settings › Node defaults › LLM servers), by name."
+    description = (
+        "Passes a server you saved once in Settings › Node defaults › LLM servers - Ollama, an OpenAI-compatible "
+        "server or Anthropic, with its address, model and key variable - to the LLM ports of other nodes. The "
+        "workflow keeps only the server's name: its address is read from your node defaults when a model is "
+        "called, so the workflow runs on another machine whose saved server of that name points elsewhere."
+    )
+    fields = [
+        F("server", "enum", "Server", "", "Empty: the default saved server.", options=[""]),
+        F("model", "string", "Model", "", "Empty: the saved server's model."),
+        *option_fields(),
+    ]
+
+    def connection(self, s):
+        name = (s.get("server") or "").strip() or default_server_name()
+        if not name:
+            raise InvalidSettingsError("No saved LLM server: add one in Settings › Node defaults › LLM servers")
+        srv = saved_server(name, (s.get("model") or "").strip())
+        return LLMConnectionPortObject(srv["provider"], "${saved:%s}" % name, srv["model"], srv["key_env"],
+                                       f"{name} · {srv['model']}{_t(s)}", _options(s))
+
+    def dialog_data(self, inputs, s, connected=(), context=None):
+        names = list(saved_servers())
+        current = (s.get("server") or "").strip()
+        out = super().dialog_data(inputs, s, connected, context) if (names or current) else {
+            "error": "No saved LLM servers yet: add them in Settings › Node defaults › LLM servers"}
+        out["options"] = {"server": ["", *names, *([current] if current and current not in names else [])]}
+        return out
+
+
+MODELS_DIR = "~/.verknode/models"  # (shown; engine/home.py: the folder)
+LEGACY_MODELS = os.path.join(LEGACY_CACHE, "models")
 
 
 class LocalModelConnector(_Connector):
@@ -275,7 +313,11 @@ class LocalModelConnector(_Connector):
         repo, file = (s.get("repo") or "").strip(), (s.get("file") or "").strip()
         if not repo or not file:
             raise InvalidSettingsError("Give the Hugging Face repository and the GGUF file in it")
-        return os.path.join(os.path.expanduser(s.get("folder") or MODELS_DIR), repo.replace("/", "__"), file)
+        folder = (s.get("folder") or "").strip()
+        rel = os.path.join(repo.replace("/", "__"), file)
+        if not folder or folder == MODELS_DIR:  # (the verknode folder's models; a file downloaded before: there)
+            return user_path("models", rel, legacy=os.path.join(LEGACY_MODELS, rel))
+        return os.path.join(os.path.expanduser(folder), rel)
 
     def connection(self, s, ctx=None):
         path = self._path(s, ctx)

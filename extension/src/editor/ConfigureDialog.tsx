@@ -96,16 +96,28 @@ function ScalarEditor(props: {
           }}
         />
       );
-    case 'enum':
+    case 'enum': {
+      // (extra.options: choices the server works out, e.g. the saved LLM servers; options_from: the names
+      // of a records setting, as edited)
+      let options: string[] = ctx.extra?.options?.[f.key] ?? f.options ?? [];
+      if (f.options_from) {
+        const rows: any[] = ctx.settings?.[f.options_from.field] ?? [];
+        const names = rows.map(r => String(r?.[f.options_from!.key] ?? '').trim()).filter(n => n && !options.includes(n));
+        options = [...options, ...new Set(names)];
+      }
+      if (value && !options.includes(value)) {
+        options = [...options, value];
+      }
       return (
         <select className="jp-mod-styled" value={value ?? ''} disabled={disabled} onChange={e => onChange(e.target.value)}>
-          {(f.options ?? []).map(o => (
+          {options.map(o => (
             <option key={o} value={o}>
-              {o}
+              {o === '' ? '(default)' : o}
             </option>
           ))}
         </select>
       );
+    }
     case 'variable': {
       const missing = value && !ctx.flowVariables.some(v => v.name === value);
       return (
@@ -630,7 +642,7 @@ function TableCreatorEditor(props: { field: FieldInfo; value: CreatorTable; onCh
 /* ------------------------------------------------------------------ */
 /* field row                                                           */
 /* ------------------------------------------------------------------ */
-function FieldRow(props: {
+export function FieldRow(props: {
   field: FieldInfo;
   value: any;
   onChange: (v: any) => void;
@@ -966,15 +978,25 @@ export function ConfigureDialog(props: {
               (data.node.fields.length ? (
                 data.node.fields
                   .filter(f => visible(f, settings))
-                  .map(f => (
-                    <FieldRow
-                      key={f.key}
-                      field={f}
-                      value={settings[f.key]}
-                      ctx={ctx}
-                      boundTo={variables[f.key]?.used}
-                      onChange={v => void change(f.key, v)}
-                    />
+                  .map((f, i, shown) => (
+                    <React.Fragment key={f.key}>
+                      {f.section && f.section !== shown[i - 1]?.section && (
+                        <div className="verknode-field-section">
+                          {f.section}
+                          {extra?.notes?.[f.section] && <div className="verknode-field-section-note">{extra.notes[f.section]}</div>}
+                        </div>
+                      )}
+                      {/* (extra.hide: settings the node's inputs replace, e.g. an LLM port's connection) */}
+                      {!(extra?.hide ?? []).includes(f.key) && (
+                        <FieldRow
+                          field={f}
+                          value={settings[f.key]}
+                          ctx={ctx}
+                          boundTo={variables[f.key]?.used}
+                          onChange={v => void change(f.key, v)}
+                        />
+                      )}
+                    </React.Fragment>
                   ))
               ) : (
                 <div className="verknode-empty">This node has no settings.</div>
