@@ -23,6 +23,10 @@ ENV VERKNODE_KETCHER_DIR=/opt/ketcher
 
 USER ${NB_UID}
 
+# the user's verknode folder (docs/install.md), owned by the user: a new volume mounted there (compose.yml)
+# starts with this ownership, not root's
+RUN mkdir -p /home/${NB_USER}/.verknode
+
 # workflow engine data libraries (polars, RDKit), the JupyterLab extension build backend, agent frameworks
 RUN pip install --no-cache-dir \
         polars \

@@ -46,6 +46,8 @@ COPY --from=ketcher /opt/ketcher /opt/ketcher
 RUN useradd --create-home --uid 1000 --shell /bin/bash jovyan
 COPY --chown=jovyan notebooks/examples /home/jovyan/examples
 USER jovyan
+# (the user's verknode folder, owned by jovyan: a new volume mounted there starts with this ownership)
+RUN mkdir -p /home/jovyan/.verknode
 WORKDIR /home/jovyan
 EXPOSE 8888
 ENTRYPOINT ["tini", "--"]
