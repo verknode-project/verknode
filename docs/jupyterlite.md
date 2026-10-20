@@ -58,8 +58,13 @@ The build (`docker/lite/Dockerfile`) has two stages:
    PyPI is not used (`disablePyPIFallback` in `lite/jupyter-lite.json`),
    so a missing package fails at once instead of waiting on a blocked
    network.
+5. `lite/bundle_chem.py` adds what chemistry needs, at the paths a Jupyter
+   server serves it from (`verknode/...`), so the same URLs work:
+   - RDKit's WebAssembly build (`@rdkit/rdkit`, 7.4 MB);
+   - Ketcher's standalone build (32 MB);
+   - the NGL and Mol* 3D viewers.
 
-The site is about 200 MB.
+The site is about 240 MB.
 
 ## How it works
 
@@ -102,7 +107,10 @@ with the Jupyter server. In JupyterLite there is no server. Instead:
 | Web services | those that allow other origins (CORS): Wikipedia, GitHub, OpenStreetMap Geocode, Open-Meteo, Apple Podcasts; not the Overpass server, nor feeds without CORS |
 | LLM nodes | with an `llm.env` file (below), and a server that allows the page's origin |
 | Chats on the canvas: LLM chat loops, Data Q&A Chat, Workflow Agent Chat | no: a run in the browser cannot wait for messages, so they stop with a message |
-| RDKit nodes, the Molecule Sketcher | no: RDKit and Ketcher are not in Pyodide |
+| RDKit nodes, molecule columns and pictures, the Molecule Input | yes, on RDKit's WebAssembly build ([below](#chemistry)) |
+| The Molecule Sketcher, with Ketcher or the built-in sketcher | yes |
+| 3D structures: NGL and Mol* views of proteins and of ligands with 3D coordinates | yes |
+| 3D coordinates from 2D (Generate Coordinates, 3D for ligands from SMILES) | no: the WebAssembly build cannot embed in 3D |
 | SQLite database nodes on files | no: SQLite cannot work on the browser's files |
 | Python Code Runner, the Jupyter Notebook node, export folders | no: they need processes |
 | The MCP server and agent API | no: they are server endpoints |
@@ -134,6 +142,32 @@ The server must accept requests from the page's origin. For Ollama, set
 allowed by default). An API key in this file is stored in the browser:
 use the browser version with keys only on a computer you trust.
 
+## Chemistry
+
+Pyodide has no RDKit. RDKit's own WebAssembly build (MinimalLib) runs in
+the browser instead: it is the same C++ toolkit, version 2026.09.1, the same
+as the server's.
+- **How:** `jupyterlab_verknode/lite_rdkit` gives it RDKit's Python API, the
+  part verknode uses. The chemistry nodes run unchanged on it, and the
+  server keeps the real RDKit (that folder is only on Python's path in the
+  browser).
+- **Same results:** SMILES, InChI, formulas, molecules read and written as
+  SD files, substructures and reactions match the server's, and so do the
+  Morgan, RDKit, atom pair, torsion, MACCS and pattern fingerprints, bit for
+  bit. The same goes for Murcko scaffolds, neutralization, the largest
+  fragment and the descriptors, QED among them.
+- **Molecule columns:** they are RDKit's own pickles. A workflow saved with
+  results on a server opens with its molecules in the browser, and the other
+  way round.
+
+| In the browser | |
+|---|---|
+| Descriptors | 45 (the ones the WebAssembly build computes, by RDKit's names, and QED) instead of 217 |
+| Fingerprints | all but FeatMorgan |
+| Structure Normalizer | cleanup (hydrogens, metal bonds), largest fragment, neutralization; not canonical tautomers |
+| Diversity Picker | the same MaxMin algorithm; with a seed, the first pick (and so the picks) may differ from the server's |
+| Generate Coordinates (3D) | not available: shown as such in the Node Repository |
+
 ## In a test run
 
 | Example | In the browser |
@@ -141,7 +175,9 @@ use the browser version with keys only on a computer you trust.
 | `demo.vkf` | all 15 nodes; opens in about 20 s on the first visit, then runs in 0.2 s |
 | `gis.vkf` | all 13 nodes, with the Leaflet map |
 | `mermaid.vkf` | all 12 nodes |
-| `widgets.vkf` | 30 of 33: everything but the molecule input (RDKit) and what depends on it; matplotlib loads on the first run |
+| `widgets.vkf` | all 33 nodes, the molecule input too; matplotlib loads on the first run |
+| `chemistry.vkf` | 14 of 17: every RDKit node but Generate Coordinates (3D), and the SDF writer and reader after it |
+| `structures.vkf` | 9 of 10: the poses from the SD file in Mol*, and the protein; not the SMILES ligands that need 3D coordinates |
 | `web_services.vkf` | 15 of 20: Overpass and a podcast feed don't allow other origins |
 | `analytics.vkf` | runs, scikit-learn loaded; the database writer fails (SQLite) |
 | `data_chat.vkf` | the LLM Summarizer runs with the Ollama of `llm.env`; the Data Q&A Chat stops (it waits for messages) |

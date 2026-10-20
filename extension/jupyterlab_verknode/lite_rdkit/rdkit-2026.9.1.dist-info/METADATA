@@ -1,0 +1,4 @@
+Metadata-Version: 2.1
+Name: rdkit
+Version: 2026.9.1
+Summary: RDKit's WebAssembly build (MinimalLib) behind RDKit's Python API, for verknode in the browser

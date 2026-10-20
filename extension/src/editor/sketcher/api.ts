@@ -1,6 +1,7 @@
 import { PageConfig, URLExt } from '@jupyterlab/coreutils';
 
 import { postJSON, requestAPI } from '../../api';
+import { isLite } from '../../lite';
 import { StructureJSON } from './model';
 
 export interface Structure extends StructureJSON {
@@ -18,11 +19,15 @@ export function structure(text: string, clean = false, width = 200, height = 140
 
 let ketcher: Promise<boolean> | null = null;
 
-/** Is the Ketcher editor installed on the server (see Dockerfile)? */
+/** Is the Ketcher editor installed on the server (see Dockerfile), or in the browser version's site? */
 export function ketcherAvailable(): Promise<boolean> {
-  ketcher ??= requestAPI<{ available: boolean }>('chem/ketcher')
-    .then(r => r.available)
-    .catch(() => false);
+  ketcher ??= isLite()
+    ? fetch(ketcherUrl(), { method: 'HEAD' })
+        .then(r => r.ok)
+        .catch(() => false)
+    : requestAPI<{ available: boolean }>('chem/ketcher')
+        .then(r => r.available)
+        .catch(() => false);
   return ketcher;
 }
 

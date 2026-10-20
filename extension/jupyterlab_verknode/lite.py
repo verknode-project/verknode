@@ -174,6 +174,77 @@ def patch_http():
 
 
 # ---------------------------------------------------------------------------------------------------
+# chemistry: RDKit's WebAssembly build (MinimalLib) behind RDKit's Python API (lite_rdkit)
+# ---------------------------------------------------------------------------------------------------
+LITE_RDKIT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lite_rdkit")
+# nodes that need what the WebAssembly build has not: shown as not available here, with the reason
+NOT_IN_BROWSER = {
+    "verknode.chem.Conformers": "3D coordinates (embedding, force fields) are not available in the browser version",
+}
+
+
+async def load_rdkit(url: str) -> bool:
+    """Load RDKit's WebAssembly build (RDKit_minimal.js / .wasm at url, the site's static/rdkit/) into this
+    worker as verknodeRDKit. False (and the chemistry nodes stay unavailable) if it is not there."""
+    import js
+
+    if getattr(js, "verknodeRDKit", None) is not None:
+        return True
+    from pyodide.ffi import create_proxy, to_js
+
+    try:
+        if hasattr(js, "importScripts"):
+            js.importScripts(url + "RDKit_minimal.js")
+        else:  # (a module worker)
+            from pyodide.code import run_js
+            from pyodide.http import pyfetch
+
+            run_js(await (await pyfetch(url + "RDKit_minimal.js")).string())
+        locate = create_proxy(lambda name, *_: url + name)
+        module = await js.initRDKitModule(to_js({"locateFile": locate}, dict_converter=js.Object.fromEntries))
+        setattr(js, "verknodeRDKit", module)
+        return True
+    except Exception as e:  # noqa: BLE001 - verknode runs without chemistry
+        print(f"verknode: RDKit (WebAssembly) did not load: {e}")
+        return False
+
+
+def install_rdkit() -> bool:
+    """RDKit's Python API (lite_rdkit) on the WebAssembly build, if it is loaded and the real RDKit is not
+    there; nodes it cannot run are marked (NOT_IN_BROWSER)."""
+    import importlib.util
+
+    try:
+        import js
+
+        if getattr(js, "verknodeRDKit", None) is None:
+            return False
+    except ImportError:
+        return False
+    if importlib.util.find_spec("rdkit") is not None:
+        return False  # (a real RDKit)
+    sys.path.insert(0, LITE_RDKIT)
+    importlib.invalidate_caches()
+    from .engine import requirements as req
+
+    requirements, missing = req.requirements, req.missing
+
+    def browser_requirements(cls):
+        out = requirements(cls)
+        if getattr(cls, "factory", None) in NOT_IN_BROWSER:
+            out = out + [{"package": "RDKit 3D (not in the browser)", "module": "rdkit_3d", "optional": False,
+                          "installed": False}]
+        return out
+
+    def browser_missing(cls):
+        why = NOT_IN_BROWSER.get(getattr(cls, "factory", None))
+        return f"{cls.name}: {why}" if why else missing(cls)
+
+    req.requirements, req.missing = browser_requirements, browser_missing
+    return True
+
+
+# ---------------------------------------------------------------------------------------------------
 # the bridge
 # ---------------------------------------------------------------------------------------------------
 class HTTPError(Exception):
@@ -194,6 +265,7 @@ class Bridge:
             patch_threads()
             patch_polars()
             patch_http()
+            install_rdkit()  # (before the nodes: the chemistry nodes import rdkit)
         from . import nodes  # noqa: F401 - registers the built-in nodes
 
         self.root = root

@@ -17,3 +17,4 @@ notebooks/examples/**/*_export
 !lite/jupyter_lite_config.json
 !lite/jupyter-lite.json
 !lite/bundle_pyodide.py
+!lite/bundle_chem.py

@@ -7,8 +7,8 @@
 # (make lite / make lite-serve in docker/.) The build context is the repository root.
 #
 # Pyodide 0.27 is the last with polars (1.18): jupyterlite-pyodide-kernel 0.6.1 brings it, with JupyterLite
-# 0.6 (JupyterLab 4.4). Pyodide and the packages are in the site (lite/bundle_pyodide.py): it loads nothing
-# from a CDN.
+# 0.6 (JupyterLab 4.4). Pyodide and the packages are in the site (lite/bundle_pyodide.py), and so are
+# RDKit's WebAssembly build, Ketcher and the 3D viewers (lite/bundle_chem.py): it loads nothing from a CDN.
 
 # ---- build: the frontend (Node.js) and the wheel ----
 FROM python:3.13-slim AS build
@@ -41,6 +41,12 @@ RUN pip download --no-cache-dir --no-deps --only-binary=:all: -d /wheels/extra \
 COPY notebooks/examples /build/contents/examples
 RUN jupyter lite build --piplite-wheels "$(ls /wheels/*.whl)" \
         $(for w in /wheels/extra/*.whl; do printf -- "--piplite-wheels %s " "$w"; done)
+# chemistry: RDKit's WebAssembly build (the chemistry nodes run on it), Ketcher and the 3D structure viewers,
+# at the paths the Jupyter server serves them from (verknode/...) - lite/bundle_chem.py
+ARG RDKIT_JS=2026.9.1
+ARG KETCHER_VERSION=3.18.0
+COPY lite/bundle_chem.py /build/
+RUN python bundle_chem.py /site/verknode "$RDKIT_JS" "$KETCHER_VERSION"
 
 FROM scratch AS site
 COPY --from=lite /site /

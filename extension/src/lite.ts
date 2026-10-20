@@ -6,7 +6,7 @@
  * application/json display. The kernel runs one call at a time, and a run executes before its call returns.
  * The long poll of the server (sessions/<id>/wait) becomes polling here.
  */
-import { PageConfig } from '@jupyterlab/coreutils';
+import { PageConfig, URLExt } from '@jupyterlab/coreutils';
 import { Notification } from '@jupyterlab/apputils';
 import { Kernel, ServiceManager } from '@jupyterlab/services';
 
@@ -25,15 +25,20 @@ export function isLite(): boolean {
 }
 
 /** Python that makes the engine: the packages (numpy, polars from Pyodide; verknode's wheel without its
- * server dependencies), then the bridge on the drive (the browser's files). */
-const BOOT = `
+ * server dependencies), RDKit's WebAssembly build for the chemistry nodes (the site's verknode/rdkit/,
+ * docker/lite/Dockerfile), then the bridge on the drive (the browser's files). */
+const boot = () => {
+  const rdkit = new URL(URLExt.join(PageConfig.getBaseUrl(), 'verknode', 'rdkit') + '/', location.href).href;
+  return `
 import piplite
 await piplite.install(["numpy", "polars", "pyarrow", "pyodide-http"], keep_going=True)
 await piplite.install(["jupyterlab_verknode"], deps=False)
 from jupyterlab_verknode import lite as __vkn
+await __vkn.load_rdkit(${py(rdkit)})
 __vkn.bridge("/drive")
 print("verknode ready")
 `;
+};
 
 function run(k: Kernel.IKernelConnection, code: string): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -66,7 +71,7 @@ function engine(): Promise<Kernel.IKernelConnection> {
     }
     await services.ready;
     const k = await services.kernels.startNew({ name: 'python' });
-    await run(k, BOOT);
+    await run(k, boot());
     return k;
   })();
   void Notification.promise(kernel.then(() => null), {
