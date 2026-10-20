@@ -6,8 +6,11 @@ HTTP (the requests package, if it is there, for HTTP Request), the GIS nodes
 use polars and numpy, and the diagrams and maps are drawn in the browser
 (Mermaid, Leaflet).
 
-Examples: `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`,
-`mermaid.vkf` in `notebooks/examples`.
+Examples, in `notebooks/examples`:
+- `web_and_maps/web_services.vkf`;
+- `life_science/life_science_web.vkf`;
+- `web_and_maps/gis.vkf`;
+- `widgets_and_diagrams/mermaid.vkf`.
 
 ## Use cases
 

@@ -1,10 +1,10 @@
 """Any LLM as a verknode agent, through MCP: the model gets the MCP server's tools and answers a question
 by building, running and checking a workflow.
 
-    python notebooks/examples/mcp/llm_mcp_agent.py "Which product sold the most units in each region?"
-    python notebooks/examples/mcp/llm_mcp_agent.py --http http://localhost:8888/verknode/mcp "..."
+    python notebooks/examples/agents/mcp/llm_mcp_agent.py "Which product sold the most units in each region?"
+    python notebooks/examples/agents/mcp/llm_mcp_agent.py --http http://localhost:8888/verknode/mcp "..."
 
-stdio (default): a headless verknode MCP server on notebooks/examples. --http: the MCP endpoint of a
+stdio (default): a headless verknode MCP server on notebooks/examples/agents. --http: the MCP endpoint of a
 running JupyterLab (token: JUPYTER_TOKEN) - open the workflow there and watch the nodes appear.
 The model: VERKNODE_LLM_URL / VERKNODE_LLM_MODEL (Ollama or OpenAI-compatible, as the LLM nodes use).
 """
@@ -28,7 +28,7 @@ with get_table, save it, then answer me in two or three sentences with the numbe
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("question", nargs="?", default="Which product sold the most units in each region (agent/sales.csv)?")
+    p.add_argument("question", nargs="?", default="Which product sold the most units in each region (data/sales.csv)?")
     p.add_argument("--workflow", default="mcp/top_products.vkf")
     p.add_argument("--http", help="the MCP URL of a running JupyterLab (live)")
     p.add_argument("--steps", type=int, default=60)

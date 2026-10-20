@@ -2,7 +2,7 @@
 
     api = AgentAPI(LocalWorkspace("notebooks"))          # .vkf files under a folder
     await api.call("add_node", {"workflow": "report.vkf", "type": "CSV Reader", "label": "Sales",
-                                "settings": {"path": "agent/sales.csv"}})
+                                "settings": {"path": "data/sales.csv"}})
 
 Each tool takes JSON arguments and answers with text written for a model (what happened, the ids,
 columns and problems to go on with) and data for programs. The same tools are served

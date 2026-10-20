@@ -17,7 +17,7 @@ extension/jupyterlab_verknode/vendor/
 extension/.yarn/
 *.egg-info/
 __pycache__/
-notebooks/examples/output/
+notebooks/examples/**/output/
 
 # the JupyterLite site (make lite)
 lite/_output/

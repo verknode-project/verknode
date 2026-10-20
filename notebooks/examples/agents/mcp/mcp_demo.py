@@ -1,6 +1,6 @@
 """An agent's session with the verknode MCP server, step by step (no LLM: the calls an agent makes).
 
-    python notebooks/examples/mcp/mcp_demo.py
+    python notebooks/examples/agents/mcp/mcp_demo.py
 
 Use case: "Which regions are below their sales target?" - asked every month, with different
 thresholds. Instead of answering with a one-off script, the agent builds a workflow once:
@@ -21,7 +21,7 @@ import sys
 from mcp_client import MCPClient
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)  # notebooks/examples: the workspace
+ROOT = os.path.dirname(HERE)  # notebooks/examples/agents: the workspace
 WORKFLOW = "mcp/regional_check.vkf"
 
 
@@ -49,14 +49,14 @@ def main():
     call(c, "create_workflow", workflow=WORKFLOW, overwrite=True)
     w = {"workflow": WORKFLOW}
     call(c, "set_variables", **w, variables={"threshold": 200.0})
-    sales = call(c, "add_node", **w, type="CSV Reader", label="Sales", settings={"path": "../agent/sales.csv"})["id"]
+    sales = call(c, "add_node", **w, type="CSV Reader", label="Sales", settings={"path": "../data/sales.csv"})["id"]
     revenue = call(c, "add_node", **w, type="Math Formula", label="Revenue", after=sales,
                      settings={"expression": "$amount$ * $quantity$", "new_column": "revenue"})["id"]
     call(c, "connect", **w, from_node=sales, to_node=revenue)
     per_region = call(c, "add_node", **w, type="GroupBy", label="Revenue per region", after=revenue, settings={
         "groups": ["region"], "aggregations": [{"column": "revenue", "method": "Sum", "name": "revenue"}]})["id"]
     call(c, "connect", **w, from_node=revenue, to_node=per_region)
-    targets = call(c, "add_node", **w, type="CSV Reader", label="Targets", settings={"path": "../agent/regions.csv"})["id"]
+    targets = call(c, "add_node", **w, type="CSV Reader", label="Targets", settings={"path": "../data/regions.csv"})["id"]
     joined = call(c, "add_node", **w, type="Joiner", label="With targets", after=per_region,
                     settings={"keys": [{"left": "region", "right": "region"}]})["id"]
     call(c, "connect", **w, from_node=per_region, to_node=joined, to_port=1)

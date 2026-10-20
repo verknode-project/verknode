@@ -12,5 +12,5 @@ extension/.yarn
 **/__pycache__
 **/.ipynb_checkpoints
 **/*.egg-info
-notebooks/examples/output
-notebooks/examples/*_export
+notebooks/examples/**/output
+notebooks/examples/**/*_export

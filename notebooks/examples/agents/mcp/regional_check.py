@@ -19,7 +19,7 @@ VARIABLES = {'threshold': 200.0}  # workflow variables (--var NAME=VALUE)
 
 def build(wf):
     """The nodes and their connections; returns the result nodes."""
-    sales = wf.add_node('CSV Reader', 'Sales', path='../agent/sales.csv', at=(0, 200))
+    sales = wf.add_node('CSV Reader', 'Sales', path='../data/sales.csv', at=(0, 200))
     revenue = wf.add_node(
         'Math Formula',
         'Revenue',
@@ -34,7 +34,7 @@ def build(wf):
         aggregations=[{'column': 'revenue', 'method': 'Sum', 'name': 'revenue'}],
         at=(300, 200),
     )
-    targets = wf.add_node('CSV Reader', 'Targets', path='../agent/regions.csv', at=(450, 200))
+    targets = wf.add_node('CSV Reader', 'Targets', path='../data/regions.csv', at=(450, 200))
     with_targets = wf.add_node(
         'Joiner',
         'With targets',

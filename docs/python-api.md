@@ -149,7 +149,7 @@ script node resets it too. Like Python Script it has `input_table_1`,
 input table). Input widgets with *Run on change* run the Workflow Scripts
 after them, so a checkbox or drop-down can rebuild part of the workflow.
 
-Example: `notebooks/examples/workflow_scripts.vkf` - a filter reconfigured
+Example: `notebooks/examples/loops_and_scripting/workflow_scripts.vkf` - a filter reconfigured
 from the data, a checkbox that switches the source for testing, a drop-down
 that changes a widget and adds a chart, and a parallel chunk loop next to
 the same parallel structure built by a script (one branch per chunk, joined

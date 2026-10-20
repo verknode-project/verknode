@@ -199,9 +199,19 @@ extra (chemistry, machine learning, Excel / XML / JSON, notebooks). See
 setup: `cd docker && make build && make up`, based on the conda
 `scipy-notebook`, with the source mounted ([development](docs/development.md)).
 
-Open `examples/demo.vkf` (more examples next to it:
-`widgets.vkf`, `timing.vkf`, `analytics.vkf`, `chemistry.vkf`,
-`structures.vkf`, `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`, `mermaid.vkf`, `llm_connections.vkf`, `data_query_agent.vkf`, `agent_improvement.vkf`, `llm_harness.vkf`, `custom_nodes.vkf`), or create a workflow from the Launcher.
+Open `examples/demo.vkf`, or create a workflow from the Launcher. The
+other examples are in folders by topic next to it:
+- `analytics/`;
+- `loops_and_scripting/`;
+- `widgets_and_diagrams/`;
+- `web_and_maps/`;
+- `life_science/`;
+- `llm/`;
+- `agents/`;
+- `custom_nodes/`.
+
+[`notebooks/examples/README.md`](notebooks/examples/README.md) lists what
+each one shows.
 
 **In the browser, with no server:** `cd docker && make lite && make lite-serve`
 builds a JupyterLite site of static files. The workflow engine runs in a

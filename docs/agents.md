@@ -108,10 +108,10 @@ ask before using them.
 ## A use case: "Which regions are below target?"
 
 The question comes up every month, with different thresholds.
-`notebooks/examples/mcp/mcp_demo.py` plays the agent's side as plain MCP
+`notebooks/examples/agents/mcp/mcp_demo.py` plays the agent's side as plain MCP
 calls:
 
-    python notebooks/examples/mcp/mcp_demo.py
+    python notebooks/examples/agents/mcp/mcp_demo.py
 
 1. **The agent looks around.** It calls `list_files`, then
    `find_node_types("join two tables")`, then `node_type_help` for the
@@ -132,15 +132,15 @@ calls:
 
    The saved workflow stays as it was.
 
-`notebooks/examples/mcp/llm_mcp_agent.py` lets a model do the agent's part.
+`notebooks/examples/agents/mcp/llm_mcp_agent.py` lets a model do the agent's part.
 It gives the server's tools to the model you set up for the
 [LLM nodes](llm.md#the-server) (`VERKNODE_LLM_URL`, `VERKNODE_LLM_MODEL`)
 and asks a question:
 
-    python notebooks/examples/mcp/llm_mcp_agent.py "Which product sold the most units in each region?"
-    python notebooks/examples/mcp/llm_mcp_agent.py --http http://localhost:8888/verknode/mcp \
-        --workflow notebooks/examples/mcp/revenue_share.vkf \
-        "Revenue per product, largest first, and its share of the total in percent? Data: notebooks/examples/agent/sales.csv"
+    python notebooks/examples/agents/mcp/llm_mcp_agent.py "Which product sold the most units in each region?"
+    python notebooks/examples/agents/mcp/llm_mcp_agent.py --http http://localhost:8888/verknode/mcp \
+        --workflow notebooks/examples/agents/mcp/revenue_share.vkf \
+        "Revenue per product, largest first, and its share of the total in percent? Data: notebooks/examples/agents/data/sales.csv"
 
 **Run with gemma4:26b on Ollama.** The model found the node types and
 corrected a file path from the tool's hint. It then built and checked:

@@ -29,7 +29,7 @@ protein. Residues within a distance of the shown ligands are drawn as thin
 sticks (PDB proteins); the protein file's own ligands are drawn thin and grey.
 Settings: protein style (cartoon, cartoon and surface, ball and stick,
 hidden), ligand style, which ligands are shown at the start, background, and
-a limit on the number of ligands. Example: `notebooks/examples/structures.vkf`
+a limit on the number of ligands. Example: `notebooks/examples/life_science/structures.vkf`
 - pick poses in a table of structures and see them in the pocket.
 
 **Molecule Sketcher** (Chemistry › RDKit › IO) makes a table of sketches
@@ -73,4 +73,4 @@ molecule's index and name, and Previous / Next (PageUp / PageDown) go
 through the list without closing it - changes are kept as you go, and
 molecules you only look at stay unedited (compared by canonical SMILES).
 
-Example: `notebooks/examples/chemistry.vkf`.
+Example: `notebooks/examples/life_science/chemistry.vkf`.

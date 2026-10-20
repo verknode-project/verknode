@@ -6,7 +6,7 @@ decides when the model is done. Claude Code, coding agents and chat
 assistants each have one. In verknode the harness is a workflow: every part
 is a node you can see, change, test and measure on its own.
 
-`notebooks/examples/llm_harness.vkf`:
+`notebooks/examples/agents/llm_harness.vkf`:
 
 ![An LLM harness as a verknode workflow: the task, a tools table (SQL, Python, a verknode workflow, Wikipedia over HTTP), the data and an Ollama connector on the left; the loop of Context Window, LLM Step, Tool Policy, Tool Executor and two Concatenates between Recursive Loop Start and End; on the right the answer, the trace of every message, tool calls per tool and tokens per turn; below, the policy denying a Python import of os, a DROP TABLE and an unknown shell tool](images/llm-harness-v1.png)
 

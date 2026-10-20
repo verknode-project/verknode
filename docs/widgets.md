@@ -87,11 +87,11 @@ page calls `verknode.setValue(v)`):
         def html(self, s, value):
             return f'<input type="color" value="{value}" onchange="verknode.setValue(this.value)">'
 
-`notebooks/examples/widgets.vkf` shows every widget: a what-if (table and
+`notebooks/examples/widgets_and_diagrams/widgets.vkf` shows every widget: a what-if (table and
 slider into a bar chart and a total; clicked bars into a table), a signal
 generator (inputs as flow variables of a Python Script, line and scatter
 charts whose selections feed value displays), molecule properties, an image
 display of a chart node, simple inputs, and custom widgets from
-`notebooks/examples/vkn_widget_nodes/` (a date input reusing the text box, a
+`notebooks/examples/widgets_and_diagrams/vkn_widget_nodes/` (a date input reusing the text box, a
 colour picker and a gauge with pages of their own). The base classes are
 documented in `extension/jupyterlab_verknode/engine/widgets.py`.

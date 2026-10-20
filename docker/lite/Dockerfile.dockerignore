@@ -12,8 +12,8 @@ extension/.yarn
 **/__pycache__
 **/.ipynb_checkpoints
 **/*.egg-info
-notebooks/examples/output
-notebooks/examples/*_export
+notebooks/examples/**/output
+notebooks/examples/**/*_export
 !lite/jupyter_lite_config.json
 !lite/jupyter-lite.json
 !lite/bundle_pyodide.py

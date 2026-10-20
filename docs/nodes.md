@@ -81,9 +81,8 @@ square = model, green square = image, dark red square = DB session, brown
 square = DB data. Non-table port objects (models etc.) are pickled inside
 the `.vkf`, so only open workflow files you trust.
 
-Examples: `notebooks/examples/demo.vkf`, `chemistry.vkf`, `analytics.vkf`,
-`custom_nodes.vkf`, `widgets.vkf`, `timing.vkf`, `workflow_scripts.vkf`,
-`structures.vkf` (HIV-1 protease, PDB 1HSG, with indinavir poses), `llm.vkf`, `ollama.vkf`, `coding_agent.vkf`, `time_loops.vkf`, `chatbot.vkf`, `workflow_agent.vkf`, `data_chat.vkf`, `web_services.vkf`, `life_science_web.vkf`, `gis.vkf`, `mermaid.vkf`, `llm_connections.vkf`, `data_query_agent.vkf`, `agent_improvement.vkf`, `llm_harness.vkf`.
+Examples: `notebooks/examples/demo.vkf`, and the folders by topic next to
+it. `notebooks/examples/README.md` lists them.
 
 ## Workflow files (.vkf)
 
