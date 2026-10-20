@@ -218,6 +218,12 @@ class PackagesHandler(BaseHandler):
             job = packages.start_job("uninstall", packages.uninstall, name)
         elif action == "update":
             job = packages.start_job("update", packages.update, [name] if name else None)
+        elif action == "examples" and name:  # (quick: no job)
+            try:
+                return self.reply(packages.copy_examples(name, self.manager.root_dir))
+            except (ValueError, OSError) as e:
+                self.set_status(400)
+                return self.reply({"message": str(e)})
         else:
             self.set_status(400)
             return self.reply({"message": f"Unknown package action: {action}"})

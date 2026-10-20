@@ -49,7 +49,7 @@ import urllib.request
 import uuid
 from dataclasses import dataclass, field
 
-API_VERSION = "1.0"
+API_VERSION = "1.1"  # (1.1: Package.examples)
 GROUP = "verknode.packages"
 INDEX_URL = "https://raw.githubusercontent.com/verknode-project/verknode/main/packages/index.json"
 WASM = sys.platform == "emscripten"
@@ -70,11 +70,18 @@ class Package:
     modules: list = field(default_factory=list)  # node modules (default: the package's "nodes" subpackage)
     static: str | None = None  # a folder, served at verknode/packages/<name>/ (relative: to the package)
     homepage: str = ""
+    examples: str | None = None  # a folder of example workflows (and their data), relative to the package (API 1.1)
     root: str = ""  # (set when loaded: the package's folder)
 
     def static_url(self, path: str) -> str:
         """The URL of a static file in pages shown in views and widgets (the server's base is put in)."""
         return f"__VERKNODE_BASE__verknode/packages/{self.name}/{path.lstrip('/')}"
+
+    def examples_dir(self) -> str | None:
+        if not self.examples:
+            return None
+        d = self.examples if os.path.isabs(self.examples) else os.path.join(self.root, self.examples)
+        return d if os.path.isdir(d) else None
 
     def static_dir(self) -> str | None:
         if not self.static:
@@ -124,7 +131,8 @@ class Loaded:
                 "version": p.version if p else self.dist_version, "dist": self.dist, "distVersion": self.dist_version,
                 "api": p.api if p else "", "description": p.description if p else "",
                 "homepage": p.homepage if p else "", "status": self.status, "error": self.error,
-                "nodes": len(self.factories), "portTypes": list(self.port_types)}
+                "nodes": len(self.factories), "portTypes": list(self.port_types),
+                "examples": bool(p and self.status == "loaded" and p.examples_dir())}
 
 
 LOADED: dict[str, Loaded] = {}
@@ -227,6 +235,30 @@ def unload(name: str, registry: dict | None = None):
         for m in list(sys.modules):
             if m.split(".")[0] in mods or (top and m.split(".")[0] == top):
                 del sys.modules[m]
+
+
+def copy_examples(name: str, root_dir: str, folder: str = "verknode-examples") -> dict:
+    """The package's example workflows, copied into the workspace (root_dir/verknode-examples/<name>/): files
+    already there are kept (they may have been changed); the workflows' paths, relative to root_dir."""
+    import shutil
+
+    rec = LOADED.get(name)
+    src = rec.package.examples_dir() if rec and rec.package else None
+    if not src:
+        raise ValueError(f"{name} has no examples")
+    dest = os.path.join(root_dir, folder, name)
+    for d, _, files in os.walk(src):
+        rel = os.path.relpath(d, src)
+        if any(part.startswith((".", "__")) or part == "output" for part in rel.split(os.sep) if part != "."):
+            continue
+        os.makedirs(os.path.join(dest, rel), exist_ok=True)
+        for f in files:
+            target = os.path.join(dest, rel, f)
+            if not os.path.exists(target) and not f.endswith((".pyc",)):
+                shutil.copy2(os.path.join(d, f), target)
+    workflows = sorted(os.path.relpath(os.path.join(d, f), root_dir).replace(os.sep, "/")
+                       for d, _, files in os.walk(dest) for f in files if f.endswith(".vkf"))
+    return {"folder": os.path.relpath(dest, root_dir).replace(os.sep, "/"), "workflows": workflows}
 
 
 def find(name: str) -> Loaded | None:

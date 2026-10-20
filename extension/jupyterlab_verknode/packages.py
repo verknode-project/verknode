@@ -87,6 +87,12 @@ def validate(path: str = ".") -> int:
         pkg.root = os.path.dirname(mod.__file__)
         if pkg.static and not os.path.isdir(pkg.static_dir()):
             errors.append(f"static folder {pkg.static!r} is not there")
+        if getattr(pkg, "examples", None):
+            ex = pkg.examples_dir()
+            if not ex:
+                errors.append(f"examples folder {pkg.examples!r} is not there (inside the Python package, for the wheel)")
+            elif not any(f.endswith(".vkf") for _, _, fs in os.walk(ex) for f in fs):
+                warnings.append(f"examples folder {pkg.examples!r} has no workflows (.vkf)")
         factories, n = {}, 0
         modules = pkg.modules or pk._module_names(pkg, mod_name.split(".")[0])
         for m in modules:

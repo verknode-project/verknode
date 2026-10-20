@@ -23,6 +23,9 @@ slicer, G-code, and 3D viewers and editors.
   or a folder.
 - **Without a restart:** a package's nodes are in the Node Repository as soon as it is installed. Open
   workflows switch to them. Uninstalled nodes turn into placeholders that name the package to install.
+- **Examples:** a package with example workflows has an *Examples* button. It copies them, with their
+  data, into `verknode-examples/<package>/` at the top of the file browser and opens the first one.
+  Files already there are kept, so your changes to them stay.
 
 Where packages go:
 - **Their own Python environment,** in `~/.verknode/packages` ([your verknode
@@ -85,6 +88,9 @@ What a package can have:
   `renderer = "html"`. An interactive html display is an editor: its page reads `verknode.value` and
   calls `verknode.setValue(v)`, and `select(obj, s, value)` makes its second output (the Mesh Editor
   places a part this way).
+- **Examples:** `examples="examples"` names a folder of example workflows and their data, inside the
+  Python package so that the wheel includes it. Settings › Packages › *Examples* copies them into the
+  user's workspace (node API 1.1).
 - **Static files:** `static="static"` is served at `verknode/packages/<name>/`, open to the views'
   sandboxed frames. Pages refer to these files with `package.static_url("viewer.js")`, which also works
   for ES modules and import maps.
@@ -105,7 +111,7 @@ It checks:
 
 ## Versions
 
-- **The node API.** `verknode.node.API_VERSION` (now 1.0) versions everything a package uses:
+- **The node API.** `verknode.node.API_VERSION` (now 1.1) versions everything a package uses:
   `verknode.node`, `verknode.package`, the widget base classes, port objects, node defaults and the
   static files. A minor version only adds. A major version may change or remove something: what is
   deprecated keeps working, with a warning, for a whole major version first, and the changelog says
@@ -118,6 +124,13 @@ It checks:
   saved with an older version migrates its settings when it is opened.
 - **A package's version** is its own (`[project] version`). A workflow saved with a package's results
   keeps them only for the same version, and runs the nodes again after an update.
+
+The node API's changes:
+
+| Version | What changed |
+|---|---|
+| 1.1 | `Package.examples`: example workflows, opened from Settings › Packages |
+| 1.0 | Packages, `register_port_type`, `PortObject.view_html`, interactive html displays, node `version` and `migrate()`, node defaults |
 
 ## Automated updates
 

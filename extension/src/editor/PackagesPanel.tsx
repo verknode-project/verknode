@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 import { postJSON, requestAPI } from '../api';
+import { openFileInLab } from './labViews';
 
 /** A verknode package (engine/packages.py): installed, or in the index. */
 interface Installed {
@@ -15,6 +16,8 @@ interface Installed {
   error: string;
   nodes: number;
   managed: boolean;
+  /** it has example workflows (Package.examples) */
+  examples: boolean;
 }
 
 interface Available {
@@ -93,6 +96,17 @@ export function PackagesPanel() {
       .then(r => setJob({ id: r.job, kind: action, args: [name], state: 'running', log: [] }))
       .catch(e => setError(e.message));
   const busy = job?.state === 'running';
+  const [opened, setOpened] = useState<string | null>(null);
+  // a package's examples: copied into the workspace (verknode-examples/<name>/), the first opened
+  const examples = (name: string) =>
+    postJSON<{ folder: string; workflows: string[] }>('packages', { action: 'examples', name })
+      .then(r => {
+        setOpened(`${r.folder}: ${r.workflows.length} workflow${r.workflows.length === 1 ? '' : 's'}`);
+        for (const w of r.workflows.slice(0, 1)) {
+          openFileInLab(w);
+        }
+      })
+      .catch(e => setError(e.message));
 
   if (!st) {
     return <div className="verknode-empty">{error ?? 'Loading…'}</div>;
@@ -122,6 +136,7 @@ export function PackagesPanel() {
           </button>
         )}
         {error && <span className="verknode-error-text">{error}</span>}
+        {opened && <span className="verknode-field-help">Examples in {opened}</span>}
       </div>
 
       <div className="verknode-field-section">Installed</div>
@@ -143,6 +158,15 @@ export function PackagesPanel() {
                     {p.status === 'loaded' && <div className="verknode-field-help">{p.nodes} nodes</div>}
                   </td>
                   <td className="verknode-packages-actions">
+                    {p.examples && (
+                      <button
+                        className="jp-Button jp-mod-styled"
+                        title="Copy the package's example workflows into verknode-examples/ and open them"
+                        onClick={() => void examples(p.name)}
+                      >
+                        Examples
+                      </button>
+                    )}
                     {u && (
                       <button className="jp-Button jp-mod-styled jp-mod-accept" disabled={busy} onClick={() => void act('update', p.name)}>
                         Update to {u.latest}
