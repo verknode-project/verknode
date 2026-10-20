@@ -15,3 +15,8 @@ from ..engine.node import NODE_REGISTRY as _REGISTRY
 SKIPPED = _load(__name__, _os.path.dirname(__file__), _REGISTRY)
 for _path, _error in SKIPPED:
     _logging.getLogger(__name__).info("verknode: skipped standard node file %s: %s", _path, _error)
+
+# verknode packages (engine/packages.py): node sets installed as Python packages, after the standard nodes
+from ..engine import packages as _packages  # noqa: E402
+
+_packages.load_installed(_REGISTRY)

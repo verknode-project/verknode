@@ -21,3 +21,6 @@ notebooks/examples/**/output/
 
 # the JupyterLite site (make lite)
 lite/_output/
+
+# other projects worked on next to verknode (their own repositories), e.g. the verknode-printing3d package
+external/

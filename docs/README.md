@@ -11,6 +11,7 @@
   ChEMBL, PDB, UCSC, Ensembl, Gene Ontology; GeoJSON, distances and spatial
   joins; maps and Mermaid diagrams on the canvas.
 - [Custom nodes](custom-nodes.md) - nodes as Python classes next to a workflow.
+- [Packages](packages.md) - node sets distributed on their own: installing, making one, versions, automated updates.
 - [Python API and notebooks](python-api.md) - controlling live workflows
   from Python, and the Jupyter Notebook node.
 - [Chemistry](chemistry.md) - RDKit molecules, the RDKit nodes and the

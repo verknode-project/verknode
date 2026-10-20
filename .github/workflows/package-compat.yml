@@ -1,0 +1,68 @@
+# Automated updates of a verknode package (docs/packages.md): run by the package every week -
+#
+#   on: {schedule: [{cron: "17 4 * * 1"}], workflow_dispatch: {}}
+#   permissions: {contents: write, pull-requests: write}
+#   jobs:
+#     compat:
+#       uses: verknode-project/verknode/.github/workflows/package-compat.yml@main
+#
+# It checks the package against the newest verknode. When verknode's node API has a new major version that
+# the package's API range leaves out, it widens the range (bump-api), runs the checks and tests with it, and
+# opens a pull request with the change - the package's authors review and merge. Nothing to do: no pull request.
+name: verknode package compatibility
+
+on:
+  workflow_call:
+    inputs:
+      verknode-ref: {type: string, default: main}
+      python-version: {type: string, default: "3.12"}
+      path: {type: string, default: "."}
+
+jobs:
+  compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: verknode-project/verknode
+          ref: ${{ inputs.verknode-ref }}
+          path: _verknode
+          sparse-checkout: extension
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ inputs.python-version }}"}
+      - name: verknode's Python, and the package
+        run: |
+          pip install "jupyter_server>=2.0.1,<3" "polars>=1.0" "numpy>=1.24" pyarrow packaging pytest
+          pip install -e "${{ inputs.path }}[test]" || pip install -e "${{ inputs.path }}"
+          echo "PYTHONPATH=$GITHUB_WORKSPACE/_verknode/extension" >> "$GITHUB_ENV"
+      - name: widen the API range to the newest verknode
+        id: bump
+        run: |
+          set +e
+          RANGE=$(python -m jupyterlab_verknode.packages bump-api "${{ inputs.path }}")
+          CODE=$?
+          set -e
+          echo "range=$RANGE" >> "$GITHUB_OUTPUT"
+          echo "API=$(python -m jupyterlab_verknode.packages api)" >> "$GITHUB_ENV"
+          if [ "$CODE" = "2" ]; then echo "changed=no" >> "$GITHUB_OUTPUT"; else echo "changed=yes" >> "$GITHUB_OUTPUT"; fi
+      - name: check and test with it
+        if: steps.bump.outputs.changed == 'yes'
+        run: |
+          pip install -e "${{ inputs.path }}" --no-deps
+          python -m jupyterlab_verknode.packages validate "${{ inputs.path }}"
+          if [ -d "${{ inputs.path }}/tests" ]; then python -m pytest -q "${{ inputs.path }}/tests"; fi
+      - name: pull request
+        if: steps.bump.outputs.changed == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH="verknode-api-$API"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git commit -am "Works with verknode's node API $API (api ${{ steps.bump.outputs.range }})"
+          git push -f origin "$BRANCH"
+          gh pr view "$BRANCH" >/dev/null 2>&1 || gh pr create --head "$BRANCH" \
+            --title "verknode node API $API" \
+            --body "verknode's node API is now $API. The package's checks and tests pass with it, so this widens its API range to ${{ steps.bump.outputs.range }}. (verknode-project/verknode's package-compat workflow)"

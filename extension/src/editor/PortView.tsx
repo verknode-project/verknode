@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { WorkflowController } from '../controller';
 import { PortData } from '../types';
+import { HtmlFrame } from './widgets/HtmlFrame';
 import { TypeBadge, VarBadge } from './ConfigureDialog';
 import { useWorkflowVersion, ViewFrame, ViewFrameKind, ViewMove } from './ChildWindow';
 
@@ -175,6 +176,11 @@ export function PortView(props: {
           )}
           {tab === 'object' && data.executed && !data.inactive && (
             <div className="verknode-table-scroll">
+              {data.html && (
+                <div className="verknode-port-html">
+                  <HtmlFrame html={data.html} width={0} height={0} fill />
+                </div>
+              )}
               {data.image && (
                 <div className="verknode-port-image">
                   <img src={`data:${data.image.mime};base64,${data.image.data}`} alt={data.portName} />

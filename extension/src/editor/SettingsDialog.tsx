@@ -4,6 +4,7 @@ import { WorkflowController } from '../controller';
 import { EditorPreferences, EditorSettings } from '../settings';
 import { CustomNodesPanel } from './CustomNodesPanel';
 import { NodeDefaultsPanel } from './NodeDefaultsPanel';
+import { PackagesPanel } from './PackagesPanel';
 import { Modal } from './Modal';
 
 type Option<T> = { value: T; label: string };
@@ -63,7 +64,7 @@ function Row(props: { label: string; help?: string; children: React.ReactNode })
 export function SettingsDialog(props: { controller: WorkflowController; settings: EditorSettings; onClose: () => void }) {
   const { settings } = props;
   const [values, setValues] = useState(settings.values);
-  const [tab, setTab] = useState<'editor' | 'defaults' | 'nodes'>('editor');
+  const [tab, setTab] = useState<'editor' | 'defaults' | 'packages' | 'nodes'>('editor');
   useEffect(() => {
     const onChange = (_: unknown, v: EditorPreferences) => setValues(v);
     settings.changed.connect(onChange);
@@ -99,10 +100,18 @@ export function SettingsDialog(props: { controller: WorkflowController; settings
         <button className={`verknode-tab ${tab === 'defaults' ? 'verknode-tab-active' : ''}`} onClick={() => setTab('defaults')}>
           Node defaults
         </button>
+        <button className={`verknode-tab ${tab === 'packages' ? 'verknode-tab-active' : ''}`} onClick={() => setTab('packages')}>
+          Packages
+        </button>
         <button className={`verknode-tab ${tab === 'nodes' ? 'verknode-tab-active' : ''}`} onClick={() => setTab('nodes')}>
           Custom nodes
         </button>
       </div>
+      {tab === 'packages' && (
+        <div className="verknode-tab-body">
+          <PackagesPanel />
+        </div>
+      )}
       {tab === 'defaults' && (
         <div className="verknode-tab-body">
           <NodeDefaultsPanel />

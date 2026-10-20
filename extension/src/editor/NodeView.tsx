@@ -86,8 +86,8 @@ function PortHandle(props: {
       id={`${kind === 'target' ? 'in' : 'out'}-${port.index}`}
       type={kind}
       position={kind === 'target' ? Position.Left : Position.Right}
-      className={cls}
-      style={{ top }}
+      className={cls + (port.color ? ' verknode-port-custom' : '')}
+      style={port.color ? ({ top, '--verknode-port-color': port.color } as React.CSSProperties) : { top }}
       title={
         `${port.index}: ${port.name}${port.optional && !port.implicit ? ' (optional)' : ''}` +
         (onOpen ? '\nDouble-click to open (Ctrl: in a new tab)' : '') +

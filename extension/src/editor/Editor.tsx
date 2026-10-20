@@ -891,7 +891,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
           target: String(c.destID),
           targetHandle: `in-${c.destPort}`,
           selected: selected.has(id),
-          className: `verknode-edge-${c.type}${c.inactive ? ' verknode-edge-inactive' : ''}${id === insertEdge.current ? ' verknode-edge-insert' : ''}`,
+          className: `verknode-edge-${c.type}${c.type !== 'table' && c.type !== 'flowvariable' ? ' verknode-edge-square' : ''}${c.inactive ? ' verknode-edge-inactive' : ''}${id === insertEdge.current ? ' verknode-edge-insert' : ''}`,
           data: { ...c }
         };
       });

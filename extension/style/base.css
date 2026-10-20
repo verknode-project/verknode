@@ -1085,6 +1085,65 @@
   margin-top: 12px;
 }
 
+.verknode-packages-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+
+.verknode-packages-bar input {
+  flex: 1;
+}
+
+.verknode-packages-table td {
+  vertical-align: top;
+}
+
+.verknode-packages-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.verknode-packages-actions > * {
+  margin-left: 6px;
+}
+
+.verknode-packages-status {
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 0.9em;
+  background: var(--jp-layout-color2);
+}
+
+.verknode-packages-loaded {
+  background: #d7f0dd;
+  color: #1e6b33;
+}
+
+.verknode-packages-incompatible,
+.verknode-packages-error {
+  background: #fbe3e1;
+  color: #9c2a2a;
+}
+
+pre.verknode-packages-error {
+  white-space: pre-wrap;
+  font-size: 0.85em;
+  padding: 4px;
+  max-height: 120px;
+  overflow: auto;
+}
+
+.verknode-packages-log {
+  max-height: 220px;
+  overflow: auto;
+  font-size: 0.85em;
+  background: var(--jp-layout-color2);
+  padding: 6px;
+  white-space: pre-wrap;
+}
+
 .verknode-error-text {
   color: var(--jp-error-color1);
 }
@@ -1552,6 +1611,23 @@
 
 .verknode-port-agent rect {
   fill: #00897b;
+}
+
+/* a package's port type (register_port_type): its colour comes with the port */
+.verknode-port-custom rect {
+  fill: var(--verknode-port-color);
+}
+
+.verknode-editor .react-flow__edge.verknode-edge-square .react-flow__edge-path {
+  stroke: var(--jp-ui-font-color1);
+  stroke-width: 1.3;
+}
+
+/* a port object's own page (PortObject.view_html, e.g. a 3D viewer) */
+.verknode-port-html {
+  height: min(70vh, 560px);
+  border: 1px solid var(--verknode-border);
+  margin-bottom: 8px;
 }
 
 .verknode-port-optional.verknode-port-square rect {

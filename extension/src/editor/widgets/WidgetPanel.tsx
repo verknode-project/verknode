@@ -109,8 +109,9 @@ function ImageRenderer({ data, width, height }: OutputRendererProps) {
   );
 }
 
-function HtmlRenderer({ data, width, height }: OutputRendererProps) {
-  return <HtmlFrame html={data.html ?? ''} width={width} height={height} />;
+function HtmlRenderer({ data, width, height, selection, onSelect }: OutputRendererProps) {
+  // (interactive html displays: verknode.value is the selection, verknode.setValue(v) changes it - e.g. an editor)
+  return <HtmlFrame html={data.html ?? ''} width={width} height={height} value={selection} onValue={onSelect} keep={!!onSelect} />;
 }
 
 for (const [name, control] of Object.entries(BUILTIN_CONTROLS)) {

@@ -83,6 +83,11 @@ standalone Python script that runs without Jupyter.
 - **Chemistry built in** - RDKit molecules as a column type, drawn as
   structures, with a structure sketcher; proteins and ligands in 3D with
   NGL or Mol*, in node views and on the canvas ([chemistry](docs/chemistry.md)).
+- **Packages** - sets of nodes, port types, widgets and editors that anyone
+  can publish and users install from the package manager, kept up to date
+  by themselves; the first is 3D printing: meshes, CAD files, a slicer,
+  G-code, 3D viewers ([packages](docs/packages.md),
+  [verknode-printing3d](https://github.com/verknode-project/verknode-printing3d)).
 
 ## A quick look
 

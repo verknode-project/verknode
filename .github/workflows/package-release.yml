@@ -1,0 +1,35 @@
+# A verknode package's release (docs/packages.md): on a tag vX.Y.Z of the package -
+#
+#   on: {push: {tags: ["v*"]}}
+#   permissions: {contents: write}
+#   jobs:
+#     release:
+#       uses: verknode-project/verknode/.github/workflows/package-release.yml@main
+#
+# builds the wheel and the sdist (checking that the tag is the project's version) and puts them on a GitHub
+# release. verknode's package index adds the release by itself (packages-index.yml, every day).
+name: verknode package release
+
+on:
+  workflow_call:
+    inputs:
+      python-version: {type: string, default: "3.12"}
+      path: {type: string, default: "."}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ inputs.python-version }}"}
+      - name: build
+        run: |
+          pip install build
+          python -m build "${{ inputs.path }}" --outdir dist
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('${{ inputs.path }}/pyproject.toml', 'rb'))['project']['version'])")
+          if [ "v$VERSION" != "${GITHUB_REF_NAME}" ]; then echo "The tag ${GITHUB_REF_NAME} is not the project's version v$VERSION"; exit 1; fi
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes --verify-tag

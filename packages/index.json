@@ -1,0 +1,15 @@
+{
+  "format": 1,
+  "about": "verknode's package index (docs/packages.md). Add a package by a pull request: an entry with its repository; its versions come by themselves from its GitHub releases (update_index.py, packages-index.yml).",
+  "packages": [
+    {
+      "name": "printing3d",
+      "dist": "verknode-printing3d",
+      "title": "3D Printing",
+      "description": "Meshes and CAD files (STL, OBJ, PLY, 3MF, GLB, STEP, IGES, DXF), modelling, a slicer, G-code and 3D viewers and editors.",
+      "homepage": "https://github.com/verknode-project/verknode-printing3d",
+      "repository": "https://github.com/verknode-project/verknode-printing3d",
+      "versions": []
+    }
+  ]
+}

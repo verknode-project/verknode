@@ -61,6 +61,23 @@ class PortObject:
     def summary(self) -> dict:
         return {}
 
+    def view_html(self) -> str | None:
+        """A page of its own for port views and the hover inspection (e.g. a 3D viewer), or None. It runs in a
+        sandboxed frame; __VERKNODE_BASE__ in it is the server's base URL (Package.static_url)."""
+        return None
+
+
+# port types of packages (register_port_type): name -> {"label", "color"}; the built-in ones have their
+# own looks in the editor
+PORT_TYPES: dict[str, dict] = {}
+
+
+def register_port_type(name: str, label: str, color: str = "#777777", description: str = "") -> str:
+    """A port type of a package (a square port of this colour): its PortObject subclasses set port_type to
+    the name it returns."""
+    PORT_TYPES[name] = {"label": label, "color": color, "description": description}
+    return name
+
 
 class ModelPortObject(PortObject):
     """A trained model: estimator plus the learning spec needed to apply it."""
@@ -271,7 +288,7 @@ class Port:
     optional: bool = False
 
     def to_json(self, index: int) -> dict:
-        return {
+        out = {
             "index": index,
             "type": self.type,
             "name": self.name,
@@ -279,6 +296,10 @@ class Port:
             "optional": self.optional,
             "implicit": False,
         }
+        custom = PORT_TYPES.get(self.type)
+        if custom is not None:
+            out["color"], out["typeLabel"] = custom["color"], custom["label"]
+        return out
 
 
 IMPLICIT_IN = Port(FLOWVARIABLE, "Variable Inport", "Flow variables (implicit port)", optional=True)
@@ -483,6 +504,9 @@ class NodeModel:
     # not run in a test sandbox (engine.sandbox) unless it allows it
     sandbox_unsafe = False
     has_view = False  # execute() sets ctx.set_view(html)
+    # the version of the node's settings: raise it when they change, and migrate() turns settings saved by
+    # an older version into the new ones (workflows update themselves when they are opened)
+    version = 1
     # nodes that close the scope this node opens (loop end, End IF, Catch ...),
     # most likely first; suggested first by the Tab quick-add while open
     closed_by: list = []
@@ -522,6 +546,10 @@ class NodeModel:
     def execute(self, inputs: list, s: dict, ctx: ExecContext) -> list | None:
         raise NotImplementedError
 
+    def migrate(self, settings: dict, from_version: int) -> dict:
+        """Settings saved by an older version of the node (from_version < version) as this version's."""
+        return settings
+
     @classmethod
     def describe(cls) -> dict:
         return {
@@ -540,6 +568,9 @@ class NodeModel:
             "closedBy": list(cls.closed_by),
             # (the packages it needs beyond polars, and whether they are installed: engine/requirements.py)
             "requires": _requirements(cls),
+            # (the verknode package it comes from, if any: engine/packages.py)
+            "package": getattr(cls, "_verknode_package", None),
+            "version": getattr(cls, "version", 1),
         }
 
 

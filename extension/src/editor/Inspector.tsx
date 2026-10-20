@@ -3,6 +3,7 @@ import { useReactFlow, useViewport } from '@xyflow/react';
 
 import { WorkflowController } from '../controller';
 import { PortData } from '../types';
+import { HtmlFrame } from './widgets/HtmlFrame';
 import { Cell } from './PortView';
 import { tail } from './widgets/WidgetPanel';
 import { TailStore } from './widgets/tails';
@@ -285,6 +286,9 @@ function Content({ data }: { data: PortData }) {
         </tbody>
       </table>
     );
+  }
+  if (data.html) {
+    return <HtmlFrame html={data.html} width={360} height={260} />;
   }
   if (data.image) {
     return <img className="verknode-inspect-image" src={`data:${data.image.mime};base64,${data.image.data}`} />;

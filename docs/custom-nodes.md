@@ -32,7 +32,8 @@ data and notebooks:
   with tracebacks, and can create an example node file in either.
 - **Sharing:** a workflow that uses nodes from your folder needs them on the
   other machine too. Without them, those nodes show as missing. Put them in
-  a workflow folder to share them.
+  a workflow folder to share them, or make them a [package](packages.md)
+  that others install.
 - **⟳ Reload nodes** (toolbar, shown when the workflow has node folders)
   re-imports the folders. Nodes switch to the new code and
   keep their settings; nodes whose code changed are reset. Changed files are

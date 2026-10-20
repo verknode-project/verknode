@@ -167,10 +167,14 @@ export function Description({ node }: { node: NodeDescription | null }) {
           {list.map(p => (
             <React.Fragment key={p.index}>
               <dt>
-                <span className={`verknode-desc-port verknode-desc-port-${p.type}`} /> {p.index}: {p.name}
+                <span
+                  className={`verknode-desc-port verknode-desc-port-${p.type}`}
+                  style={p.color ? { background: p.color } : undefined}
+                />{' '}
+                {p.index}: {p.name}
                 {p.optional ? ' (optional)' : ''}
               </dt>
-              <dd>{p.description || PORT_TYPE_NAMES[p.type]}</dd>
+              <dd>{p.description || PORT_TYPE_NAMES[p.type] || p.typeLabel}</dd>
             </React.Fragment>
           ))}
         </dl>

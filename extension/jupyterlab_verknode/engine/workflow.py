@@ -73,14 +73,18 @@ class MissingNodeModel(NodeModel):
     node_type = "Other"
     icon = "?"
 
-    def __init__(self, factory, name, in_ports, out_ports):
+    def __init__(self, factory, name, in_ports, out_ports, package: str | None = None):
         self.factory = factory
         self.name = name or "Missing Node"
         self.in_ports = in_ports
         self.out_ports = out_ports
-        self.description = f"Node implementation not found: {factory}"
+        self.package = package
+        self.description = (f"From the package {package}, which is not installed (Settings › Packages)" if package
+                            else f"Node implementation not found: {factory}")
 
     def configure(self, in_specs, s, ctx):
+        if self.package:
+            raise InvalidSettingsError(f"Needs the verknode package {self.package!r}: install it in Settings › Packages")
         raise InvalidSettingsError(f"Node implementation not found: {self.factory}")
 
     def describe(self):
@@ -1105,19 +1109,33 @@ class Workflow:
             self._changed(dirty=False)
             return report
 
+    def refresh_registry(self, reason: str = "packages changed"):
+        """Nodes switch to what the node registry has now (a package installed, updated or removed)."""
+        if self.executing:
+            return
+        with self._lock:
+            for nc in list(self.nodes.values()):
+                self._swap_model(nc)
+            self.registry_version += 1
+            self._log("INFO", f"Nodes updated ({reason})")
+            self._changed(dirty=False)
+
     def _swap_model(self, nc: NodeContainer):
         cls = self.lookup(nc.factory)
         old = nc.model
         if cls is None:
-            if not isinstance(old, MissingNodeModel) and getattr(old, "_verknode_custom", False):
-                nc.model = MissingNodeModel(nc.factory, old.name, list(old.in_ports), list(old.out_ports))
+            pkg = getattr(old, "_verknode_package", None)
+            if not isinstance(old, MissingNodeModel) and (getattr(old, "_verknode_custom", False) or pkg):
+                nc.model = MissingNodeModel(nc.factory, old.name, list(old.in_ports), list(old.out_ports), package=pkg)
                 self._reset_with_descendants(nc.id)
-                nc.message = ("ERROR", f"Custom node implementation not found: {nc.factory}")
+                nc.message = ("ERROR", f"Needs the verknode package {pkg!r}: install it in Settings › Packages" if pkg
+                              else f"Custom node implementation not found: {nc.factory}")
             return
         if type(old) is cls:
             return
         new = cls()
-        if isinstance(old, MissingNodeModel) or not getattr(old, "_verknode_custom", False) or \
+        if isinstance(old, MissingNodeModel) or not (getattr(old, "_verknode_custom", False)
+                                                     or getattr(old, "_verknode_package", None)) or \
                 getattr(type(old), "_verknode_hash", None) != getattr(cls, "_verknode_hash", None):
             changed = True
         else:
@@ -2573,6 +2591,12 @@ class Workflow:
         out["inactive"] = obj is INACTIVE
         if isinstance(obj, PortObject):
             out["object"] = {k: json_value(v) for k, v in obj.summary().items()}
+            try:
+                html = obj.view_html()
+            except Exception as e:  # noqa: BLE001 - the summary still shows
+                html = f"<pre>{e}</pre>"
+            if html:
+                out["html"] = html
             if isinstance(obj, ImagePortObject) and obj.data:
                 out["image"] = {"mime": obj.mime, "data": base64.b64encode(obj.data).decode("ascii")}
             cols = obj.columns()

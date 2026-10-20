@@ -1,4 +1,6 @@
-export type PortType = 'table' | 'flowvariable' | 'model' | 'image' | 'dbsession' | 'dbdata' | 'llm' | 'agent';
+export type BuiltinPortType = 'table' | 'flowvariable' | 'model' | 'image' | 'dbsession' | 'dbdata' | 'llm' | 'agent';
+/** the built-in port types, or one of a package (register_port_type: its colour and label come with the port) */
+export type PortType = BuiltinPortType | (string & {});
 export type NodeState = 'IDLE' | 'CONFIGURED' | 'EXECUTED' | 'EXECUTING' | 'QUEUED';
 export type VarType = 'STRING' | 'INTEGER' | 'DOUBLE' | 'BOOLEAN';
 
@@ -9,6 +11,9 @@ export interface PortInfo {
   description: string;
   optional: boolean;
   implicit: boolean;
+  /** a package's port type: its colour and name */
+  color?: string;
+  typeLabel?: string;
 }
 
 export interface FieldInfo {
@@ -303,6 +308,8 @@ export interface PortData {
   flowVariables?: FlowVariableInfo[];
   object?: Record<string, any>;
   image?: { mime: string; data: string };
+  /** a page of the port object's own (PortObject.view_html, e.g. a 3D viewer), shown in a sandboxed frame */
+  html?: string;
 }
 
 export interface NodeViewData {

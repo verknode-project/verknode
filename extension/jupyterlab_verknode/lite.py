@@ -282,6 +282,9 @@ class Bridge:
             ("GET", r"nodes", self.nodes),
             ("GET", r"defaults", lambda q, b: defaults.describe()),
             ("POST", r"defaults", lambda q, b: defaults.save(b.get("values") or {})),
+            # (packages are installed on a Jupyter server; here: the ones the site was built with)
+            ("GET", r"packages", lambda q, b: {"server": False, "api": __import__(
+                "jupyterlab_verknode.engine.packages", fromlist=["API_VERSION"]).API_VERSION}),
             ("POST", r"sessions", self.open),
             ("GET", rf"sessions/{SID}", self.view),
             ("DELETE", rf"sessions/{SID}", self.close),

@@ -67,6 +67,11 @@ def save_workflow(wf: Workflow) -> bytes:
             settings = {
                 "factory": nc.factory,
                 "node_name": nc.name,
+                # the version of its settings (NodeModel.version) and its package, if any: a workflow opened
+                # with a newer node migrates the settings, one without the package says which to install
+                "node_version": getattr(nc.model, "version", 1),
+                "package": ({"name": nc.model._verknode_package, "version": getattr(nc.model, "_verknode_package_version", "")}
+                            if getattr(nc.model, "_verknode_package", None) else None),
                 "customDescription": nc.custom_description,
                 "state": "EXECUTED" if nc.executed else "CONFIGURED",
                 "inactive": nc.inactive,
@@ -156,6 +161,7 @@ def load_workflow(data: bytes, base_dir: str | None = None) -> Workflow:
                     factory, s.get("node_name"),
                     [Port(t, f"In {i + 1}") for i, t in enumerate(pt.get("in", []))],
                     [Port(t, f"Out {i + 1}") for i, t in enumerate(pt.get("out", []))],
+                    package=(s.get("package") or {}).get("name"),
                 )
             nc = NodeContainer(nid, factory, ui.get("x", 0), ui.get("y", 0), model=missing or cls())
             nc.annotation = entry.get("annotation", nc.annotation)
@@ -163,7 +169,14 @@ def load_workflow(data: bytes, base_dir: str | None = None) -> Workflow:
             nc.parent = entry.get("parent")
             nc.custom_description = s.get("customDescription", "")
             known = {f.key for f in nc.model.fields}
-            nc.settings.update({k: v for k, v in s.get("model", {}).items() if k in known or missing})
+            saved = dict(s.get("model", {}))
+            saved_version = int(s.get("node_version") or 1)
+            if missing is None and saved_version < getattr(nc.model, "version", 1):
+                try:  # (settings of an older version of the node, made the new version's)
+                    saved = nc.model.migrate(saved, saved_version)
+                except Exception as e:  # noqa: BLE001 - the defaults, rather than no workflow
+                    nc.message = ("WARNING", f"Settings of version {saved_version} could not be updated: {e}")
+            nc.settings.update({k: v for k, v in saved.items() if k in known or missing})
             nc.var_settings = s.get("variables", {}) or {}
             if s.get("message"):
                 nc.message = (s["message"]["level"], s["message"]["text"])

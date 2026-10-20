@@ -54,6 +54,7 @@ from jupyterlab_verknode.engine import views  # noqa: F401 - chart/table helpers
 from jupyterlab_verknode.engine.flowvars import VAR_TYPES, FlowVariable, coerce, infer_type, make  # noqa: F401
 from jupyterlab_verknode.engine.custom import capture_stdout  # noqa: F401 - this thread's print() into a buffer
 from jupyterlab_verknode.engine.defaults import node_defaults, register_defaults  # noqa: F401 - global setup
+from jupyterlab_verknode.engine.packages import API_VERSION  # noqa: F401 - the node API's version (docs/packages.md)
 from jupyterlab_verknode.engine.helpers import selected_columns, substitute_variables  # noqa: F401
 from jupyterlab_verknode.engine.node import (  # noqa: F401
     DB_DATA,
@@ -78,8 +79,10 @@ from jupyterlab_verknode.engine.node import (  # noqa: F401
     LLMConnectionPortObject,
     ModelPortObject,
     NodeModel,
+    PORT_TYPES,
     Port,
     PortObject,
+    register_port_type,
     register,
     require_column,
     spec_of,

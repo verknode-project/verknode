@@ -14,7 +14,7 @@ from jupyter_server.base.handlers import APIHandler
 from jupyter_server.utils import ensure_async, url_path_join
 
 from . import nodes  # noqa: F401 - registers the built-in nodes
-from .engine import defaults
+from .engine import defaults, packages
 from .engine.node import NODE_REGISTRY
 from .engine.persistence import load_workflow, save_workflow
 from .agentapi import AgentAPI, LocalWorkspace, ToolError
@@ -198,6 +198,63 @@ class DefaultsHandler(BaseHandler):
         except (ValueError, OSError) as e:
             self.set_status(400)
             self.reply({"message": str(e)})
+
+
+class PackagesHandler(BaseHandler):
+    """The package manager (engine/packages.py): GET the installed and available packages; POST
+    {action: install | uninstall | update | check, name} starts a job (GET packages/jobs/<id> to follow)."""
+
+    @tornado.web.authenticated
+    def get(self):
+        self.reply(packages.status(refresh=self.get_argument("refresh", "") == "1"))
+
+    @tornado.web.authenticated
+    def post(self):
+        a = self.body()
+        action, name = a.get("action"), (a.get("name") or "").strip()
+        if action == "install" and name:
+            job = packages.start_job("install", packages.install, name)
+        elif action == "uninstall" and name:
+            job = packages.start_job("uninstall", packages.uninstall, name)
+        elif action == "update":
+            job = packages.start_job("update", packages.update, [name] if name else None)
+        else:
+            self.set_status(400)
+            return self.reply({"message": f"Unknown package action: {action}"})
+        self.reply({"job": job})
+
+
+class PackageJobHandler(BaseHandler):
+    @tornado.web.authenticated
+    def get(self, jid):
+        job = packages.JOBS.get(jid)
+        if job is None:
+            raise tornado.web.HTTPError(404, "No such job")
+        self.reply(job)
+
+
+class PackageFileHandler(tornado.web.StaticFileHandler):
+    """A package's static files (Package.static: viewers' scripts) at verknode/packages/<name>/: public like
+    JupyterLab's assets; open to every origin, as the views that load them run in sandboxed frames."""
+
+    @classmethod
+    def get_absolute_path(cls, root, path):
+        name, _, rest = path.partition("/")
+        folder = packages.static_dir(name)
+        if not folder:
+            raise tornado.web.HTTPError(404)
+        return os.path.abspath(os.path.join(folder, rest))
+
+    def validate_absolute_path(self, root, absolute_path):
+        name = self.path_args[0].partition("/")[0] if self.path_args else ""
+        folder = os.path.abspath(packages.static_dir(name) or "/nonexistent")
+        if not absolute_path.startswith(folder + os.sep) or not os.path.isfile(absolute_path):
+            raise tornado.web.HTTPError(404)
+        return absolute_path
+
+    def set_extra_headers(self, path):
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Cache-Control", "public, max-age=3600")
 
 
 class SessionsHandler(BaseHandler):
@@ -585,6 +642,8 @@ def setup_handlers(server_app):
     handlers = [
         (url_path_join(base, "nodes"), NodesHandler),
         (url_path_join(base, "defaults"), DefaultsHandler),
+        (url_path_join(base, "packages"), PackagesHandler),
+        (url_path_join(base, "packages", "jobs", r"(?P<jid>[0-9a-f]+)"), PackageJobHandler),
         (url_path_join(base, "sessions"), SessionsHandler),
         (url_path_join(base, "sessions", sid), SessionHandler),
         (url_path_join(base, "sessions", sid, "save"), SaveHandler),
@@ -613,5 +672,23 @@ def setup_handlers(server_app):
          {"path": KETCHER_DIR, "default_filename": "index.html"}),
         (url_path_join(web_app.settings["base_url"], "verknode", "vendor", "(.*)"), VendorFileHandler,
          {"path": VENDOR_DIR}),
+        # the static files of verknode packages
+        (url_path_join(web_app.settings["base_url"], "verknode", "packages", "(.*)"), PackageFileHandler,
+         {"path": "/"}),
     ]
     web_app.add_handlers(".*$", handlers)
+
+    # packages changed (installed, updated, removed): the open workflows switch to the nodes there are now
+    def refresh():
+        for wf in list(manager.sessions.values()):
+            try:
+                wf.refresh_registry()
+            except Exception:  # noqa: BLE001
+                pass
+
+    packages.ON_CHANGE.append(refresh)
+    # updates of the packages, by the policy (Settings › Node defaults › Packages), without holding up the start
+    import threading
+
+    threading.Thread(target=packages.auto_update, args=(server_app.log.info,), daemon=True,
+                     name="verknode-packages-updates").start()
