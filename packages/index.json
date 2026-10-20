@@ -9,7 +9,14 @@
       "description": "Meshes and CAD files (STL, OBJ, PLY, 3MF, GLB, STEP, IGES, DXF), modelling, a slicer, G-code and 3D viewers and editors.",
       "homepage": "https://github.com/verknode-project/verknode-printing3d",
       "repository": "https://github.com/verknode-project/verknode-printing3d",
-      "versions": []
+      "versions": [
+        {
+          "version": "0.1.0",
+          "api": ">=1.0,<2",
+          "install": "verknode-printing3d @ https://github.com/verknode-project/verknode-printing3d/releases/download/v0.1.0/verknode_printing3d-0.1.0-py3-none-any.whl",
+          "released": "2026-10-20"
+        }
+      ]
     }
   ]
 }
