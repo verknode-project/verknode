@@ -180,6 +180,41 @@ it, and each failing case goes back to the model:
 
 ![A coding agent: a recursive loop of LLM Prompter and Python Code Runner, with the attempts and the failing test case of each](docs/images/llm-agent-v1.png)
 
+## Packages
+
+verknode grows with **packages**: optional sets of nodes, port types,
+canvas widgets, editors and example workflows. You install the ones you
+want from **≡ Settings › Packages**. They work at once, without a restart,
+and they stay up to date by themselves.
+
+**3D printing** ([verknode-printing3d](https://github.com/verknode-project/verknode-printing3d)),
+the first package:
+- **Files:** meshes and CAD files (STL, OBJ, PLY, 3MF, GLB, STEP, IGES,
+  DXF).
+- **Modelling:** shapes, booleans, extrusions, repair, OpenSCAD.
+- **Printing:** a slicer, and G-code as a table of moves.
+- **On the canvas:** 3D viewers, and an editor that places the part on the
+  build plate.
+
+![verknode-printing3d: a block with a hole made of shapes and a boolean, placed by hand in the Mesh Editor; sliced for the printer, its toolpaths layer by layer and its print time and filament; a DXF drawing extruded and an STL knob combined on the build plate in the Mesh Viewer](docs/images/printing3d-hero-v1.png)
+
+| Package | What it adds | Install |
+|---|---|---|
+| [3D Printing](https://github.com/verknode-project/verknode-printing3d) (`printing3d`) | 18 nodes: mesh and CAD readers and writers, modelling, a slicer, G-code, 3D viewers and an editor; the `mesh` port; a printer profile; an example workflow | ≡ Settings › Packages › Install |
+
+**Make your own.** A package is an ordinary Python package that follows a
+few conventions:
+- an entry point;
+- a stable factory id for each node;
+- the range of verknode's node API it works with;
+- examples that come with their results.
+
+`python -m jupyterlab_verknode.packages new my-nodes` starts one, with CI,
+weekly compatibility checks and releases already set up. Once a package is
+listed in verknode's index, it is offered to every verknode it fits. See
+[packages](docs/packages.md) and its
+[conventions](docs/packages.md#conventions).
+
 ## Quick start
 
 **Try it in your browser**, with nothing to install:
@@ -232,7 +267,7 @@ reverse proxy is in [deployment](docs/deployment.md).
 
 See [docs/](docs/README.md): the [editor](docs/editor.md),
 [nodes](docs/nodes.md), [widgets](docs/widgets.md),
-[custom nodes](docs/custom-nodes.md), [Python API](docs/python-api.md),
+[custom nodes](docs/custom-nodes.md), [packages](docs/packages.md), [Python API](docs/python-api.md),
 [installing](docs/install.md), [export](docs/export.md), [agents and MCP](docs/agents.md),
 [chemistry](docs/chemistry.md), [deployment](docs/deployment.md) and
 [development](docs/development.md).

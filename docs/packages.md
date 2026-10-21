@@ -11,6 +11,14 @@ Users pick the packages they want, and anyone can publish one. The first is
 [verknode-printing3d](https://github.com/verknode-project/verknode-printing3d): meshes, CAD files, a
 slicer, G-code, and 3D viewers and editors.
 
+Packages so far:
+
+| Package | What it adds |
+|---|---|
+| [3D Printing](https://github.com/verknode-project/verknode-printing3d) (`printing3d`) | Meshes and CAD files (STL, OBJ, PLY, 3MF, GLB, STEP, IGES, DXF), modelling, a slicer, G-code, 3D viewers and an editor |
+
+![verknode-printing3d's example: a part from shapes placed in the Mesh Editor, sliced, its toolpaths and print time; a DXF drawing extruded with an STL knob on the build plate](images/printing3d-hero-v1.png)
+
 ## Using packages
 
 **≡ Settings › Packages** is the package manager:
@@ -144,6 +152,30 @@ The policy is that whatever can be updated by itself is. Everyone does as little
 | Installed packages | Updates are offered (*Notify*) or installed at start (*Install compatible updates*), only to versions that fit the installed verknode. |
 | The package environment | It is made again, with its packages, when the server's Python changes. |
 | Saved workflows | Nodes migrate their own settings (`version`, `migrate()`). Results are kept until a package's version changes. |
+
+## Conventions
+
+These conventions keep packages easy to find, safe to combine and able to update by themselves. They are
+what `validate` checks, or warns about. [verknode-printing3d](https://github.com/verknode-project/verknode-printing3d)
+follows all of them and makes a good model.
+
+| | Convention | printing3d |
+|---|---|---|
+| Name | The package name is short: lower case, digits and `_`. The distribution is `verknode-<name>` and the module `verknode_<name>`. The entry point has the package's name. | `printing3d`, `verknode-printing3d`, `verknode_printing3d` |
+| Node ids | Every node sets `factory = "<name>.<Node>"`. Never change one: saved workflows refer to nodes by it. To rename a node, change its `name` instead. | `printing3d.Slicer` |
+| Repository | Categories start with the field the package is about, then a subfolder per kind of node. | `3D Printing/IO`, `…/Modeling`, `…/Printing`, `…/Views` |
+| Settings | Changing a node's settings raises its `version`, and `migrate()` turns older settings into the new ones. Removing a setting is a major change. | (all at version 1) |
+| Port types | A type that other packages may produce or read gets a generic name, documented in the package's README so that others can use it. A type only the package itself uses gets the package's name in it (`<name>-thing`). | `mesh`: vertices and faces in mm |
+| Data | Tables stay tables where they can: one row per item, so that every verknode node works on them. | G-code is a table of moves |
+| Setup | What a user sets once goes in node defaults (`register_defaults("<name>", …)`), not in every node. | the printer: build volume, nozzle, filament |
+| Files | Viewers' scripts and libraries go in `static/` and load through `package.static_url()`, never from a CDN, so that they work in closed networks. | `static/three/`, `static/viewer.js` |
+| Examples | At least one example workflow in `examples/` inside the Python package, built by a script (`scripts/build_example.py`) with the version being released, so that it opens with its results. | `examples/printing3d.vkf` |
+| Dependencies | List everything the nodes import, and test in a clean environment: the CI does this. Optional heavy libraries may be imported inside a node, with `requires = [...]`, so that only that node is dimmed when they are missing. | trimesh, shapely, manifold3d, cascadio... |
+| Versions | `[project] version` is semver for the package's own nodes. `[tool.verknode] api` and the `Package`'s `api` give the node API range, and the two must match. A release is a tag `v<version>`. | `0.1.2`, `api = ">=1.1,<2"` |
+| Automation | Use verknode's workflows: `package-check.yml` for CI, `package-compat.yml` every week, `package-release.yml` on tags. Do not copy them: reference them with `@main`. | `.github/workflows/` |
+| Docs | The README opens with a hero screenshot of the example, then a table of the nodes, how to install the package, and its versions. A CHANGELOG lists every release. | `README.md`, `CHANGELOG.md` |
+| License | An OSI license. Bundled third-party files keep theirs, next to them. | Apache-2.0; three.js MIT |
+| Discovery | The GitHub repository has the topic `verknode-package`. | [topic: verknode-package](https://github.com/topics/verknode-package) |
 
 ## Listing a package in the index
 
