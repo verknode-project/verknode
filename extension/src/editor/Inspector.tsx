@@ -27,6 +27,8 @@ export interface Inspection {
   /** top left, in canvas coordinates */
   at: { x: number; y: number };
   pinned: boolean;
+  /** shown while its node is selected, with the widgets following the selection (Enter) */
+  follow?: boolean;
   w?: number;
   h?: number;
 }

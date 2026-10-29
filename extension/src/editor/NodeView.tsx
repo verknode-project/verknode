@@ -1,5 +1,5 @@
 import { Handle, Node, NodeProps, Position } from '@xyflow/react';
-import React, { memo } from 'react';
+import React, { createContext, memo, useContext } from 'react';
 
 import { NodeInfo, NodeState, NodeTiming, PortInfo, WidgetLayout } from '../types';
 import { iconBackground } from './themes';
@@ -363,6 +363,12 @@ export function StatusLight({ state }: { state: NodeState }) {
 }
 
 /**
+ * Widgets follow the selection (Enter on the canvas): a selected node's minimized widget opens, only
+ * while it is selected and without changing the saved layout.
+ */
+export const WidgetFollowContext = createContext(false);
+
+/**
  * A workflow node: name above, colored icon with ports at the
  * sides (black triangles = tables, red circles = flow variables, the
  * implicit flow variable ports at the top corners), traffic light and
@@ -375,6 +381,9 @@ export const WorkflowNode = memo(({ data, selected, positionAbsoluteX, positionA
   // metanodes have no implicit flow variable ports
   const implicitIn = n.inPorts.find(p => p.implicit);
   const implicitOut = n.outPorts.find(p => p.implicit);
+  const follow = useContext(WidgetFollowContext);
+  const layout = n.widgetLayout ?? {};
+  const widgetLayout = follow && selected && layout.minimized ? { ...layout, minimized: false } : layout;
   return (
     <div
       className={`verknode-node verknode-state-${n.state}${selected ? ' verknode-selected' : ''}${n.inactive ? ' verknode-node-is-inactive' : ''}${n.kind === 'metanode' ? ' verknode-node-metanode' : ''}`}
@@ -475,7 +484,7 @@ export const WorkflowNode = memo(({ data, selected, positionAbsoluteX, positionA
       {n.widget && (
         <WidgetPanel
           widget={n.widget}
-          layout={n.widgetLayout ?? {}}
+          layout={widgetLayout}
           id={n.id}
           at={{ x: positionAbsoluteX, y: positionAbsoluteY }}
           tails={data.tails}

@@ -23,7 +23,7 @@ import { ConfigureDialog, VarBadge } from './ConfigureDialog';
 import { EditorPreferences, EditorSettings } from '../settings';
 import { SettingsDialog } from './SettingsDialog';
 import { Modal } from './Modal';
-import { MetanodeBar, WorkflowNode, WorkflowNodeType } from './NodeView';
+import { MetanodeBar, WidgetFollowContext, WorkflowNode, WorkflowNodeType } from './NodeView';
 import { nodeColor, themeOf, themeStyle } from './themes';
 import { flatEnd, innerNodes, levelPath, projectLevel } from './metanodes';
 import { Link, planAutoConnect, planBridge, planInsert } from './wiring';
@@ -1032,13 +1032,45 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     setNodes(ns => ns.map(n => ({ ...n, data: { ...n.data, navHints: hints.get(Number(n.id)) } })));
   }, [hints]);
 
-  // leaving lineage mode when the selection is cleared
+  // Enter: the canvas widgets follow the selection. A minimized widget opens while its node is
+  // selected (NodeView), and closes again when the selection moves on.
+  const [widgetFollow, setWidgetFollow] = useState(false);
+  // the keyboard is in use: key hints at the bottom left (until the mouse is used)
+  const [kbdMode, setKbdMode] = useState(false);
+
+  // leaving lineage mode and widget following when the selection is cleared
   const anySelected = nodes.some(n => n.selected);
   useEffect(() => {
     if (!anySelected && lineageLock.current) {
       setLineageLock(false);
     }
+    if (!anySelected) {
+      setWidgetFollow(false);
+    }
   }, [anySelected]);
+
+  /**
+   * Enter on the selection: its widgets shown (and following the selection from then on) or hidden.
+   * Hiding minimizes the widgets that were open in the saved layout as well.
+   */
+  const toggleWidgets = (sel: number[]) => {
+    const widgets = sel.map(id => byId.get(id)).filter((x): x is NodeInfo => !!x?.widget);
+    const open = widgets.filter(x => !x.widgetLayout?.minimized);
+    if (!widgets.length) {
+      setWidgetFollow(f => !f);
+    } else if (widgetFollow || open.length) {
+      setWidgetFollow(false);
+      if (open.length) {
+        void run(() =>
+          controller.op('set_widget_layouts', {
+            layouts: open.map(x => ({ id: x.id, layout: { ...(x.widgetLayout ?? {}), minimized: true } }))
+          })
+        );
+      }
+    } else {
+      setWidgetFollow(true);
+    }
+  };
 
   const navigate = (dir: 'left' | 'right' | 'up' | 'down', lineage: boolean, extend: boolean) => {
     const selected = nodes.filter(n => n.selected).map(n => Number(n.id));
@@ -1828,7 +1860,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   const hideTimer = useRef<number | undefined>();
   const hidePeek = (delay = 250) => {
     window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => setInspections(list => list.filter(i => i.pinned)), delay);
+    hideTimer.current = window.setTimeout(() => setInspections(list => list.filter(i => i.pinned || i.follow)), delay);
   };
   inspectRef.current = (node, kind, port, action, near) => {
     window.clearTimeout(peekTimer.current);
@@ -1860,9 +1892,9 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       window.clearTimeout(hideTimer.current);
       setInspections(list =>
         list.some(i => i.pinned && same(i))
-          ? list.filter(i => i.pinned)
+          ? list.filter(i => i.pinned || i.follow)
           : [
-              ...list.filter(i => i.pinned),
+              ...list.filter(i => i.pinned || (i.follow && !same(i))),
               { ...(list.find(i => !i.pinned && same(i)) ?? { node: src.node, port: src.port, at }), key: `i${Date.now()}`, pinned: true }
             ]
       );
@@ -1872,8 +1904,8 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     peekTimer.current = window.setTimeout(
       () =>
         setInspections(list => [
-          ...list.filter(i => i.pinned),
-          ...(list.some(i => i.pinned && same(i)) ? [] : [{ key: 'peek', node: src.node, port: src.port, at, pinned: false }])
+          ...list.filter(i => i.pinned || i.follow),
+          ...(list.some(i => (i.pinned || i.follow) && same(i)) ? [] : [{ key: 'peek', node: src.node, port: src.port, at, pinned: false }])
         ]),
       350
     );
@@ -1893,8 +1925,8 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     };
     inspectRef.current?.(id, 'out', port, pin ? 'pin' : 'enter', box || undefined);
   };
-  /** Kept inspection widgets for the outputs of these nodes (executed ones), right of each node. */
-  const inspectNodes = (ids: number[]) => {
+  /** Inspection widgets for the outputs of these nodes (executed ones), right of each node. */
+  const inspectionsFor = (ids: number[], follow = false): Inspection[] => {
     const add: Inspection[] = [];
     const taken = obstacles(flow, wrapper.current, []);
     for (const id of ids) {
@@ -1910,11 +1942,41 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         const anchor = portPoint(flow, id, 'out', port) ?? { x: p.x + w, y: p.y + 30 };
         const at = place(anchor, 'right', { w: INSPECT_W, h: INSPECT_H }, taken);
         taken.push({ x: at.x, y: at.y, w: INSPECT_W, h: INSPECT_H });
-        add.push({ key: `i${Date.now()}-${id}-${port}`, node: id, port, pinned: true, at });
+        add.push(
+          follow
+            ? { key: `follow-${id}-${port}`, node: id, port, pinned: false, follow: true, at }
+            : { key: `i${Date.now()}-${id}-${port}`, node: id, port, pinned: true, at }
+        );
       }
     }
+    return add;
+  };
+  /** Kept inspection widgets for the outputs of these nodes. */
+  const inspectNodes = (ids: number[]) => {
+    const add = inspectionsFor(ids);
     setInspections(list => [...list.filter(i => i.pinned && !add.some(a => a.node === i.node && a.port === i.port)), ...add]);
   };
+  // widgets following the selection: a selected node without a canvas widget shows its outputs'
+  // inspection widgets instead, until the selection moves on
+  const selectedKey = nodes
+    .filter(n => n.selected)
+    .map(n => n.id)
+    .join(',');
+  const executedKey = (view?.nodes ?? []).filter(n => n.state === 'EXECUTED').map(n => n.id).join(',');
+  useEffect(() => {
+    const ids = widgetFollow && selectedKey ? selectedKey.split(',').map(Number).filter(id => !byId.get(id)?.widget) : [];
+    setInspections(list => {
+      const kept = list.filter(i => !i.follow);
+      const shown = (id: number) => list.some(i => i.follow && i.node === id);
+      // (ones already shown stay where they are; nodes with a kept inspection need no other)
+      const stay = list.filter(i => i.follow && ids.includes(i.node));
+      const fresh = ids.filter(id => !shown(id) && !kept.some(i => i.pinned && i.node === id));
+      if (!fresh.length && stay.length === list.length - kept.length) {
+        return list;
+      }
+      return [...kept, ...stay, ...inspectionsFor(fresh, true)];
+    });
+  }, [widgetFollow, selectedKey, executedKey]);
 
   // close child windows with the editor (and when the page unloads)
   useEffect(() => {
@@ -2141,6 +2203,12 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       return;
     }
     const sel = selectedIds();
+    // keyboard navigation shows the key hints (bottom left) until the mouse is used again
+    if (KEY_DIRECTIONS[e.key] || ['Enter', 'Tab', 'F6', 'F7', 'F8', 'F9', 'F10'].includes(e.key)) {
+      setKbdMode(true);
+    }
+    // (Enter on a button or inside a canvas widget is theirs)
+    const enterIsOurs = e.key === 'Enter' && !['BUTTON', 'A'].includes(target.tagName) && !target.closest('.verknode-widget');
     const handled = () => {
       e.preventDefault();
       e.stopPropagation();
@@ -2162,6 +2230,12 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     } else if (KEY_DIRECTIONS[e.key]) {
       handled();
       navigate(KEY_DIRECTIONS[e.key], e.altKey || lineageLock.current, e.shiftKey);
+    } else if (enterIsOurs && (e.ctrlKey || e.metaKey) && sel.length === 1) {
+      handled();
+      openConfigure(sel[0]);
+    } else if (enterIsOurs && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && sel.length) {
+      handled();
+      toggleWidgets(sel);
     } else if (e.key === 'F6' && sel.length === 1) {
       handled();
       openConfigure(sel[0]);
@@ -2208,7 +2282,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   const nodeMenuItems = (n: NodeInfo) => {
     const busy = n.state === 'EXECUTING' || n.state === 'QUEUED';
     return [
-      { label: 'Configure…', shortcut: 'F6', disabled: !n.hasDialog || busy, action: () => openConfigure(n.id) },
+      { label: 'Configure…', shortcut: 'F6 / Ctrl+Enter', disabled: !n.hasDialog || busy, action: () => openConfigure(n.id) },
       { label: 'Execute', shortcut: 'F7', disabled: busy || n.state === 'EXECUTED', action: () => execute([n.id]) },
       { label: 'Cancel', shortcut: 'F9', disabled: !busy, action: () => cancel() },
       { label: 'Reset', shortcut: 'F8', disabled: n.state !== 'EXECUTED', action: () => reset([n.id]) },
@@ -2420,12 +2494,14 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
 
   return (
     <CanvasLinkContext.Provider value={canvasLink}>
+    <WidgetFollowContext.Provider value={widgetFollow}>
     <div
       ref={editorRef}
-      className={`verknode-editor verknode-theme-${prefs.theme} verknode-lights-${prefs.statusLight} ${prefs.statusLight.startsWith('led-') ? 'verknode-lights-led' : ''} ${theme.dark ? 'verknode-theme-dark' : ''} ${prefs.showFlowVariablePorts ? 'verknode-show-flow-ports' : ''} ${panning ? 'verknode-panning' : ''}`}
+      className={`verknode-editor verknode-theme-${prefs.theme} verknode-lights-${prefs.statusLight} ${prefs.statusLight.startsWith('led-') ? 'verknode-lights-led' : ''} ${theme.dark ? 'verknode-theme-dark' : ''} ${prefs.showFlowVariablePorts ? 'verknode-show-flow-ports' : ''} ${panning ? 'verknode-panning' : ''} ${widgetFollow ? 'verknode-widget-follow' : ''} ${kbdMode ? 'verknode-kbd-mode' : ''}`}
       style={themeStyle(theme)}
       onKeyDown={onKeyDown}
       onPointerDownCapture={e => {
+        setKbdMode(false);
         if (e.shiftKey && startBand(e)) {
           return;
         }
@@ -2450,6 +2526,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       <div className="verknode-lineage-badge" title="Arrow keys follow the connections. Tap Alt (or clear the selection) to go back to moving by position.">
         Lineage navigation · tap Alt to leave
       </div>
+      <div className="verknode-follow-badge">Widgets follow the selection · Enter to hide</div>
       <div className="verknode-toolbar">
         <span className="verknode-brand" title="verknode">
           <svg viewBox="133 399 928 381" height="13" aria-hidden="true">
@@ -2755,7 +2832,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
               onMenu={(key, e) => setMenu({ ...localPos(e), nodeId: null, inspection: key })}
               onChange={(key, patch) =>
                 setInspections(list =>
-                  list.map(i => (i.key !== key ? i : { ...i, ...patch, ...(patch.pinned && !i.pinned ? { key: `i${Date.now()}` } : {}) }))
+                  list.map(i => (i.key !== key ? i : { ...i, ...patch, ...(patch.pinned && !i.pinned ? { key: `i${Date.now()}`, follow: false } : {}) }))
                 )
               }
               onClose={key => setInspections(list => list.filter(i => i.key !== key))}
@@ -2771,6 +2848,17 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
               }}
               onOpen={(node, port) => openPort(node, port)}
             />
+            <div className="verknode-kbd-hints" aria-hidden="true">
+              <span><kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd> move</span>
+              <span><kbd>Shift</kbd> extend</span>
+              <span><kbd>Alt</kbd> follow connections (tap twice: stay)</span>
+              <span><kbd>Enter</kbd> {widgetFollow ? 'hide widgets' : 'show widgets'}</span>
+              <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> settings</span>
+              <span><kbd>F7</kbd> execute</span>
+              <span><kbd>F8</kbd> reset</span>
+              <span><kbd>Shift</kbd>+<kbd>F10</kbd> view</span>
+              <span><kbd>Tab</kbd> add next node</span>
+            </div>
             <Controls showInteractive={false} showFitView={false}>
               <ControlButton onClick={() => fitAll(200)} title="Fit view" aria-label="fit view" className="react-flow__controls-fitview">
                 <svg viewBox="0 0 32 30" xmlns="http://www.w3.org/2000/svg">
@@ -2905,6 +2993,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         />
       )}
     </div>
+    </WidgetFollowContext.Provider>
     </CanvasLinkContext.Provider>
   );
 }

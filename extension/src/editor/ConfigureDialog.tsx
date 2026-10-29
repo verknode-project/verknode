@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import { WorkflowController } from '../controller';
 import { ColumnSpec, DialogData, FieldInfo, FlowVariableInfo, TableSpec, VariableBinding } from '../types';
-import { Modal } from './Modal';
+import { focusables, Modal } from './Modal';
 import { EditorSettings } from '../settings';
 import { MoleculeList } from './sketcher/MoleculeList';
 import { NotebookField } from './NotebookField';
@@ -936,21 +936,71 @@ export function ConfigureDialog(props: {
   const title = data ? `Dialog - ${nodeId} - ${data.node.name}` : 'Dialog';
   const hasData = !!data && data.node.fields.length > 0;
 
+  // the keyboard: the first setting has it when the dialog opens; the tabs are a tab list (arrow keys,
+  // Home / End), and Ctrl+PageDown / PageUp switch tabs from anywhere in the dialog
+  const TABS = ['settings', 'variables', 'description'] as const;
+  const body = useRef<HTMLDivElement>(null);
+  const tabList = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (data && body.current && !body.current.contains(body.current.ownerDocument.activeElement)) {
+      focusables(body.current)[0]?.focus({ preventScroll: true });
+    }
+  }, [!!data]);
+  const goTab = (t: (typeof TABS)[number], focus: 'tab' | 'body') => {
+    setTab(t);
+    window.requestAnimationFrame(() => {
+      if (focus === 'tab') {
+        tabList.current?.querySelector<HTMLElement>(`[data-tab="${t}"]`)?.focus();
+      } else if (body.current) {
+        focusables(body.current)[0]?.focus();
+      }
+    });
+  };
+  const tabKeys = (e: React.KeyboardEvent) => {
+    const i = TABS.indexOf(tab);
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'PageDown' || e.key === 'PageUp')) {
+      e.preventDefault();
+      goTab(TABS[(i + (e.key === 'PageDown' ? 1 : TABS.length - 1)) % TABS.length], 'body');
+    }
+  };
+  const tabListKeys = (e: React.KeyboardEvent) => {
+    const i = TABS.indexOf(tab);
+    const to =
+      e.key === 'ArrowRight' ? (i + 1) % TABS.length
+      : e.key === 'ArrowLeft' ? (i + TABS.length - 1) % TABS.length
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? TABS.length - 1
+      : null;
+    if (to !== null) {
+      e.preventDefault();
+      goTab(TABS[to], 'tab');
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      goTab(tab, 'body');
+    }
+  };
+
   return (
     <Modal
       title={title}
       onClose={onClose}
+      onSubmit={hasData ? () => void apply(true) : undefined}
       className="verknode-configure"
       footer={
         <>
           {error && <div className="verknode-dialog-error">{error}</div>}
-          <button className="jp-Dialog-button jp-mod-accept jp-mod-styled" onClick={() => apply(true)} disabled={!hasData}>
+          <button
+            className="jp-Dialog-button jp-mod-accept jp-mod-styled"
+            onClick={() => apply(true)}
+            disabled={!hasData}
+            title="OK (Enter in a field, Ctrl+Enter anywhere)"
+          >
             <div className="jp-Dialog-buttonLabel">OK</div>
           </button>
           <button className="jp-Dialog-button jp-mod-reject jp-mod-styled" onClick={() => apply(false)} disabled={!hasData}>
             <div className="jp-Dialog-buttonLabel">Apply</div>
           </button>
-          <button className="jp-Dialog-button jp-mod-reject jp-mod-styled" onClick={onClose}>
+          <button className="jp-Dialog-button jp-mod-reject jp-mod-styled" onClick={onClose} title="Cancel (Escape)">
             <div className="jp-Dialog-buttonLabel">Cancel</div>
           </button>
         </>
@@ -959,8 +1009,8 @@ export function ConfigureDialog(props: {
       {!data ? (
         <div className="verknode-empty">{error ? '' : 'Loading…'}</div>
       ) : (
-        <>
-          <div className="verknode-tabs">
+        <div className="verknode-configure-content" onKeyDown={tabKeys}>
+          <div className="verknode-tabs" role="tablist" ref={tabList} onKeyDown={tabListKeys}>
             {(
               [
                 ['settings', 'Settings'],
@@ -968,12 +1018,21 @@ export function ConfigureDialog(props: {
                 ['description', 'Description']
               ] as const
             ).map(([k, label]) => (
-              <button key={k} className={`verknode-tab ${tab === k ? 'verknode-tab-active' : ''}`} onClick={() => setTab(k)}>
+              <button
+                key={k}
+                role="tab"
+                data-tab={k}
+                aria-selected={tab === k}
+                tabIndex={tab === k ? 0 : -1}
+                title="Arrow keys or Ctrl+PageDown / PageUp: the other tabs"
+                className={`verknode-tab ${tab === k ? 'verknode-tab-active' : ''}`}
+                onClick={() => setTab(k)}
+              >
                 {label}
               </button>
             ))}
           </div>
-          <div className="verknode-tab-body">
+          <div className="verknode-tab-body" role="tabpanel" ref={body}>
             {tab === 'settings' &&
               (data.node.fields.length ? (
                 data.node.fields
@@ -1011,7 +1070,7 @@ export function ConfigureDialog(props: {
             )}
             {tab === 'description' && <Description node={data.node} />}
           </div>
-        </>
+        </div>
       )}
     </Modal>
   );

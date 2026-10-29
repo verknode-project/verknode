@@ -18,7 +18,7 @@ Create one from the Launcher ("Workflow") or the command palette
   [LLM nodes](llm.md#saved-llm-servers)); and the workflow's custom node
   folders.
 - Traffic light: red = not configured, yellow = configured, green = executed.
-- F6 configure, F7 execute (Shift: all), F8 reset (Shift: all), F9 cancel,
+- F6 (or Ctrl+Enter) configure, F7 execute (Shift: all), F8 reset (Shift: all), F9 cancel,
   Shift+F10 execute and open view, Del delete. Ctrl+S saves (including
   executed data).
 - Ctrl+click the toolbar's ↺ Reset (or click it with nothing selected) to
@@ -164,6 +164,25 @@ Create one from the Launcher ("Workflow") or the command palette
   newest node is where the next jump starts). ≡ Settings › Arrow keys
   switches lineage to strict port order (first parent, first child,
   sibling order).
+- **Enter** shows or hides the selected nodes' canvas widgets. Showing makes
+  the widgets follow the selection (a badge shows it): a minimized widget
+  opens while its node is selected and minimizes again when the arrow keys
+  move on, without changing the saved layout. Widgets that were already open
+  stay open. A node without a canvas widget shows the inspection widget of
+  its outputs instead, once executed. Enter again stops following; on an
+  open widget it minimizes it. Clearing the selection stops following too.
+- Once you navigate with the keyboard, the keys are listed at the bottom left
+  of the canvas, until you use the mouse again.
+- **Ctrl+Enter** (or F6) opens the selected node's dialog. In the dialog:
+  - the first setting has the keyboard, and Tab / Shift+Tab go through the
+    fields and buttons without leaving the dialog;
+  - Enter in a field, or Ctrl+Enter anywhere (also in code), is OK; Escape
+    cancels;
+  - on the tabs (Settings, Flow Variables, Description), ← / → switch tabs
+    and ↓ goes into the tab; Ctrl+PageDown / PageUp switch tabs from
+    anywhere;
+  - after closing, the keyboard is back on the node, so the arrow keys go
+    on from there.
 - Drag on the empty canvas pans the view (also Ctrl + drag or middle-drag);
   Shift + drag draws a selection rectangle (Ctrl + Shift + drag adds to the
   selection); Ctrl/Shift + click adds or removes a node from the selection.
