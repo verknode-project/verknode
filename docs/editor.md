@@ -189,6 +189,20 @@ Create one from the Launcher ("Workflow") or the command palette
   (≡ Settings can switch left-drag to selecting instead.) Ctrl + double-click on a node selects it and
   everything downstream, Shift + double-click everything upstream. Ctrl+A
   selects every node and widget on the canvas.
+- **Layout ▾** (toolbar) tidies the canvas:
+  - *Auto Layout* (Ctrl+Shift+L, also in the canvas' context menu) lays the
+    workflow out from left to right along its connections. It orders the
+    nodes of each column so that as few connections as possible cross, keeps
+    group annotations and loop / try / switch blocks together, and puts each
+    canvas widget beside its node (inputs before it, outputs after). With two
+    or more nodes selected, only those are laid out, where they are. Ties go
+    to the current arrangement, so a tidy workflow stays much as it was.
+    Widgets anchored to the canvas stay put.
+  - *Align Left / Centers / Right / Top / Middles / Bottom* lines up the
+    selected nodes' icons; *Distribute Horizontally / Vertically* spaces
+    three or more evenly. The node context menu has the same items when
+    several nodes are selected.
+  - Each is one step to undo (Ctrl+Z).
 - Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste nodes with their settings and
   the connections between them (also between workflows); Ctrl+Z undo,
   Ctrl+Shift+Z / Ctrl+Y redo (edits only; execution is not undone, and

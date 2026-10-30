@@ -55,6 +55,7 @@
     "@lumino/widgets": "^2.0.0",
     "@xyflow/react": "^12.3.0",
     "d3-contour": "^4.0.2",
+    "elkjs": "0.9.3",
     "leaflet": "^1.9",
     "mermaid": "^11",
     "react": "^18.2.0",

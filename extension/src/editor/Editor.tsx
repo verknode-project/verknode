@@ -45,10 +45,11 @@ import { TailStore, useTails } from './widgets/tails';
 import { DisplayLoader } from './widgets/frames';
 import { CanvasLink, CanvasLinkContext } from './widgets/registry';
 import { InspectLayer, Inspection, INSPECT_H, INSPECT_W, obstacles, place, portPoint } from './Inspector';
+import { align, Alignment, autoLayout, LayoutNode, LayoutWidget } from './layout';
 
 const nodeTypes = { node: WorkflowNode, metabar: MetanodeBar };
 
-type Menu = { x: number; y: number; nodeId: number | null; groupId?: number | null; inspection?: string };
+type Menu = { x: number; y: number; nodeId: number | null; groupId?: number | null; inspection?: string; layout?: boolean };
 
 /** A port or node view shown in a child browser window. */
 type External = { key: number; win: Window; kind: 'port' | 'view'; node: number; port: number; tab: boolean };
@@ -1956,6 +1957,145 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     const add = inspectionsFor(ids);
     setInspections(list => [...list.filter(i => i.pinned && !add.some(a => a.node === i.node && a.port === i.port)), ...add]);
   };
+  // ------------------------------------------------------------- layout and alignment
+  /** A box on the screen, in canvas coordinates. */
+  const canvasRect = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    const a = flow.screenToFlowPosition({ x: r.left, y: r.top }, { snapToGrid: false });
+    const b = flow.screenToFlowPosition({ x: r.right, y: r.bottom }, { snapToGrid: false });
+    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+  };
+  const nodeElement = (id: number) => wrapper.current?.querySelector(`.react-flow__node[data-id="${id}"]`) ?? null;
+  // (a free canvas widget moves with its node, unless it is anchored to the canvas)
+  const widgetMoves = (n: NodeInfo | undefined) => !!n?.widget && n.widgetLayout?.side === 'free' && !n.widgetLayout.anchored;
+  /** The nodes as auto layout sees them: each with the room of its canvas widget, and its ports. */
+  const layoutNodes = (ids: number[]): LayoutNode[] =>
+    ids.flatMap(id => {
+      const node = flow.getInternalNode(String(id));
+      const info = byId.get(id);
+      if (!node || !info || info.boundary) {
+        return [];
+      }
+      const p = node.internals.positionAbsolute;
+      let box = { x: p.x, y: p.y, w: node.measured?.width ?? 96, h: node.measured?.height ?? 90 };
+      // (a docked widget is part of its node's box; a free one is laid out by itself, layoutWidgets)
+      const dock = nodeElement(id)?.querySelector('.verknode-widget-dock');
+      if (dock && info.widget && info.widgetLayout?.side !== 'free') {
+        const d = canvasRect(dock);
+        const x = Math.min(box.x, d.x);
+        const y = Math.min(box.y, d.y);
+        box = { x, y, w: Math.max(box.x + box.w, d.x + d.w) - x, h: Math.max(box.y + box.h, d.y + d.h) - y };
+      }
+      const bounds = node.internals.handleBounds;
+      const ports = [...(bounds?.target ?? []), ...(bounds?.source ?? [])].flatMap(h => {
+        const [kind, index] = String(h.id ?? '').split('-');
+        return kind === 'in' || kind === 'out'
+          ? [{ kind: kind as 'in' | 'out', index: Number(index), at: { x: p.x + h.x + h.width / 2, y: p.y + h.y + h.height / 2 } }]
+          : [];
+      });
+      return [{ id, box, position: { x: p.x, y: p.y }, ports }];
+    });
+  /** The free canvas widgets of these nodes that auto layout places (not the ones anchored to the canvas). */
+  const layoutWidgets = (ids: number[]): (LayoutWidget & { offset: { x: number; y: number } })[] =>
+    ids.flatMap(id => {
+      const info = byId.get(id);
+      const dock = nodeElement(id)?.querySelector('.verknode-widget-dock');
+      if (!widgetMoves(info) || !dock) {
+        return [];
+      }
+      const box = canvasRect(dock);
+      const l = info!.widgetLayout!;
+      // (offset: from the box on the screen to the stored x / y)
+      return [{ node: id, box, input: info!.widget!.type === 'input', offset: { x: (l.x ?? box.x) - box.x, y: (l.y ?? box.y) - box.y } }];
+    });
+  /**
+   * Moves nodes (one undo step), and the free canvas widgets with them: to `widgetsAt` (their boxes'
+   * top left) or along with their nodes.
+   */
+  const moveNodes = (
+    moved: Map<number, { x: number; y: number }>,
+    widgetsAt?: Map<number, { x: number; y: number }>,
+    offsets?: Map<number, { x: number; y: number }>
+  ) => {
+    const positions = [...moved].map(([id, p]) => ({ id, x: p.x, y: p.y }));
+    const layouts = [...moved].flatMap(([id, p]) => {
+      const info = byId.get(id);
+      const node = flow.getInternalNode(String(id));
+      if (!widgetMoves(info) || !node) {
+        return [];
+      }
+      const l = info!.widgetLayout!;
+      const at = widgetsAt?.get(id);
+      if (at) {
+        const o = offsets?.get(id) ?? { x: 0, y: 0 };
+        return [{ id, layout: { ...l, x: Math.round(at.x + o.x), y: Math.round(at.y + o.y) } }];
+      }
+      const from = node.internals.positionAbsolute;
+      return [{ id, layout: { ...l, x: Math.round((l.x ?? 0) + p.x - from.x), y: Math.round((l.y ?? 0) + p.y - from.y) } }];
+    });
+    return run(() => controller.op('move', { positions, layouts }));
+  };
+  /**
+   * Auto layout of the selected nodes (two or more), or of all: left to right along the connections,
+   * groups and loop / try / switch blocks kept together, as few crossing connections as can be.
+   */
+  const layoutAll = async (ids: number[] = selectedIds()) => {
+    const all = ids.length < 2;
+    const chosen = all ? (view?.nodes ?? []).map(n => n.id) : ids;
+    const items = layoutNodes(chosen);
+    if (items.length < 2 || !view) {
+      return;
+    }
+    const inside = new Set(items.map(i => i.id));
+    const groups = [
+      ...(view.groups ?? []).map(g => g.nodes),
+      ...findScopeBlocks(view.nodes, view.connections, repo)
+        .filter(b => b.end !== null)
+        .map(b => b.members)
+    ].map(g => g.filter(id => inside.has(id)));
+    const widgets = layoutWidgets([...inside]);
+    const boxes = [...items.map(i => i.box), ...widgets.map(w => w.box)];
+    const origin = { x: Math.min(...boxes.map(b => b.x)), y: Math.min(...boxes.map(b => b.y)) };
+    try {
+      const moved = await autoLayout(items, view.connections, groups, origin, widgets);
+      await moveNodes(moved.nodes, moved.widgets, new Map(widgets.map(w => [w.node, w.offset])));
+      if (all) {
+        window.setTimeout(() => fitAll(300), 300); // (once the moved nodes are shown)
+      }
+    } catch (e) {
+      setError(`Auto layout: ${(e as Error).message}`);
+    }
+  };
+  /** Lines up the selected nodes' icons (Align …) or spaces them evenly (Distribute …). */
+  const alignSelected = (how: Alignment) => {
+    const items = selectedIds().flatMap(id => {
+      const node = flow.getInternalNode(String(id));
+      const icon = nodeElement(id)?.querySelector('.verknode-node-icon');
+      return node && icon ? [{ id, icon: canvasRect(icon), position: node.internals.positionAbsolute }] : [];
+    });
+    const moved = align(items, how);
+    if (moved.size) {
+      void moveNodes(moved);
+    }
+  };
+  const layoutMenuItems = () => {
+    const n = selectedIds().length;
+    const a = (label: string, how: Alignment, min = 2) => ({ label, disabled: n < min, action: () => alignSelected(how) });
+    return [
+      { label: n >= 2 ? `Auto Layout Selection (${n} nodes)` : 'Auto Layout', shortcut: 'Ctrl+Shift+L', action: () => void layoutAll() },
+      '-' as const,
+      a('Align Left', 'left'),
+      a('Align Centers', 'center'),
+      a('Align Right', 'right'),
+      a('Align Top', 'top'),
+      a('Align Middles', 'middle'),
+      a('Align Bottom', 'bottom'),
+      '-' as const,
+      a('Distribute Horizontally', 'distribute-h', 3),
+      a('Distribute Vertically', 'distribute-v', 3)
+    ];
+  };
+
   // widgets following the selection: a selected node without a canvas widget shows its outputs'
   // inspection widgets instead, until the selection moves on
   const selectedKey = nodes
@@ -2274,6 +2414,9 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       } else if (key === 'g' && sel.length) {
         handled();
         createGroup(sel);
+      } else if (key === 'l' && e.shiftKey) {
+        handled();
+        void layoutAll(sel);
       }
     }
   };
@@ -2351,6 +2494,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         disabled: busy,
         action: () => detach(selectedIds().length ? selectedIds() : [n.id])
       },
+      ...(selectedIds().length > 1 && selectedIds().includes(n.id) ? ['-' as const, ...layoutMenuItems()] : []),
       '-' as const,
       {
         label: selectedIds().length > 1 && selectedIds().includes(n.id) ? `Inspect Outputs (${selectedIds().length} nodes)` : 'Inspect Outputs',
@@ -2465,6 +2609,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     { label: 'Workflow Variables…', action: () => setWfVars(true) },
     { label: 'Export as Python…', action: () => setPythonOpen(true) },
     { label: 'Fit to Screen', action: () => fitAll(200) },
+    { label: 'Auto Layout', shortcut: 'Ctrl+Shift+L', action: () => void layoutAll([]) },
     ...(inspections.length
       ? ['-' as const, { label: `Close All Inspections (${inspections.length})`, action: () => setInspections([]) }]
       : [])
@@ -2566,6 +2711,18 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
           ↺ Reset
         </button>
         <span className="verknode-tb-sep" />
+        <button
+          className="verknode-tb"
+          onMouseDown={e => e.stopPropagation()}
+          onClick={e => {
+            const r = e.currentTarget.getBoundingClientRect();
+            const w = wrapper.current!.getBoundingClientRect();
+            setMenu(m => (m?.layout ? null : { x: r.left - w.left, y: r.bottom - w.top + 2, nodeId: null, layout: true }));
+          }}
+          title="Auto layout (Ctrl+Shift+L) and alignment of the selected nodes"
+        >
+          ⊞ Layout ▾
+        </button>
         <button className="verknode-tb" onClick={() => setWfVars(true)} title="Edit workflow variables">
           <VarBadge type="STRING" /> Workflow variables
         </button>
@@ -2887,7 +3044,9 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
             <ContextMenu
               menu={menu}
               items={
-                menu.inspection
+                menu.layout
+                  ? layoutMenuItems()
+                  : menu.inspection
                   ? inspectionMenuItems(menu.inspection)
                   : menu.nodeId !== null && byId.get(menu.nodeId)?.kind === 'metanode'
                   ? metanodeMenuItems(byId.get(menu.nodeId)!)

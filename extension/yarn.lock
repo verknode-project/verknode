@@ -3610,7 +3610,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"elkjs@npm:^0.9.3":
+"elkjs@npm:0.9.3, elkjs@npm:^0.9.3":
   version: 0.9.3
   resolution: "elkjs@npm:0.9.3"
   checksum: 1293e42e0ea034b39d3719f3816b7b3cbaceb52a3114f2c1bd5ddd969bb1e36ae0afef58e77864fff7a1018dc5e96c177e9b0a40c16e4aaac26eb87f5785be4b
@@ -4938,6 +4938,7 @@ __metadata:
     "@types/react-dom": ^18.0.0
     "@xyflow/react": ^12.3.0
     d3-contour: ^4.0.2
+    elkjs: 0.9.3
     leaflet: ^1.9
     mermaid: ^11
     molstar: 5.12.0
