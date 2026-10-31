@@ -615,6 +615,8 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   const [panning, setPanning] = useState(false);
 
   const [band, setBand] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  // the last press on the empty canvas: a second press soon after, at the same place, holds for a selection rectangle
+  const lastPaneDown = useRef<{ t: number; x: number; y: number } | null>(null);
 
   /**
    * Shift + drag on the empty canvas draws a selection rectangle (with Ctrl:
@@ -2650,6 +2652,16 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         if (e.shiftKey && startBand(e)) {
           return;
         }
+        // double-click and hold on the empty canvas: drag a selection rectangle
+        if (e.button === 0 && (e.target as HTMLElement).classList.contains('react-flow__pane')) {
+          const last = lastPaneDown.current;
+          const again =
+            last && e.timeStamp - last.t < 400 && Math.abs(e.clientX - last.x) < 8 && Math.abs(e.clientY - last.y) < 8;
+          lastPaneDown.current = again ? null : { t: e.timeStamp, x: e.clientX, y: e.clientY };
+          if (again && !e.ctrlKey && !e.metaKey && startBand(e)) {
+            return;
+          }
+        }
         if ((e.ctrlKey || e.metaKey) && startCtrlPan(e)) {
           return;
         }
@@ -2923,7 +2935,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
               widgetSel.setExplicit([]);
             }}
             deleteKeyCode={['Delete', 'Backspace']}
-            // left-drag pans by default (Shift+drag selects, see startBand);
+            // left-drag pans by default (Shift+drag and double-click-drag select, see startBand);
             // the "select" preference restores drag-to-select
             selectionOnDrag={prefs.dragBehavior === 'select'}
             panOnDrag={prefs.dragBehavior === 'pan' ? [0, 1] : [1]}

@@ -184,8 +184,8 @@ Create one from the Launcher ("Workflow") or the command palette
   - after closing, the keyboard is back on the node, so the arrow keys go
     on from there.
 - Drag on the empty canvas pans the view (also Ctrl + drag or middle-drag);
-  Shift + drag draws a selection rectangle (Ctrl + Shift + drag adds to the
-  selection); Ctrl/Shift + click adds or removes a node from the selection.
+  Shift + drag, or double-click and hold then drag, draws a selection
+  rectangle (Ctrl + Shift + drag adds to the selection); Ctrl/Shift + click adds or removes a node from the selection.
   (≡ Settings can switch left-drag to selecting instead.) Ctrl + double-click on a node selects it and
   everything downstream, Shift + double-click everything upstream. Ctrl+A
   selects every node and widget on the canvas.

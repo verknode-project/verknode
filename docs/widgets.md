@@ -42,7 +42,7 @@ Widgets):
   default place). Drag its corner to resize it; the title bar button (or
   a double-click on it) minimizes it. The node's context menu docks it
   left, right, above or below, and resets its size.
-- **Selecting and anchoring** - the marquee (Shift+drag on the canvas)
+- **Selecting and anchoring** - the marquee (Shift+drag, or double-click-hold and drag, on the canvas)
   selects widgets as well as nodes; Ctrl/Shift+click on a title bar adds or
   removes one; selecting nodes selects their widgets too. Dragging a selected
   widget moves all selected widgets, and dragging selected nodes takes their

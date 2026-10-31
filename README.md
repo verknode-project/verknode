@@ -42,6 +42,11 @@ standalone Python script that runs without Jupyter.
 - **See it run** - status lights, time bars with estimates, progress and the
   expected end of every node, loop iteration counters
   ([editor](docs/editor.md)).
+- **Tidy and fast at the keyboard** - auto layout that keeps groups together
+  and untangles connections, alignment, and a canvas you can work from the
+  keyboard: arrow keys between nodes, widgets that follow the selection, node
+  settings and a node picker without touching the mouse
+  ([editor](docs/editor.md)).
 - **Python all the way** - write nodes as Python classes, run notebooks as
   nodes, drive an open workflow from a notebook, export a workflow as a
   script - also a standalone one that runs without Jupyter, from a terminal,
@@ -106,6 +111,25 @@ the rest of the workflow:
 should be done; loops count their iterations:
 
 ![A running workflow: time bars, a loop at iteration 4 of 6, queued nodes with their expected end](docs/images/timing-v3.png)
+
+**Work from the keyboard, and tidy up in one step**: draw a selection by
+double-clicking and holding on the empty canvas, align what you selected, and
+let Auto Layout untangle the whole workflow. Then walk it with the arrow keys:
+widgets follow the selection, and key hints appear at the bottom left once you
+start.
+
+![A tangled workflow: a double-click-hold selection rectangle, Align Middles and undo from the Layout menu, then Ctrl+Shift+L lays it out with its groups together; arrow keys move between nodes, Enter makes widgets follow the selection, Ctrl+Enter opens a node's settings, Tab adds a node at the pointer, Ctrl+A selects everything](docs/images/keyboard-v1.gif)
+
+| Keys | What they do |
+|---|---|
+| Arrow keys | Move the selection between nodes (Shift: extend it; Alt: follow the connections) |
+| Enter | Widgets follow the selection: each node shows its widget, or a view of its result, as you reach it |
+| Ctrl+Enter | Node settings; in the dialog, Tab, ← / →, Enter to apply and Esc to cancel all work |
+| F7 / F8 | Execute / reset the selected nodes |
+| Tab | Add a node: the next one after the selection, or at the pointer when nothing is selected |
+| Ctrl+Shift+L | Auto Layout: the selected nodes, or the whole canvas |
+| Ctrl+A | Select everything on the canvas |
+| Double-click and hold, or Shift+drag | Draw a selection rectangle on the empty canvas |
 
 **Look at any result**, including molecules drawn as structures:
 
