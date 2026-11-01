@@ -172,7 +172,7 @@ follows all of them and makes a good model.
 | Files | Viewers' scripts and libraries go in `static/` and load through `package.static_url()`, never from a CDN, so that they work in closed networks. | `static/three/`, `static/viewer.js` |
 | Examples | At least one example workflow in `examples/` inside the Python package, built by a script (`scripts/build_example.py`) with the version being released, so that it opens with its results. | `examples/printing3d.vkf` |
 | Dependencies | List everything the nodes import, and test in a clean environment: the CI does this. Optional heavy libraries may be imported inside a node, with `requires = [...]`, so that only that node is dimmed when they are missing. | trimesh, shapely, manifold3d, cascadio... |
-| Versions | `[project] version` is semver for the package's own nodes. `[tool.verknode] api` and the `Package`'s `api` give the node API range, and the two must match. A release is a tag `v<version>`. | `0.1.2`, `api = ">=1.1,<2"` |
+| Versions | `[project] version` is semver for the package's own nodes. `[tool.verknode] api` and the `Package`'s `api` give the node API range, and the two must match. A release is a tag `v<version>`. | `0.1.3`, `api = ">=1.2,<2"` |
 | Automation | Use verknode's workflows: `package-check.yml` for CI, `package-compat.yml` every week, `package-release.yml` on tags. Do not copy them: reference them with `@main`. | `.github/workflows/` |
 | Docs | The README opens with a hero screenshot of the example, then a table of the nodes, how to install the package, and its versions. A CHANGELOG lists every release. | `README.md`, `CHANGELOG.md` |
 | License | An OSI license. Bundled third-party files keep theirs, next to them. | Apache-2.0; three.js MIT |
