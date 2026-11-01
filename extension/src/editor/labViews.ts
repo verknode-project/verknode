@@ -10,6 +10,14 @@ export interface LabHost {
   activate(id: string): void;
   /** open a file (path relative to the Jupyter root) in JupyterLab */
   openFile(path: string): void;
+  /** the files and folders of a folder (path relative to the Jupyter root) */
+  listFolder(path: string): Promise<FolderEntry[]>;
+}
+
+export interface FolderEntry {
+  name: string;
+  isFolder: boolean;
+  size?: number | null;
 }
 
 let host: LabHost | null = null;
@@ -58,4 +66,15 @@ export function openFileInLab(path: string): boolean {
   }
   host.openFile(path);
   return true;
+}
+
+/** The files and folders of a folder (relative to the Jupyter root): folders first, hidden ones left out. */
+export async function listFolder(path: string): Promise<FolderEntry[]> {
+  if (!host) {
+    return [];
+  }
+  const found = await host.listFolder(path);
+  return found
+    .filter(e => !e.name.startsWith('.'))
+    .sort((a, b) => Number(b.isFolder) - Number(a.isFolder) || a.name.localeCompare(b.name));
 }

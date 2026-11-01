@@ -173,6 +173,12 @@ Create one from the Launcher ("Workflow") or the command palette
   open widget it minimizes it. Clearing the selection stops following too.
 - Once you navigate with the keyboard, the keys are listed at the bottom left
   of the canvas, until you use the mouse again.
+- A setting that holds a file or folder has **Browse…** next to its text box.
+  The chooser starts where the current path is, lists the node's file types
+  (or *All files*), and puts in the path relative to the workflow. Arrow keys
+  and typing move in the list, Enter opens a folder or takes a file, Backspace
+  goes up. It reaches the folders under the Jupyter root; for anything else
+  (absolute or `~` paths, URLs, variables), type in the text box.
 - **Ctrl+Enter** (or F6) opens the selected node's dialog. In the dialog:
   - the first setting has the keyboard, and Tab / Shift+Tab go through the
     fields and buttons without leaving the dialog;

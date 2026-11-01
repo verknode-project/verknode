@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { FieldInfo } from '../types';
 import type { FieldContext } from './ConfigureDialog';
 import { labAvailable, openFileInLab } from './labViews';
+import { BrowseButton } from './PathField';
 
 /** What the Jupyter Notebook node tells its dialog (JupyterNotebook.dialog_data). */
 interface NotebookInfo {
@@ -70,14 +71,17 @@ export function NotebookField(props: {
 
   return (
     <div className="verknode-notebook-field">
-      <input
-        className="jp-mod-styled"
-        type="text"
-        value={props.value ?? ''}
-        placeholder={info.suggested ?? 'analysis.ipynb'}
-        disabled={props.disabled}
-        onChange={e => props.onChange(e.target.value)}
-      />
+      <div className="verknode-path-field">
+        <input
+          className="jp-mod-styled"
+          type="text"
+          value={props.value ?? ''}
+          placeholder={info.suggested ?? 'analysis.ipynb'}
+          disabled={props.disabled}
+          onChange={e => props.onChange(e.target.value)}
+        />
+        <BrowseButton field={props.field} value={props.value} onChange={props.onChange} ctx={props.ctx} disabled={props.disabled} />
+      </div>
       <div className={`verknode-notebook-status ${info.exists ? 'verknode-ok' : ''}`}>{status}</div>
       <div className="verknode-notebook-actions">
         <button className="jp-mod-styled" disabled={busy || props.disabled} onClick={() => void create()}>

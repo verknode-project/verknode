@@ -89,7 +89,7 @@ class JupyterNotebook(NodeModel):
     in_ports = _in_ports(1)
     out_ports = _out_ports(1)
     fields = [
-        F("path", "notebook", "Notebook", "", "The .ipynb file, relative to the workflow's folder.", path=True),
+        F("path", "notebook", "Notebook", "", "The .ipynb file, relative to the workflow's folder.", path=True, extensions=[".ipynb"]),
         F("kernel", "kernel", "Kernel", "", "Kernel to run it with (empty: the notebook's own kernel)."),
         F("timeout", "int", "Cell timeout (seconds)", 600, "Longest a single cell may run (0: no limit)."),
         F("live", "bool", "Run in the open notebook: when it is open in JupyterLab, run it there (cells visibly, in its kernel)", False),

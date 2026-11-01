@@ -119,7 +119,7 @@ It checks:
 
 ## Versions
 
-- **The node API.** `verknode.node.API_VERSION` (now 1.1) versions everything a package uses:
+- **The node API.** `verknode.node.API_VERSION` (now 1.2) versions everything a package uses:
   `verknode.node`, `verknode.package`, the widget base classes, port objects, node defaults and the
   static files. A minor version only adds. A major version may change or remove something: what is
   deprecated keeps working, with a warning, for a whole major version first, and the changelog says
@@ -137,6 +137,7 @@ The node API's changes:
 
 | Version | What changed |
 |---|---|
+| 1.2 | Path fields: `path="save"`, `"folder"` or `"any"`, `extensions=[...]` and `path_base`, for the file chooser |
 | 1.1 | `Package.examples`: example workflows, opened from Settings › Packages |
 | 1.0 | Packages, `register_port_type`, `PortObject.view_html`, interactive html displays, node `version` and `migrate()`, node defaults |
 

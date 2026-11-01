@@ -75,6 +75,10 @@ export function Modal(props: {
   };
   // Ctrl+Enter is OK from anywhere, also from fields that keep their keys (code editors): caught first
   const onKeyDownCapture = (e: React.KeyboardEvent) => {
+    // (a dialog opened from this one has its own OK)
+    if ((e.target as HTMLElement).closest('.verknode-modal') !== box.current) {
+      return;
+    }
     if (props.onSubmit && e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
       e.preventDefault();
       e.stopPropagation();

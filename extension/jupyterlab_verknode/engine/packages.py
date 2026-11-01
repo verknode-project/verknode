@@ -49,7 +49,7 @@ import urllib.request
 import uuid
 from dataclasses import dataclass, field
 
-API_VERSION = "1.1"  # (1.1: Package.examples)
+API_VERSION = "1.2"  # (1.1: Package.examples; 1.2: path kinds and extensions of fields)
 GROUP = "verknode.packages"
 INDEX_URL = "https://raw.githubusercontent.com/verknode-project/verknode/main/packages/index.json"
 WASM = sys.platform == "emscripten"

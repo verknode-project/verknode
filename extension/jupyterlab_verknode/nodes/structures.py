@@ -43,9 +43,11 @@ HELP = (
 
 def structure_fields():
     return [
-        F("protein", "string", "Protein (PDB / mmCIF file)", "", FILES_HELP + " Empty: ligands only.", path=True),
+        F("protein", "string", "Protein (PDB / mmCIF file)", "", FILES_HELP + " Empty: ligands only.", path=True,
+          extensions=[".pdb", ".ent", ".cif", ".mmcif", ".gz"]),
         F("ligand_files", "records", "Ligand files (SDF, MOL, MOL2, PDB)", [], FILES_HELP, fields=[
-            F("path", "string", "File", ""),
+            F("path", "string", "File", "", path=True,
+              extensions=[".sdf", ".sd", ".mol", ".mol2", ".pdb", ".ent", ".xyz", ".gz"]),
         ]),
         F("column", "column", "Ligand column (input table)", None,
           "Molecules of the input table: an RDKit molecule column, or SMILES / MolBlock / PDB text. "

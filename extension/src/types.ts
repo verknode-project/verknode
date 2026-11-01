@@ -28,7 +28,12 @@ export interface FieldInfo {
   fields?: FieldInfo[];
   language?: string;
   insertables?: boolean;
-  path?: boolean;
+  /** a path with a chooser: true or 'file' (to read), 'save' (to write), 'folder', 'any' (a file or a folder) */
+  path?: boolean | 'file' | 'save' | 'folder' | 'any';
+  /** path fields: the file types the chooser lists first */
+  extensions?: string[];
+  /** path fields: relative to the folder in this setting, not to the workflow */
+  path_base?: string;
   show_if?: Record<string, any>;
   /** sketcher fields: settings whose change invalidates edits ("structure" / "name") */
   depends?: Record<string, 'structure' | 'name'>;

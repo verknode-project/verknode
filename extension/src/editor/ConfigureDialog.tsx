@@ -1,4 +1,5 @@
 import { Dialog, showDialog } from '@jupyterlab/apputils';
+import { PathExt } from '@jupyterlab/coreutils';
 import React, { useEffect, useRef, useState } from 'react';
 
 import { WorkflowController } from '../controller';
@@ -7,6 +8,7 @@ import { focusables, Modal } from './Modal';
 import { EditorSettings } from '../settings';
 import { MoleculeList } from './sketcher/MoleculeList';
 import { NotebookField } from './NotebookField';
+import { BrowseButton } from './PathField';
 import { Description } from './Repository';
 
 const TYPE_BADGE: Record<string, string> = {
@@ -42,6 +44,8 @@ export interface FieldContext {
   editorSettings?: EditorSettings;
   /** node-specific dialog data from the server */
   extra?: any;
+  /** the workflow's folder, from the Jupyter root (what relative paths start from) */
+  workflowFolder?: string;
   /** the dialog's (unsaved) settings and a way to change another one */
   settings?: Record<string, any>;
   setSetting?: (key: string, value: any) => void;
@@ -156,6 +160,21 @@ function ScalarEditor(props: {
       // values to pick from that the node's dialog data offers (e.g. the models of an LLM server)
       const suggestions: string[] = ctx.extra?.suggest?.[f.key] ?? [];
       const list = suggestions.length ? `verknode-suggest-${f.key}` : undefined;
+      if (f.path) {
+        return (
+          <div className="verknode-path-field">
+            <input
+              className="jp-mod-styled"
+              type="text"
+              value={value ?? ''}
+              disabled={disabled}
+              placeholder={f.path === 'folder' ? 'path/to/folder (relative to the workflow)' : 'path/to/file (relative to the workflow)'}
+              onChange={e => onChange(e.target.value)}
+            />
+            <BrowseButton field={f} value={value ?? ''} onChange={onChange} ctx={ctx} disabled={disabled} />
+          </div>
+        );
+      }
       return (
         <>
           <input
@@ -164,7 +183,7 @@ function ScalarEditor(props: {
             value={value ?? ''}
             disabled={disabled}
             list={list}
-            placeholder={f.path ? 'path/to/file (relative to the workflow)' : (ctx.extra?.placeholder?.[f.key] ?? '')}
+            placeholder={ctx.extra?.placeholder?.[f.key] ?? ''}
             onChange={e => onChange(e.target.value)}
           />
           {list && (
@@ -927,6 +946,7 @@ export function ConfigureDialog(props: {
     inSpecs: data?.inSpecs ?? [],
     flowVariables: data?.flowVariables ?? [],
     editorSettings: props.editorSettings,
+    workflowFolder: PathExt.dirname(props.controller.context.localPath),
     extra,
     settings,
     setSetting: (key, value) => void change(key, value),

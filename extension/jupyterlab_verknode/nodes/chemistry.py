@@ -97,7 +97,7 @@ class SDFReader(NodeModel):
     )
     out_ports = [Port(TABLE, "Molecules", "Molecules and SD properties")]
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path=True, extensions=[".sdf", ".sd", ".gz"]),
         F("molecule_column", "string", "Molecule column name", "Molecule"),
         F("include_name", "bool", "Add molecule name column", True),
         F("read_properties", "bool", "Read SD properties", True),
@@ -280,7 +280,7 @@ class SDFWriter(NodeModel):
     description = "Writes the molecule column to an SD file; selected columns are written as SD properties."
     in_ports = [Port(TABLE, "Molecules")]
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path="save", extensions=[".sdf", ".sd", ".gz"]),
         mol_column_field(),
         F("name_column", "column", "Molecule name column (optional)", None),
         F("properties", "columns", "Property columns", {"include": [], "exclude": [], "enforce": "exclusion"}),

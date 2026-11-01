@@ -33,7 +33,7 @@ class CSVReader(NodeModel):
     description = "Reads a delimiter separated text file. Column types are detected automatically."
     out_ports = [Port(TABLE, "File Table", "Table read from the CSV file")]
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path=True, extensions=[".csv", ".tsv", ".txt", ".gz"]),
         F("delimiter", "string", "Column delimiter", ",", "Use \\t for tab."),
         F("has_header", "bool", "Has column header", True),
         F("skip_rows", "int", "Skip first lines", 0),
@@ -72,7 +72,7 @@ class ParquetReader(NodeModel):
     short_description = "Reads a Parquet file into a table."
     description = "Reads an Apache Parquet file, preserving all column types."
     out_ports = [Port(TABLE, "File Table", "Table read from the Parquet file")]
-    fields = [F("path", "string", "File", "", PATH_HELP, path=True)]
+    fields = [F("path", "string", "File", "", PATH_HELP, path=True, extensions=[".parquet", ".pq"])]
 
     def configure(self, in_specs, s, ctx):
         return [pl.Schema(pl.read_parquet_schema(_existing(ctx, s["path"])))]
@@ -113,7 +113,7 @@ class CSVWriter(_Writer):
     short_description = "Writes a table to a CSV file."
     description = "Writes the input table to a delimiter separated text file. Molecule columns are written as SMILES."
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path="save", extensions=[".csv", ".tsv", ".txt", ".gz"]),
         F("delimiter", "string", "Column delimiter", ","),
         F("include_header", "bool", "Write column header", True),
         F("if_exists", "enum", "If file exists", "Overwrite", options=["Overwrite", "Append", "Fail"]),
@@ -139,7 +139,7 @@ class ParquetWriter(_Writer):
     short_description = "Writes a table to a Parquet file."
     description = "Writes the input table to an Apache Parquet file, preserving column types."
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path="save", extensions=[".parquet", ".pq"]),
         F("compression", "enum", "Compression", "zstd", options=["zstd", "snappy", "lz4", "gzip", "uncompressed"]),
         F("if_exists", "enum", "If file exists", "Overwrite", options=["Overwrite", "Fail"]),
         F("create_dirs", "bool", "Create missing folders", True),

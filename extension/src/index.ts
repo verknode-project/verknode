@@ -49,7 +49,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
     setLabHost({
       add: widget => app.shell.add(widget, 'main', { mode: 'split-right', ref: app.shell.currentWidget?.id ?? null }),
       activate: id => app.shell.activateById(id),
-      openFile: path => void app.commands.execute('docmanager:open', { path })
+      openFile: path => void app.commands.execute('docmanager:open', { path }),
+      listFolder: async path => {
+        const model = await app.serviceManager.contents.get(path, { content: true });
+        return (model.content as any[]).map(e => ({ name: e.name, isFolder: e.type === 'directory', size: e.size }));
+      }
     });
 
     app.docRegistry.addFileType({

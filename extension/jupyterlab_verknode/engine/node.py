@@ -326,7 +326,11 @@ class Field:
     fields: list | None = None  # sub-fields of a records field
     language: str | None = None  # code fields
     insertables: bool = False  # code field: offer $column$ / $${Svar}$$ insertion
-    path: bool = False  # string field holding a file path
+    # string field holding a path, with a chooser in the dialog: True or "file" (a file to read), "save" (a file
+    # to write, may be new), "folder", "any" (a file or a folder)
+    path: bool | str = False
+    extensions: list | None = None  # path fields: the file types the chooser lists first, e.g. [".csv", ".tsv"]
+    path_base: str | None = None  # path fields: relative to the folder in this setting, not to the workflow
     show_if: dict | None = None  # {"key": value-or-list} visibility condition
     # sketcher fields: other settings whose change invalidates edits, {"column": "structure"|"name"}
     depends: dict | None = None
@@ -341,7 +345,8 @@ class Field:
             "default": self.default,
             "description": self.description,
         }
-        for k in ("options", "kinds", "language", "show_if", "depends", "section", "options_from"):
+        for k in ("options", "kinds", "language", "show_if", "depends", "section", "options_from", "extensions",
+                  "path_base"):
             v = getattr(self, k)
             if v is not None:
                 d[k] = v
@@ -352,7 +357,7 @@ class Field:
         if self.insertables:
             d["insertables"] = True
         if self.path:
-            d["path"] = True
+            d["path"] = self.path
         return d
 
     @property

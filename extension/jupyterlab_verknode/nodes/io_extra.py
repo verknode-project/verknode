@@ -124,7 +124,7 @@ class ExcelReader(NodeModel):
     )
     out_ports = [Port(TABLE, "Output table", "Contents of the sheet")]
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path=True, extensions=[".xlsx", ".xlsm", ".xls"]),
         F("sheet_mode", "enum", "Sheet", "First sheet", options=["First sheet", "Sheet by name", "Sheet by position"]),
         F("sheet_name", "string", "Sheet name", "", show_if={"sheet_mode": "Sheet by name"}),
         F("sheet_index", "int", "Sheet position", 1, "1 = first sheet.", show_if={"sheet_mode": "Sheet by position"}),
@@ -162,7 +162,7 @@ class ReadExcelSheetNames(NodeModel):
     short_description = "Lists the sheet names of an Excel file."
     description = "Outputs one row per sheet with the sheet name and the file path, e.g. to loop over all sheets."
     out_ports = [Port(TABLE, "Sheet names")]
-    fields = [F("path", "string", "File", "", PATH_HELP, path=True)]
+    fields = [F("path", "string", "File", "", PATH_HELP, path=True, extensions=[".xlsx", ".xlsm", ".xls"])]
 
     def execute(self, inputs, s, ctx):
         import fastexcel
@@ -182,7 +182,7 @@ class TableReader(NodeModel):
     short_description = "Reads a table written by the Table Writer."
     description = "Reads the native table format (Apache Arrow IPC, extension <code>.table</code>), keeping all column types including molecules."
     out_ports = [Port(TABLE, "Read table")]
-    fields = [F("path", "string", "File", "", PATH_HELP, path=True)]
+    fields = [F("path", "string", "File", "", PATH_HELP, path=True, extensions=[".table"])]
 
     def configure(self, in_specs, s, ctx):
         return [pl.read_ipc_schema(_existing(ctx, s["path"]))]
@@ -219,7 +219,7 @@ class JSONReader(NodeModel):
     )
     out_ports = [Port(TABLE, "JSON table")]
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path=True, extensions=[".json", ".jsonl", ".ndjson", ".gz"]),
         F("format", "enum", "Format", "JSON", options=["JSON", "JSON Lines"]),
         F("json_path", "string", "Select with JSONPath", "$", "Path to the list of records, $ = whole document.",
           show_if={"format": "JSON"}),
@@ -259,7 +259,7 @@ class XMLReader(NodeModel):
     )
     out_ports = [Port(TABLE, "XML table")]
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path=True, extensions=[".xml", ".gz"]),
         F("xpath", "string", "Row XPath", "/*/*", "XPath selecting one element per row."),
         F("attributes", "bool", "Read attributes", True),
         F("children", "bool", "Read child elements", True),
@@ -405,7 +405,7 @@ class ModelReader(NodeModel):
     short_description = "Reads a model written by the Model Writer."
     description = "Reads a trained model (e.g. from a learner node) saved with the Model Writer."
     out_ports = [Port(MODEL, "Model")]
-    fields = [F("path", "string", "File", "", PATH_HELP, path=True)]
+    fields = [F("path", "string", "File", "", PATH_HELP, path=True, extensions=[".model"])]
 
     def configure(self, in_specs, s, ctx):
         return [_load_model(_existing(ctx, s["path"])).spec()]
@@ -438,7 +438,7 @@ class ExcelWriter(_FileSink):
     )
     in_ports = [Port(TABLE, "Input table")]
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path="save", extensions=[".xlsx", ".xlsm", ".xls"]),
         F("sheet", "string", "Sheet name", "default"),
         F("include_header", "bool", "Write column header", True),
         F("if_exists", "enum", "If file exists", "Overwrite", options=["Overwrite", "Append sheet", "Fail"]),
@@ -479,7 +479,7 @@ class TableWriter(_FileSink):
     description = "Writes the table in the native format (Apache Arrow IPC, extension <code>.table</code>), keeping all column types."
     in_ports = [Port(TABLE, "Input table")]
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path="save", extensions=[".table"]),
         F("compression", "enum", "Compression", "zstd", options=["zstd", "lz4", "uncompressed"]),
         F("if_exists", "enum", "If file exists", "Overwrite", options=IF_EXISTS),
     ]
@@ -503,7 +503,7 @@ class JSONWriter(_FileSink):
     )
     in_ports = [Port(TABLE, "Input table")]
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path="save", extensions=[".json", ".jsonl", ".ndjson", ".gz"]),
         F("orientation", "enum", "Orientation", "Records", options=["Records", "Columns", "JSON Lines"]),
         F("pretty", "bool", "Pretty print", True, show_if={"orientation": ["Records", "Columns"]}),
         F("if_exists", "enum", "If file exists", "Overwrite", options=IF_EXISTS),
@@ -539,7 +539,7 @@ class ModelWriter(_FileSink):
     description = "Saves a trained model so it can be read again with the Model Reader."
     in_ports = [Port(MODEL, "Model")]
     fields = [
-        F("path", "string", "File", "", PATH_HELP + " Suggested extension: .model", path=True),
+        F("path", "string", "File", "", PATH_HELP + " Suggested extension: .model", path="save", extensions=[".model"]),
         F("if_exists", "enum", "If file exists", "Overwrite", options=IF_EXISTS),
     ]
 
@@ -560,7 +560,7 @@ class ImageWriterPort(_FileSink):
     description = "Writes the image from an image port (e.g. of a view node) to a file (.svg or .png, matching the image type)."
     in_ports = [Port(IMAGE, "Image")]
     fields = [
-        F("path", "string", "File", "", PATH_HELP, path=True),
+        F("path", "string", "File", "", PATH_HELP, path="save"),
         F("if_exists", "enum", "If file exists", "Overwrite", options=IF_EXISTS),
     ]
 
@@ -609,7 +609,7 @@ class ListFilesFolders(NodeModel):
     )
     out_ports = [Port(TABLE, "File/folder list")]
     fields = [
-        F("folder", "string", "Folder", ".", PATH_HELP, path=True),
+        F("folder", "string", "Folder", ".", PATH_HELP, path="folder"),
         F("recursive", "bool", "Include subfolders", False),
         F("mode", "enum", "List", "Files", options=["Files", "Folders", "Files and folders"]),
         F("filter", "enum", "Filter", "None", options=["None", "File extensions", "Wildcard"]),
@@ -672,7 +672,7 @@ class CreateFolder(NodeModel):
     description = "Creates a folder (including missing parent folders) and pushes its absolute path as a String flow variable."
     out_ports = [Port(FLOWVARIABLE, "Variables connection", "Carries the folder path variable")]
     fields = [
-        F("parent", "string", "Parent folder", ".", PATH_HELP, path=True),
+        F("parent", "string", "Parent folder", ".", PATH_HELP, path="folder"),
         F("folder", "string", "Folder name", "new_folder", "May contain subfolders, e.g. results/run1."),
         F("if_exists", "enum", "If folder exists", "Ignore", options=["Ignore", "Fail"]),
         F("variable", "string", "Path variable name", "folder_path"),
@@ -768,7 +768,7 @@ class TransferFiles(NodeModel):
     out_ports = [Port(TABLE, "Transfer status")]
     fields = [
         F("column", "column", "Source path column", None, kinds=["string"]),
-        F("destination", "string", "Destination folder", "", PATH_HELP, path=True),
+        F("destination", "string", "Destination folder", "", PATH_HELP, path="folder"),
         F("mode", "enum", "Transfer", "Copy", options=["Copy", "Move"]),
         F("if_exists", "enum", "If destination exists", "Overwrite", options=["Overwrite", "Ignore", "Fail"]),
     ]
@@ -830,9 +830,9 @@ class CompressFiles(NodeModel):
     in_ports = [Port(TABLE, "Paths", "Table with a path column", optional=True)]
     out_ports = []
     fields = [
-        F("source", "string", "File or folder to compress", "", "Used when no input table is connected.", path=True),
+        F("source", "string", "File or folder to compress", "", "Used when no input table is connected.", path="any"),
         F("column", "column", "Path column", None, "Used when the input table is connected.", kinds=["string"]),
-        F("archive", "string", "Archive file", "archive.zip", PATH_HELP, path=True),
+        F("archive", "string", "Archive file", "archive.zip", PATH_HELP, path="save", extensions=[".zip", ".tar", ".tar.gz", ".tgz", ".gz"]),
         F("format", "enum", "Format", "zip", options=["zip", "tar.gz"]),
         F("if_exists", "enum", "If archive exists", "Overwrite", options=IF_EXISTS),
     ]
@@ -899,8 +899,8 @@ class DecompressFiles(NodeModel):
     description = "Extracts an archive into the destination folder and lists the extracted files and folders."
     out_ports = [Port(TABLE, "Extracted files")]
     fields = [
-        F("archive", "string", "Archive file", "", PATH_HELP, path=True),
-        F("destination", "string", "Destination folder", "", PATH_HELP, path=True),
+        F("archive", "string", "Archive file", "", PATH_HELP, path=True, extensions=[".zip", ".tar", ".tar.gz", ".tgz", ".gz"]),
+        F("destination", "string", "Destination folder", "", PATH_HELP, path="folder"),
         F("if_exists", "enum", "If file exists", "Overwrite", options=["Overwrite", "Ignore", "Fail"]),
     ]
 
@@ -978,10 +978,10 @@ class CreateFileFolderVariables(NodeModel):
     )
     out_ports = [Port(FLOWVARIABLE, "Variables connection")]
     fields = [
-        F("base", "string", "Base folder", ".", PATH_HELP, path=True),
+        F("base", "string", "Base folder", ".", PATH_HELP, path="folder"),
         F("variables", "records", "Variables", [{"name": "file_path", "path": "data.csv"}], fields=[
             F("name", "string", "Variable name", ""),
-            F("path", "string", "File/folder (relative to base)", ""),
+            F("path", "string", "File/folder (relative to base)", "", path="any", path_base="base"),
         ]),
     ]
 

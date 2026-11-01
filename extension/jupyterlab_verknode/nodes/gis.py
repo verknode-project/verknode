@@ -214,7 +214,7 @@ class GeoJSONReader(NodeModel):
         "a URL (http / https)."
     )
     out_ports = [Port(TABLE, "Features")]
-    fields = [F("path", "string", "File or URL", "", "A .geojson / .json file or an http(s) URL.", path=True)]
+    fields = [F("path", "string", "File or URL", "", "A .geojson / .json file or an http(s) URL.", path=True, extensions=[".geojson", ".json"])]
 
     def _load(self, s, ctx):
         p = (s.get("path") or "").strip()
@@ -272,7 +272,7 @@ class GeoJSONWriter(NodeModel):
     in_ports = [Port(TABLE, "Table to write")]
     out_ports = []
     fields = [
-        F("path", "string", "File", "features.geojson", path=True),
+        F("path", "string", "File", "features.geojson", path="save", extensions=[".geojson", ".json"]),
         F("geometry", "column", "Geometry column", None, "GeoJSON text. Empty: geometry, else the point columns.",
           port=1, kinds=["string"]),
         lat_field(), lon_field(),

@@ -276,7 +276,7 @@ class SQLiteConnector(NodeModel):
     )
     out_ports = [Port(DB_SESSION, "DB Connection", "SQLite database session")]
     fields = [
-        F("path", "string", "Database file", "", PATH_HELP, path=True),
+        F("path", "string", "Database file", "", PATH_HELP, path=True, extensions=[".sqlite", ".sqlite3", ".db"]),
         F("create", "bool", "Create database if it does not exist", True),
     ]
 

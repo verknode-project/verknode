@@ -124,7 +124,7 @@ class PDB(_WebNode):
         F("query", "code", "PDB IDs / searches", "1HSG\n4HHB", "One per line."),
         F("limit", "int", "Search results at most", 10),
         F("format", "enum", "File format (Download)", "pdb", options=["pdb", "cif", "bcif"]),
-        F("folder", "string", "Folder (Download)", "pdb_files", "Relative to the workflow.", path=True),
+        F("folder", "string", "Folder (Download)", "pdb_files", "Relative to the workflow.", path="folder"),
     ]
 
     def configure(self, in_specs, s, ctx):
