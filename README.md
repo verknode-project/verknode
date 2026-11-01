@@ -141,6 +141,12 @@ from SMILES (NGL):
 
 ![Canvas widgets: a table of indinavir poses drawn as structures, the selected poses in HIV-1 protease in Mol*, and HIV protease inhibitors from SMILES in 2D and in 3D with NGL](docs/images/structures-v1.png)
 
+Turn and zoom them right on the canvas. Ctrl+click a row and that pose joins
+the others in the pocket; tick the ligands to show, and click a name to zoom
+to it:
+
+![Mol* on the canvas: turning HIV-1 protease with indinavir poses in its pocket, and Ctrl+clicking a row in the table adds a pose; NGL on the canvas: turning and zooming structures generated from SMILES with RDKit, unticking ligands, and clicking a name to zoom to it](docs/images/molecules-3d-v1.gif)
+
 **Build a workflow by chatting with an agent**: tell the Workflow Agent Chat
 what you need ("total revenue per region, largest first", "as a bar chart").
 For each message the model works with tools:

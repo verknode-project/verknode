@@ -32,6 +32,8 @@ hidden), ligand style, which ligands are shown at the start, background, and
 a limit on the number of ligands. Example: `notebooks/examples/life_science/structures.vkf`
 - pick poses in a table of structures and see them in the pocket.
 
+![Mol* on the canvas: turning HIV-1 protease with indinavir poses in its pocket, and Ctrl+clicking a row in the table adds a pose; NGL on the canvas: turning and zooming structures generated from SMILES with RDKit, unticking ligands, and clicking a name to zoom to it](images/molecules-3d-v1.gif)
+
 **Molecule Sketcher** (Chemistry › RDKit › IO) makes a table of sketches
 (Index, Name, Molecule, SMILES, optional MolBlock) from structures drawn in
 its dialog; they are stored as MolBlocks in the node settings (from Python:
