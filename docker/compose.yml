@@ -35,8 +35,14 @@ services:
             - ./before-notebook.d/10-verknode-extension.sh:/usr/local/bin/before-notebook.d/10-verknode-extension.sh:ro
             # the user's verknode folder (docs/install.md): llm.env, node defaults, your node folder, models
             - verknode-home:/home/jovyan/.verknode
+            # the work folder (`work` in the files): your workflows and data outlive a rebuilt container
+            - verknode-work:/home/jovyan/work
+            # JupyterLab's settings and saved layouts (lab/user-settings, lab/workspaces)
+            - verknode-jupyter:/home/jovyan/.jupyter
         env_file:
             - credentials_norepo.env
 
 volumes:
     verknode-home:
+    verknode-work:
+    verknode-jupyter:

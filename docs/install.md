@@ -56,7 +56,10 @@ home folder. Set `VERKNODE_HOME` to use another folder.
   read while the new folder has none. A save of the node defaults goes to
   `~/.verknode`.
 - **Docker:** the development setup keeps the folder in the
-  `verknode-home` volume. With `docker run`, mount it as above.
+  `verknode-home` volume, and the work folder (`work` in the browser's
+  files) in the `verknode-work` volume, and JupyterLab's settings and layouts
+  (`~/.jupyter`) in the `verknode-jupyter` volume, so they outlive a rebuilt
+  container. With `docker run`, mount the first two as above.
 - **In the browser:** the folder is `.verknode` in the browser's files.
 
 ## What the nodes need
