@@ -518,14 +518,15 @@ class AgentAPI:
         return True
 
     def _report(self, wf, ids) -> tuple[str, list, list]:
-        from .nodes.agent import why_not_run
+        from .nodes.agent import untested_before, why_not_run
 
         rows, problems = [], []
         for nid in wf.topo_order(set(ids)):
             nc = wf.nodes[nid]
             msg = nc.message
-            state = "done" if nc.executed else "failed" if msg and msg[0] == "ERROR" else \
-                "skipped" if msg and "sandbox" in msg[1] else "not run"
+            state = "done" if nc.executed else "skipped" if msg and "test sandbox" in msg[1] else \
+                "failed" if msg and msg[0] == "ERROR" else \
+                "skipped" if untested_before(wf, nid) is not None else "not run"
             out_rows = next((o.height for o in (nc.outputs or [])[1:] if isinstance(o, pl.DataFrame)), None)
             rows.append({"id": nid, "type": nc.name, "label": nc.annotation, "state": state, "rows": out_rows,
                          "seconds": round(nc.exec_time, 3) if nc.exec_time is not None else None,

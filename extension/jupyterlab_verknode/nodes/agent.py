@@ -402,6 +402,12 @@ def run_sandboxed(copy, ids, s):
             rows = next((o.height for o in (nc.outputs or [])[1:] if isinstance(o, pl.DataFrame)), None)
             report.append({"id": nid, "name": nc.name, "label": nc.annotation, "state": state,
                            "message": msg[1] if msg else None, "rows": rows})
+            if state == "skipped":
+                report[-1]["message"] = msg[1].removeprefix("Execute failed: ")
+            elif state == "not run" and (before := untested_before(copy, nid)) is not None:
+                state = report[-1]["state"] = "skipped"
+                report[-1]["message"] = (f"Not tested: it needs the output of #{before} [{copy.nodes[before].name}], "
+                                         "which the test sandbox does not run")
             if state == "failed":
                 problems.append(f"node #{nid} [{nc.name}] \"{nc.annotation}\" failed: {msg[1]}")
             elif state == "not run":
@@ -416,6 +422,29 @@ def run_sandboxed(copy, ids, s):
             box.cleanup()
         copy.sandbox = None
     return report, problems, files
+
+
+def untested_before(wf, nid) -> int | None:
+    """The node before this one that the test sandbox did not run, when that is all that keeps this one from
+    running (its own inputs are connected)."""
+    nc = wf.nodes[nid]
+    if any(not p.optional and i not in wf.in_conns(nid) for i, p in enumerate(nc.model.in_ports, 1)):
+        return None
+    for a in wf.topo_order(wf.ancestors(nid)):
+        msg = wf.nodes[a].message
+        if not wf.nodes[a].executed and msg and "test sandbox" in msg[1]:
+            return a
+    return None
+
+
+def untested_note(report) -> str:
+    """For the model: what the test could not run. "" when it ran everything."""
+    names = [f"#{r['id']} [{r['name']}]" for r in report if r["state"] == "skipped"]
+    if not names:
+        return ""
+    return (f"Not tested: {', '.join(names)}. The test does not run scripts and the like, nor the nodes after them, "
+            "so nobody has seen what they give. This is not a failure: do not replace or work around them to get a "
+            "test. In your answer, say that they were not tested, and do not say what they give.")
 
 
 def why_not_run(wf, nid) -> str:
@@ -544,6 +573,8 @@ the change with the tools - verknode shows changes of what was there before this
 - Ports count from 1. A node needs its (non optional) input ports connected before it is ready.
 - File paths are relative to the workflow's folder (list_files shows the files). Do not write files unless asked.
 - Everything you do is tried on a copy, in a file sandbox; it is made in the workflow when you have answered.
+- Scripts and the like are normally not run in that test, nor the nodes after them (state "skipped"). That is \
+not a failure: keep them, and say in your answer that they were not tested.
 - If the user only asks a question, answer it without changing the workflow. If what they ask is unclear, ask \
 them (briefly) instead of guessing."""
 
@@ -619,6 +650,7 @@ class AgentSession:
         self.helped: set[str] = set()
         self.dirty = False  # (edited since the last run)
         self.last_run = None  # (report, problems, files) of the last run
+        self.partial = False  # (the last run left out some of the nodes)
         guidance = (s.get("guidance") or "").strip()
         system = SYSTEM + ("\n\nMore instructions:\n" + guidance if guidance else "") + \
             f"\n\nNode types (by category):\n{catalog(wf)}"
@@ -689,18 +721,21 @@ class AgentSession:
             # the model has answered: test what it built, and show it the result once
             if not self.ops:
                 break
-            if self.dirty or self.last_run is None:
+            if self.dirty or self.partial or self.last_run is None:
                 self.status("Testing…")
                 self._run()
             report, problems, files = self.last_run
             if problems and fixes < max_fixes:
                 fixes += 1
+                note = untested_note(report)
                 messages.append({"role": "user", "content": "Before you answer: testing what you built gave these "
-                                 "problems:\n- " + "\n- ".join(problems[:10]) + "\nFix them with the tools, then answer."})
+                                 "problems:\n- " + "\n- ".join(problems[:10]) + "\nFix them with the tools, then answer."
+                                 + (f"\n\n{note}" if note else "")})
                 continue
             if not checked and not problems:
                 checked = True
                 result = self._result_text(rows=10)
+                note = untested_note(report)
                 if result:
                     messages.append({"role": "user", "content": "(verknode: before you answer, check the result.) "
                                      f"This is what your nodes give now:\n{result}\n\nIs it exactly what I asked for "
@@ -708,14 +743,18 @@ class AgentSession:
                                      "is not per day), the right calculation (sum, count, mean; a percent is x 100), "
                                      "and no values counted twice (a value a join repeats on many rows must not be "
                                      "summed). If something is wrong, fix it with the tools. Then answer my message "
-                                     "(about the result - not about this check)."})
+                                     "(about the result - not about this check)." + (f"\n\n{note}" if note else "")})
+                    continue
+                if note:
+                    messages.append({"role": "user", "content": f"(verknode: before you answer.) {note} Then answer "
+                                     f"my message (\"{message}\")."})
                     continue
             break
         reply = text or ("Done." if self.ops else "I have no answer to that.")
         self.ctx.log(f"Agent: {len(self.ops)} edit(s), {steps} step(s) in {time.time() - t0:.0f} s")
         if not self.ops:
             return reply, False
-        if self.dirty or self.last_run is None:  # (e.g. it ran out of steps while editing)
+        if self.dirty or self.partial or self.last_run is None:  # (e.g. it ran out of steps while editing)
             self.status("Testing…")
             self._run()
         report, problems, files = self.last_run
@@ -730,8 +769,10 @@ class AgentSession:
                      f"{os.path.relpath(f['path'], wf.base_dir or '.')}" for f in files if f["change"] in ("modified", "deleted")]
         if warnings:
             self.pending = plan
-            if CLAIM.search(reply) or re.search(r"\b(has|have) been\b", reply):  # (it is not done yet)
+            if not text:
                 reply = "Nothing has changed yet: this is what I would do, once you agree."
+            elif CLAIM.search(reply) or re.search(r"\b(has|have) been\b", reply):  # (it is not done yet)
+                reply = f"Nothing has changed yet, whatever this says: it is made once you agree.\n\n{reply}"
             # (the nodes that were there and would change: highlighted on the canvas)
             self.nodes = sorted({int(op[k]) for op in self.ops for k in ("node", "to")
                                  if isinstance(op.get(k), int) and op[k] in wf.nodes and op[k] not in self.hidden})
@@ -751,7 +792,11 @@ class AgentSession:
         moved = 0 if sandboxed else transfer_results(plan["test"], wf, live.idmap, self.hidden)
         if live.log:
             self.after_change()
-        lines = [("Done." if confirmed else plan["reply"])]
+        lines = [plan["reply"]]
+        if confirmed:
+            lines = ["Done, but the test still shows problems (below)." if plan["problems"] else "Done."]
+            if plan["reply"] != "Done.":  # (what it said when it asked: the user's OK is no reason to lose it)
+                lines.append(f"\nWhat the agent said before you agreed:\n\n{plan['reply']}")
         if errors:
             lines.append("\n**Some changes failed** (the workflow changed meanwhile?):\n" +
                          "\n".join(f"- {e}" for e in errors[:5]))
@@ -761,7 +806,8 @@ class AgentSession:
         test = (f"\n**Test** (on a copy, in a sandbox): {len(ran)} node(s) ran" if sandboxed else
                 f"\n**Run** (sandbox off - the real files): {len(ran)} node(s) ran"
                 + (f", their results are in the workflow ({moved} node(s))" if moved else "")) + \
-            (f", {len(skipped)} not run there (scripts and the like)" if skipped else "")
+            ("; not tested, so their results are unknown (scripts do not run there, nor the nodes after them): " +
+             ", ".join(f"#{r['id']} \"{r['label']}\"" for r in skipped) if skipped else "")
         if plan["problems"]:
             test += "; problems:\n" + "\n".join(f"- {p}" for p in plan["problems"][:5])
         lines.append(test)
@@ -899,6 +945,7 @@ class AgentSession:
     def _run(self, ids=None):
         ids = sorted(n for n in (ids if ids is not None else self.edit.editable) if n in self.test.nodes)
         self.last_run = run_sandboxed(self.test, ids, self.s)
+        self.partial = not self.edit.editable & set(self.test.nodes) <= set(ids)  # (e.g. a preview: up to a node)
         self.dirty = False
         return self.last_run
 
@@ -911,7 +958,10 @@ class AgentSession:
                  + (f" - {r['message'][:300]}" if r["message"] and r["state"] != "executed" else "") for r in report]
         if files:
             lines.append("Files it would write: " + ", ".join(f"{f['path']} ({f['change']})" for f in files[:8]))
-        return "\n".join(lines) + ("\nProblems:\n- " + "\n- ".join(problems) if problems else "\nNo problems.")
+        note = untested_note(report)
+        return "\n".join(lines) + ("\nProblems:\n- " + "\n- ".join(problems) if problems else
+                                   "\nNo problems in what ran." if note else "\nNo problems.") + \
+            (f"\n{note}" if note else "")
 
     def t_preview(self, node=None, port=1, rows=10):
         nid = self.edit.node(node)
@@ -921,6 +971,9 @@ class AgentSession:
             mine = (self.test.ancestors(nid) | {nid}) & (self.edit.editable | {nid})
             self._run(mine if not self.dirty else None)
         if not nc.executed:
+            untested = next((r for r in self.last_run[0] if r["id"] == nid and r["state"] == "skipped"), None)
+            if untested:
+                return f"#{nid} has no output to show. {untested['message']}\n{untested_note(self.last_run[0])}"
             return f"#{nid} did not run: {nc.message[1] if nc.message else 'a node before it did not run'}"
         outs = nc.outputs or []
         port = int(port or 1)
@@ -933,9 +986,11 @@ class AgentSession:
         return f"#{nid} output {port}: {type(o).__name__} " + _short(getattr(o, "summary", lambda: {})(), 400)
 
     def _result_text(self, rows=5, markdown=False) -> str:
-        """The first rows of the result: the last table of your nodes that ran."""
+        """The first rows of the result: the last table of your nodes that ran (not the input of a node
+        that did not: that is not the result)."""
         report = self.last_run[0] if self.last_run else []
-        for r in reversed([r for r in report if r["state"] == "executed"]):
+        inputs = set().union(*(self.test.ancestors(r["id"]) for r in report if r["state"] == "skipped"))
+        for r in reversed([r for r in report if r["state"] == "executed" and r["id"] not in inputs]):
             nc = self.test.nodes.get(r["id"])
             df = next((o for o in (nc.outputs or [])[1:] if isinstance(o, pl.DataFrame)), None) if nc else None
             if df is not None and df.width:

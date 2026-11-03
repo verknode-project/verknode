@@ -315,6 +315,9 @@ The copy runs in a **file sandbox**:
   data, but nothing real is written, moved or deleted;
 - scripts, notebooks, the Code Runner and custom nodes (which could reach
   files some other way) are not run there unless allowed.
+  What follows such a node cannot run there either: these nodes are "not
+  tested", which is not a failure. The model is told, it goes back for no fix,
+  and the chat names them instead of showing an earlier table as the result.
 
 When the model answers, the agent checks its work before anything changes:
 - **It tests what was built.** Failures go back to the model for a few rounds.
