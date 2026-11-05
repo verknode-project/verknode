@@ -93,7 +93,8 @@ class RuleBasedRowSplitter(NodeModel):
     short_description = "Splits rows using Rule Engine rules."
     description = (
         "Rows whose first matching rule has outcome TRUE go to the first output, all others "
-        "(including rows matching no rule) to the second. Uses the Rule Engine syntax."
+        "(including rows matching no rule) to the second. Uses the Rule Engine syntax; a rule "
+        "without <code>=&gt; outcome</code> means <code>=&gt; TRUE</code>."
     )
     in_ports = IN
     out_ports = [Port(TABLE, "TRUE matches"), Port(TABLE, "FALSE matches")]
@@ -101,7 +102,7 @@ class RuleBasedRowSplitter(NodeModel):
 
     def execute(self, inputs, s, ctx):
         df = inputs[0]
-        rules = compile_rules(s["rules"] or "", df.columns, ctx.variables())
+        rules = compile_rules(s["rules"] or "", df.columns, ctx.variables(), outcome=True)
         cond = rules_expression(rules, default=False).cast(pl.Boolean).fill_null(False)
         return [df.filter(cond), df.filter(~cond)]
 

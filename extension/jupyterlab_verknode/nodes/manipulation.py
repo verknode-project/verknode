@@ -174,7 +174,8 @@ class RuleEngine(NodeModel):
         "determines the value. Columns are referenced as <code>$column$</code>, flow variables as "
         "<code>$${Sname}$$</code>.<br/>Operators: <code>= &lt; &lt;= &gt; &gt;= !=</code>, "
         "<code>LIKE</code> (wildcards * ?), <code>MATCHES</code> (regex), <code>IN (a, b)</code>, "
-        "<code>MISSING $col$</code>, <code>AND OR XOR NOT</code>, <code>TRUE</code>. "
+        "<code>MISSING $col$</code>, <code>AND OR XOR NOT</code>, <code>TRUE</code>; a Boolean column "
+        "is a condition by itself (<code>NOT $returned$ =&gt; \"kept\"</code>). "
         "Lines starting with // are comments. No match gives a missing value."
     )
     in_ports = IN
@@ -371,7 +372,9 @@ class RuleBasedRowFilter(NodeModel):
     short_description = "Filters rows using Rule Engine rules."
     description = (
         "Rows are included (or excluded) when the first matching rule has outcome TRUE. "
-        "Uses the Rule Engine syntax, e.g. <code>$age$ &gt; 30 AND $city$ = \"Berlin\" =&gt; TRUE</code>."
+        "Uses the Rule Engine syntax, e.g. <code>$age$ &gt; 30 AND $city$ = \"Berlin\" =&gt; TRUE</code>; "
+        "columns are written <code>$name$</code>. A rule without <code>=&gt; outcome</code> means "
+        "<code>=&gt; TRUE</code>, and a Boolean column is a condition by itself: <code>NOT $returned$</code>."
     )
     in_ports = IN
     out_ports = [Port(TABLE, "Filtered table")]
@@ -382,7 +385,7 @@ class RuleBasedRowFilter(NodeModel):
 
     def execute(self, inputs, s, ctx):
         df = inputs[0]
-        rules = compile_rules(s["rules"] or "", df.columns, ctx.variables())
+        rules = compile_rules(s["rules"] or "", df.columns, ctx.variables(), outcome=True)
         cond = rules_expression(rules, default=False).cast(pl.Boolean).fill_null(False)
         return [df.filter(cond if s["mode"] == "Include" else ~cond)]
 
