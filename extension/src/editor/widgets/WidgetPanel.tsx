@@ -7,6 +7,7 @@ import { HtmlFrame } from './HtmlFrame';
 import { DisplayLoader } from './frames';
 import { ChatRenderer, TextRenderer } from './chat';
 import { MapRenderer, MermaidRenderer } from './diagrams';
+import { WalkthroughRenderer } from './walkthrough';
 import { useWidgetSelection, WidgetSelection } from './selection';
 import { dockGroup, groupTop, Rect as DockRect, snapGroup, snapResize } from './snap';
 import { TailStore } from './tails';
@@ -128,6 +129,7 @@ registerOutputRenderer('chat', ChatRenderer);
 registerOutputRenderer('markdown', TextRenderer);
 registerOutputRenderer('mermaid', MermaidRenderer);
 registerOutputRenderer('map', MapRenderer);
+registerOutputRenderer('walkthrough', WalkthroughRenderer);
 
 /** Canvas zoom of the node (its screen size over its own size). */
 function zoomOf(el: HTMLElement): number {

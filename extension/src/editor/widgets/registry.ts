@@ -42,20 +42,58 @@ export interface CanvasNodeRef {
   id: number;
   name: string;
   label: string;
+  /** it has a canvas widget / a dialog / a view; its number of output ports */
+  widget?: boolean;
+  dialog?: boolean;
+  view?: boolean;
+  outputs?: number;
 }
+
+/** A group annotation of the canvas. */
+export interface CanvasGroupRef {
+  id: number;
+  text: string;
+  nodes: number[];
+}
+
+/** What a reference of a document (a walkthrough's vk: link) does on the canvas. */
+export type CanvasAction =
+  | { kind: 'node' | 'view'; node: number }
+  | { kind: 'widget'; node: number; quiet?: boolean }
+  | { kind: 'group'; group: number }
+  | { kind: 'settings'; node: number; field?: string }
+  | { kind: 'output'; node: number; port?: number }
+  | { kind: 'run'; all?: boolean; group?: number; nodes?: number[] };
 
 /** What displays can do with the canvas they are on. */
 export interface CanvasLink {
   /** the nodes selected on the canvas lately - before the display was clicked (without `except`) */
   selection: (except?: number) => CanvasNodeRef[];
   /** show these nodes: select them, bring them into view and make them flash (fit 'if-hidden': move the
-   * view only if one is out of it; false: only the flash) */
-  highlight: (ids: number[], fit?: boolean | 'if-hidden') => void;
+   * view only if one is out of it; false: only the flash); keep: an element on the canvas that stays in view
+   * too (e.g. the walkthrough that points at them) */
+  highlight: (ids: number[], fit?: boolean | 'if-hidden', keep?: Element) => void;
   /** a node of the canvas by its number (#id), or null */
   node: (id: number) => CanvasNodeRef | null;
   /** a look at a node's output data (inspection widget) while hovered (null: gone); pin: kept; near:
    * the screen box of what points at it (the widget goes beside it) */
   inspect: (id: number | null, pin?: boolean, near?: DOMRect) => void;
+  /** all nodes (of the canvas level shown) and the groups */
+  nodes: () => CanvasNodeRef[];
+  groups: () => CanvasGroupRef[];
+  /** do what a reference says: show a node or group, open settings / an output / a view, show a widget, run
+   * (keep: an element on the canvas that stays in view, e.g. the walkthrough the reference is on; a quiet
+   * widget is shown without moving the view) */
+  act: (action: CanvasAction, keep?: Element) => void;
+  /** change some settings of a node (one undo step) */
+  saveSettings: (id: number, settings: Record<string, any>) => Promise<void>;
+  /** show a node's walkthrough as a page of its own (where views open: a JupyterLab tab, a window, ...) */
+  openWalkthrough: (id: number) => void;
+  /** a file next to the workflow (a relative path): its URL, and opening it in JupyterLab */
+  fileUrl: (path: string) => string | null;
+  openFile: (path: string) => void;
+  /** the workflow is executing */
+  running: () => boolean;
 }
 
 export const CanvasLinkContext = React.createContext<CanvasLink | null>(null);

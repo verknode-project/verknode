@@ -15,6 +15,7 @@ import {
   useReactFlow,
   ViewportPortal
 } from '@xyflow/react';
+import { PageConfig, PathExt, URLExt } from '@jupyterlab/coreutils';
 import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { ExportOptions, WorkflowController } from '../controller';
@@ -36,6 +37,7 @@ import { GroupDialog, groupTitle } from './GroupDialog';
 import { compatibleInput, recordTransition, suggestNodes } from './hinting';
 import { copyText, getFragment, hasFragment, setFragment, trackCopy } from './clipboard';
 import { NodeViewDialog } from './NodeViewDialog';
+import { WalkthroughPage } from './WalkthroughPage';
 import { PortView } from './PortView';
 import { Description, NODE_DRAG_MIME, Repository } from './Repository';
 import { SketcherDialog } from './sketcher/SketcherDialog';
@@ -52,7 +54,7 @@ const nodeTypes = { node: WorkflowNode, metabar: MetanodeBar };
 type Menu = { x: number; y: number; nodeId: number | null; groupId?: number | null; inspection?: string; layout?: boolean };
 
 /** A port or node view shown in a child browser window. */
-type External = { key: number; win: Window; kind: 'port' | 'view'; node: number; port: number; tab: boolean };
+type External = { key: number; win: Window; kind: 'port' | 'view' | 'walkthrough'; node: number; port: number; tab: boolean };
 
 function parseHandle(h: string | null | undefined): number {
   return h ? parseInt(h.split('-')[1], 10) : 0;
@@ -599,6 +601,9 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   const [configure, setConfigure] = useState<number | null>(null);
   const [portView, setPortView] = useState<{ node: number; port: number } | null>(null);
   const [nodeView, setNodeView] = useState<number | null>(null);
+  const [walkView, setWalkView] = useState<number | null>(null);
+  // (a reference of a walkthrough opens the settings at one of them)
+  const [configureField, setConfigureField] = useState<string | undefined>(undefined);
   const pendingViews = useRef<Set<number>>(new Set());
   const [externals, setExternals] = useState<External[]>([]);
   const externalKey = useRef(0);
@@ -949,6 +954,8 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
   }, [nodes]);
   const viewRef = useRef(rawView);
   viewRef.current = rawView;
+  type LinkActions = Pick<CanvasLink, 'nodes' | 'groups' | 'act' | 'saveSettings' | 'openWalkthrough' | 'fileUrl' | 'openFile' | 'running'>;
+  const linkActions = useRef<LinkActions | null>(null);
   const canvasLink = useMemo<CanvasLink>(
     () => ({
       selection: except => {
@@ -964,7 +971,15 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         return n ? { id, name: n.name, label: n.annotation } : null;
       },
       inspect: (id, pin, near) => inspectNodeRef.current?.(id, pin, near),
-      highlight: (ids, fit = true) => {
+      nodes: () => linkActions.current?.nodes() ?? [],
+      groups: () => linkActions.current?.groups() ?? [],
+      act: (a, keep) => linkActions.current?.act(a, keep),
+      saveSettings: async (id, settings) => linkActions.current?.saveSettings(id, settings),
+      openWalkthrough: id => linkActions.current?.openWalkthrough(id),
+      fileUrl: path => linkActions.current?.fileUrl(path) ?? null,
+      openFile: path => linkActions.current?.openFile(path),
+      running: () => linkActions.current?.running() ?? false,
+      highlight: (ids, fit = true, keep) => {
         const hidden = (id: number) => {
           const el = wrapper.current?.querySelector(`.react-flow__node[data-id="${id}"]`)?.getBoundingClientRect();
           const box = wrapper.current?.getBoundingClientRect();
@@ -981,8 +996,19 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
           }
         }, 2600);
         const shown = ids.filter(id => flow.getNode(String(id)));
-        if (shown.length && (fit === true || (fit === 'if-hidden' && shown.some(hidden)))) {
-          void flow.fitView({ nodes: shown.map(id => ({ id: String(id) })), padding: 0.4, maxZoom: 1, duration: 500 });
+        const pane = wrapper.current?.getBoundingClientRect();
+        if (shown.length && pane && (fit === true || (fit === 'if-hidden' && shown.some(hidden)))) {
+          // the nodes with their canvas widgets, and what points at them (e.g. a walkthrough on the canvas):
+          // all in view, at most at 100 %
+          const boxes = shown.flatMap(id => {
+            const el = wrapper.current?.querySelector(`.react-flow__node[data-id="${id}"]`);
+            return [el?.getBoundingClientRect(), el?.querySelector('.verknode-widget-dock')?.getBoundingClientRect()];
+          });
+          const got = [...boxes, keep?.getBoundingClientRect()].filter((b): b is DOMRect => !!b && b.width > 0);
+          const a = flow.screenToFlowPosition({ x: Math.min(...got.map(b => b.left)), y: Math.min(...got.map(b => b.top)) });
+          const z = flow.screenToFlowPosition({ x: Math.max(...got.map(b => b.right)), y: Math.max(...got.map(b => b.bottom)) });
+          const zoom = Math.min(1, pane.width / ((z.x - a.x) * 1.15 + 1), pane.height / ((z.y - a.y) * 1.15 + 1));
+          void flow.setCenter((a.x + z.x) / 2, (a.y + z.y) / 2, { zoom, duration: 500 });
         }
       }
     }),
@@ -1746,7 +1772,10 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       existing.win.focus();
       return true;
     }
-    const win = kind === 'view' ? openChildWindow(tab, 1100, 800, from) : openChildWindow(tab, 1000, 720, from);
+    const win =
+      kind === 'view' ? openChildWindow(tab, 1100, 800, from)
+      : kind === 'walkthrough' ? openChildWindow(tab, 640, 760, from)
+      : openChildWindow(tab, 1000, 720, from);
     if (!win) {
       return false;
     }
@@ -1774,6 +1803,8 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       // dialog (or the browser blocked the window)
       if (kind === 'port') {
         setPortView({ node, port });
+      } else if (kind === 'walkthrough') {
+        setWalkView(node);
       } else {
         setNodeView(node);
       }
@@ -1808,6 +1839,14 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     }
     const widget = new LabViewWidget(w => {
       const moves = movesFor(kind, node, port, 'jupyter', () => w.dispose());
+      if (kind === 'walkthrough') {
+        // (a JupyterLab tab is outside the editor: its references act on this canvas)
+        return (
+          <CanvasLinkContext.Provider value={canvasLink}>
+            <WalkthroughPage controller={controller} nodeId={node} frame="panel" onTitle={t => (w.title.label = t)} onClose={() => w.dispose()} moves={moves} />
+          </CanvasLinkContext.Provider>
+        );
+      }
       return kind === 'port' ? (
         <PortView controller={controller} nodeId={node} port={port} frame="panel" onTitle={t => (w.title.label = t)} onClose={() => w.dispose()} moves={moves} />
       ) : (
@@ -1828,6 +1867,78 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
     if (target === 'dialog' || target === 'jupyter' || !openExternal('port', node, port, target === 'tab')) {
       setPortView({ node, port });
     }
+  };
+  /** A walkthrough as a page: beside the canvas (a JupyterLab tab), else a window - a dialog would hide the canvas. */
+  const openWalkthrough = (node: number, ctrl = false) => {
+    if (!ctrl && labAvailable() && openLab('walkthrough', node, 0)) {
+      return;
+    }
+    if (!openExternal('walkthrough', node, 0, false)) {
+      setWalkView(node);
+    }
+  };
+  /** Show a node's canvas widget (restored when minimized). */
+  const showWidget = (id: number, quiet = false, keep?: Element) => {
+    const n = byId.get(id);
+    if (n?.widget && n.widgetLayout?.minimized) {
+      void run(() => controller.op('set_widget_layouts', { layouts: [{ id, layout: { ...n.widgetLayout, minimized: false } }] }));
+    }
+    if (!quiet) {
+      canvasLink.highlight([id], true, keep);
+    }
+  };
+  linkActions.current = {
+    nodes: () =>
+      (view?.nodes ?? []).map(n => ({
+        id: n.id,
+        name: n.name,
+        label: n.annotation,
+        widget: !!n.widget,
+        dialog: n.hasDialog,
+        view: n.hasView,
+        outputs: n.outPorts.filter(p => p.index > 0).length
+      })),
+    groups: () => (view?.groups ?? []).map(g => ({ id: g.id, text: g.text, nodes: g.nodes })),
+    act: (a, keep) => {
+      switch (a.kind) {
+        case 'node':
+          canvasLink.highlight([a.node], true, keep);
+          break;
+        case 'group':
+          canvasLink.highlight(groupsById.get(a.group)?.nodes ?? [], true, keep);
+          break;
+        case 'settings':
+          openConfigure(a.node, a.field);
+          break;
+        case 'widget':
+          showWidget(a.node, a.quiet, keep);
+          break;
+        case 'output':
+          openPort(a.node, a.port ?? 1);
+          break;
+        case 'view':
+          openNodeView(a.node);
+          break;
+        case 'run':
+          void execute(a.all ? undefined : a.group !== undefined ? groupsById.get(a.group)?.nodes ?? [] : a.nodes ?? []);
+          break;
+      }
+    },
+    saveSettings: async (id, settings) => {
+      await controller.op('set_settings', { id, settings });
+    },
+    openWalkthrough: id => openWalkthrough(id),
+    fileUrl: path => {
+      const full = PathExt.join(PathExt.dirname(controller.context.localPath), path);
+      return URLExt.join(PageConfig.getBaseUrl(), 'files', URLExt.encodeParts(full));
+    },
+    openFile: path => {
+      const full = PathExt.join(PathExt.dirname(controller.context.localPath), path);
+      if (!openFileInLab(full)) {
+        window.open(URLExt.join(PageConfig.getBaseUrl(), 'files', URLExt.encodeParts(full)), '_blank', 'noopener');
+      }
+    },
+    running: () => !!rawView?.executing
   };
   const openNodeView = (node: number, ctrl = false) => {
     const target = viewTarget(ctrl);
@@ -2254,9 +2365,10 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       setNodes(ns => ns.map(n => ({ ...n, selected: ids.has(n.id) })));
       window.setTimeout(() => (pendingSelect.current = null), 500);
     });
-  const openConfigure = (id: number) => {
+  const openConfigure = (id: number, field?: string) => {
     const n = byId.get(id);
     if (n?.hasDialog) {
+      setConfigureField(field);
       setConfigure(id);
     }
   };
@@ -3089,7 +3201,16 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         <SettingsDialog controller={controller} settings={settings} onClose={() => setSettingsOpen(false)} />
       )}
       {configure !== null && (
-        <ConfigureDialog controller={controller} nodeId={configure} onClose={() => setConfigure(null)} editorSettings={settings} />
+        <ConfigureDialog
+          controller={controller}
+          nodeId={configure}
+          focusField={configureField}
+          onClose={() => {
+            setConfigure(null);
+            setConfigureField(undefined);
+          }}
+          editorSettings={settings}
+        />
       )}
       {portView && (
         <PortView
@@ -3104,10 +3225,19 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
         <ChildWindow
           key={x.key}
           win={x.win}
-          title={x.kind === 'view' ? 'View' : 'Port view'}
+          title={x.kind === 'view' ? 'View' : x.kind === 'walkthrough' ? 'Walkthrough' : 'Port view'}
           onClose={() => setExternals(xs => xs.filter(y => y.key !== x.key))}
         >
-          {x.kind === 'port' ? (
+          {x.kind === 'walkthrough' ? (
+            <WalkthroughPage
+              controller={controller}
+              nodeId={x.node}
+              frame="window"
+              onTitle={t => (x.win.document.title = t)}
+              onClose={() => x.win.close()}
+              moves={movesFor('walkthrough', x.node, 0, x.tab ? 'tab' : 'window', () => x.win.close(), x.win)}
+            />
+          ) : x.kind === 'port' ? (
             <PortView
               controller={controller}
               nodeId={x.node}
@@ -3143,6 +3273,14 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
             />
           ) : null;
         })()}
+      {walkView !== null && (
+        <WalkthroughPage
+          controller={controller}
+          nodeId={walkView}
+          onClose={() => setWalkView(null)}
+          moves={movesFor('walkthrough', walkView, 0, 'dialog', () => setWalkView(null))}
+        />
+      )}
       {nodeView !== null && (
         <NodeViewDialog
           controller={controller}

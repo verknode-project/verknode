@@ -744,7 +744,7 @@ export function FieldRow(props: {
       editor = <ScalarEditor field={f} value={value} onChange={onChange} ctx={ctx} disabled={disabled} />;
   }
   return (
-    <div className={`verknode-field ${wide ? 'verknode-field-wide' : ''} verknode-field-${f.type}`}>
+    <div className={`verknode-field ${wide ? 'verknode-field-wide' : ''} verknode-field-${f.type}`} data-key={f.key}>
       <label title={f.description}>{f.label}</label>
       <div className="verknode-field-editor">
         {editor}
@@ -826,6 +826,8 @@ export function ConfigureDialog(props: {
   nodeId: number;
   onClose: () => void;
   editorSettings?: EditorSettings;
+  /** a setting to go to when the dialog opens (e.g. a walkthrough's vk:settings/3/path) */
+  focusField?: string;
 }) {
   const { controller, nodeId, onClose } = props;
   const [data, setData] = useState<DialogData | null>(null);
@@ -964,6 +966,12 @@ export function ConfigureDialog(props: {
   useEffect(() => {
     if (data && body.current && !body.current.contains(body.current.ownerDocument.activeElement)) {
       focusables(body.current)[0]?.focus({ preventScroll: true });
+    }
+    const row = props.focusField && body.current?.querySelector<HTMLElement>(`.verknode-field[data-key="${CSS.escape(props.focusField)}"]`);
+    if (data && row) {
+      row.scrollIntoView({ block: 'center' });
+      row.classList.add('verknode-field-pointed');
+      focusables(row)[0]?.focus({ preventScroll: true });
     }
   }, [!!data]);
   const goTab = (t: (typeof TABS)[number], focus: 'tab' | 'body') => {

@@ -73,6 +73,7 @@ Jupyter server's root.
 | `run_workflow` | a workflow as a tool: a private copy, run with other variable values, its result tables |
 | `export_workflow` | export to run without Jupyter: a script, or a self-contained folder (minimal requirements, data, Dockerfile, API server; a group; headless) - see [Export](export.md) |
 | `save_workflow` | save, or save as |
+| `get_walkthrough`, `write_walkthrough` | a [walkthrough](walkthroughs.md) of the workflow: the document and its references that point at nothing (or the format and the ids to use); write it into a Walkthrough node - refused while a reference points at nothing |
 
 The results are written for models:
 - Node types can be given by name. A misspelled name gets the closest

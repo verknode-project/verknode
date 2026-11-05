@@ -6,6 +6,9 @@
   and the `.vkf` format.
 - [Canvas widgets](widgets.md) - inputs and displays used directly on the
   canvas, and how to make new ones.
+- [Walkthroughs](walkthroughs.md) - documents that explain a workflow a
+  section at a time, pointing at its nodes, groups, settings, widgets and
+  outputs, with run buttons; drafted by an LLM or written by agents over MCP.
 - [Web services, GIS and diagrams](web-gis-diagrams.md) - curl and HTTP
   requests, Wikipedia, PubMed, OpenStreetMap, weather, podcasts and feeds,
   ChEMBL, PDB, UCSC, Ensembl, Gene Ontology; GeoJSON, distances and spatial

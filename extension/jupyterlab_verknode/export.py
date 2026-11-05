@@ -87,6 +87,10 @@ def prepare(wf, group: str | None = None, nodes=None, upstream: str = "include",
 
     e = clone(wf)
     notes, problems = [], []
+    docs = [n for n in _real(e) if getattr(e.nodes[n].model, "documentation", False)]
+    if docs:  # (walkthroughs: documents of the editor)
+        _remove(e, docs)
+        notes.append("left out " + ", ".join(f"#{n}" for n in docs) + ": walkthroughs are read in the editor")
     part = group is not None or bool(nodes)
     chosen = set(select(e, group, nodes))
     if part:

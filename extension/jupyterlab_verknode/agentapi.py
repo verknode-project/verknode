@@ -134,10 +134,26 @@ TOOLS = [
           {"workflow": WF, "path": {"type": "string", "description": "Save as (default: its own file)"}},
           ["workflow"], idempotent=True),
     _tool("undo", "Undo", "Undo the last edit of the workflow.", {"workflow": WF}, ["workflow"]),
+    _tool("get_walkthrough", "Get a walkthrough", "The walkthrough of a workflow (a Walkthrough node: a document "
+          "that explains the workflow section by section, its links pointing at nodes, groups, settings, widgets "
+          "and outputs, with run buttons): its document and the references in it that point at nothing - or, "
+          "when there is none, how to write one and the workflow's ids to refer to.",
+          {"workflow": WF, "node": {**NODE, "description": "The Walkthrough node (default: the first)"}},
+          ["workflow"], read_only=True),
+    _tool("write_walkthrough", "Write a walkthrough", "Write the walkthrough of a workflow: Markdown, \"## \" "
+          "starts a section, vk: links refer to its parts (get_walkthrough shows the format and the ids). It "
+          "goes into a Walkthrough node - a new one, or the given one (its document is replaced). References "
+          "that point at nothing are refused: nothing is written, fix them.",
+          {"workflow": WF, "document": {"type": "string", "description": "The walkthrough (Markdown)"},
+           "node": {**NODE, "description": "A Walkthrough node to write into (default: the first, else a new one)"},
+           "new": {"type": "boolean", "description": "Add a new Walkthrough node even when there is one"},
+           "title": {"type": "string"}, "label": {"type": "string", "description": "The node's label"}},
+          ["workflow", "document"], idempotent=True),
 ]
 SPECIAL = {"create_workflow", "save_workflow", "run_workflow", "export_workflow"}  # (async: they open or save files)
 NEEDS_WORKFLOW = {t["name"] for t in TOOLS if "workflow" in t["inputSchema"]["required"]}
-EDITS = {"add_node", "configure_node", "connect", "disconnect", "remove_node", "set_variables", "undo"}
+EDITS = {"add_node", "configure_node", "connect", "disconnect", "remove_node", "set_variables", "undo",
+         "write_walkthrough"}
 
 INSTRUCTIONS = """verknode builds and runs visual data workflows (like KNIME): nodes - readers, filters, \
 joins, group-bys, pivots, formulas, charts, models, ~300 types - connected port to port; tables flow along \
@@ -149,7 +165,8 @@ add_node / connect (each result shows the node's output columns or what is wrong
 the result -> save_workflow. A node that is wrong: fix it (configure_node, reading the error), or remove_node it - \
 leave no failing or unconnected nodes behind; when the same fix fails twice, look at node_type_help again. File paths in settings are relative to the workflow's folder (list_files). \
 Workflow variables (set_variables, and settings taken from them) make a workflow a reusable tool: \
-run_workflow runs it with other values without changing it."""
+run_workflow runs it with other values without changing it. To explain a workflow to people, write it a \
+walkthrough (get_walkthrough, then write_walkthrough): a document they step through, which points at its parts."""
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -455,6 +472,54 @@ class AgentAPI:
             text = "The workflow is empty."
         nodes = [{"id": n, "type": nc.name, "label": nc.annotation, "executed": nc.executed} for n, nc in wf.nodes.items()]
         return text, {"nodes": nodes, "connections": [list(c.key()) for c in wf.connections]}
+
+    # -- walkthroughs ----------------------------------------------------------------------------
+    WALKTHROUGH = "verknode.docs.Walkthrough"
+
+    def _walkthrough(self, wf, node) -> int | None:
+        if node not in (None, ""):
+            nid = self._node(wf, node)
+            if wf.nodes[nid].model.factory != self.WALKTHROUGH:
+                raise ToolError(f"#{nid} is a {wf.nodes[nid].name}, not a Walkthrough")
+            return nid
+        return next((n for n, nc in sorted(wf.nodes.items()) if nc.model.factory == self.WALKTHROUGH), None)
+
+    def _t_get_walkthrough(self, wf, node=None):
+        from .nodes.walkthrough import FORMAT, check, outline, sections
+
+        nid = self._walkthrough(wf, node)
+        if nid is None:
+            return (f"The workflow has no walkthrough yet. Write one with write_walkthrough.\n\nThe format:\n{FORMAT}"
+                    f"\n\nThe workflow:\n{outline(wf)}"), {"node": None}
+        doc = wf.nodes[nid].settings.get("document") or ""
+        problems = check(wf, doc) if doc.strip() else []
+        secs = sections(doc)
+        text = (f"Walkthrough #{nid} \"{wf.nodes[nid].annotation}\": {len(secs)} section(s)"
+                + (f"; references that point at nothing:\n- " + "\n- ".join(problems) if problems else "")
+                + f"\n\n{doc if doc.strip() else '(empty)'}\n\nThe format:\n{FORMAT}\n\nThe workflow:\n{outline(wf, nid)}")
+        return text, {"node": nid, "document": doc, "sections": [x["title"] for x in secs], "problems": problems}
+
+    def _t_write_walkthrough(self, wf, document="", node=None, new=False, title=None, label=None):
+        from .nodes.walkthrough import check, sections
+
+        problems = check(wf, document)
+        if problems:
+            raise ToolError("Nothing written - fix these:\n- " + "\n- ".join(problems))
+        nid = None if new else self._walkthrough(wf, node)
+        settings = {"document": document, **({"title": title} if title is not None else {})}
+        ed = self._edit(wf)
+        if nid is None:
+            nid = ed.one({"op": "add", "type": "Walkthrough", "label": label or title or "Walkthrough",
+                          "settings": settings, "after": None})
+            what = f"Added walkthrough #{nid}"
+        else:
+            ed.one({"op": "configure", "node": nid, "settings": settings, "label": label})
+            what = f"Wrote walkthrough #{nid}"
+        secs = sections(document)
+        link = self.ws.link(wf.rel_path)
+        return (f"{what}: {len(secs)} section(s) - " + ", ".join(f"\"{x['title']}\"" for x in secs if x["title"])
+                + ". It opens on the canvas as the node's widget (⇱ opens it in a tab)."
+                + (f" The user can open it: {link}" if link else "")), {"node": nid, "sections": len(secs)}
 
     # -- edit --------------------------------------------------------------------------------------
     def _t_add_node(self, wf, type="", label="", settings=None, variables=None, after=None, group=None):

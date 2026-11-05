@@ -406,7 +406,7 @@ const beside = (el: Element) => {
   return new DOMRect(dock.left, at.top - 20, dock.width, at.height);
 };
 
-function NodeChip({ text, id }: { text: string; id: number }) {
+export function NodeChip({ text, id }: { text: string; id: number }) {
   const link = useContext(CanvasLinkContext);
   const node = link?.node(id);
   if (!link || !node) {

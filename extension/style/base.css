@@ -4296,3 +4296,418 @@ pre.verknode-packages-error {
   flex: none;
   max-width: 45%;
 }
+
+/* ---------------------------------------------------------------- walkthrough (nodes/walkthrough.py) */
+.verknode-walk {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 0;
+  background: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  font-size: 12px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.verknode-walk-page {
+  flex: 1;
+  height: 100%;
+  font-size: var(--jp-content-font-size1, 14px);
+}
+
+.verknode-walk-frame .verknode-window-body {
+  padding: 0;
+}
+
+.verknode-modal.verknode-walk-frame {
+  width: min(760px, 92%);
+  height: 80%;
+}
+
+.verknode-walk-head,
+.verknode-walk-foot {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  padding: 2px 4px 2px 8px;
+  border-bottom: 1px solid var(--verknode-border);
+}
+
+.verknode-walk-foot {
+  border-top: 1px solid var(--verknode-border);
+  border-bottom: none;
+  justify-content: center;
+  gap: 6px;
+}
+
+.verknode-walk-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.verknode-walk-spacer {
+  flex: 1;
+}
+
+.verknode-walk-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 12px 10px;
+}
+
+.verknode-walk-page .verknode-walk-body,
+.verknode-walk-page .verknode-walk-preview {
+  padding: 14px 28px 20px;
+}
+
+.verknode-walk-page .verknode-walk-body > * {
+  max-width: 46em;
+}
+
+.verknode-walk-section {
+  margin: 4px 0 8px;
+  font-size: 1.3em;
+  font-weight: 600;
+}
+
+.verknode-walk-body h3,
+.verknode-walk-body h4,
+.verknode-walk-preview h3,
+.verknode-walk-preview h4 {
+  margin: 10px 0 4px;
+  font-size: 1.05em;
+}
+
+.verknode-walk-body p,
+.verknode-walk-body ul,
+.verknode-walk-body ol,
+.verknode-walk-body blockquote,
+.verknode-walk-preview p,
+.verknode-walk-preview ul,
+.verknode-walk-preview ol,
+.verknode-walk-preview blockquote {
+  margin: 0 0 8px;
+}
+
+.verknode-walk-body ul,
+.verknode-walk-body ol,
+.verknode-walk-preview ul,
+.verknode-walk-preview ol {
+  padding-left: 20px;
+}
+
+.verknode-walk blockquote {
+  padding: 2px 10px;
+  border-left: 3px solid var(--jp-brand-color2);
+  color: var(--jp-ui-font-color2);
+}
+
+.verknode-walk code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--jp-layout-color2);
+  font-family: var(--jp-code-font-family);
+  font-size: 0.92em;
+}
+
+.verknode-walk-code {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  overflow: auto;
+  border-radius: 4px;
+  background: var(--jp-layout-color2);
+}
+
+.verknode-walk-code code {
+  padding: 0;
+  background: none;
+}
+
+.verknode-walk-table {
+  margin: 0 0 8px;
+  overflow: auto;
+}
+
+.verknode-walk-table table {
+  border-collapse: collapse;
+}
+
+.verknode-walk-table th,
+.verknode-walk-table td {
+  padding: 2px 8px;
+  border: 1px solid var(--verknode-border);
+  text-align: left;
+}
+
+.verknode-walk-img {
+  max-width: 100%;
+}
+
+.verknode-walk-ref {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--jp-brand-color1) 12%, transparent);
+  color: var(--jp-brand-color1);
+  cursor: pointer;
+}
+
+.verknode-walk-ref:hover,
+.verknode-walk-ref:focus-visible {
+  background: color-mix(in srgb, var(--jp-brand-color1) 24%, transparent);
+  outline: none;
+}
+
+.verknode-walk-ref-icon {
+  margin-right: 3px;
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
+.verknode-walk-ref-missing {
+  background: none;
+  color: var(--jp-ui-font-color2);
+  text-decoration: line-through dotted;
+  cursor: help;
+}
+
+.verknode-walk-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 1px 0;
+  padding: 2px 10px;
+  border: 1px solid var(--jp-brand-color1);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--jp-brand-color1) 10%, transparent);
+  color: var(--jp-brand-color1);
+  font: inherit;
+  cursor: pointer;
+}
+
+.verknode-walk-run:hover:not(:disabled) {
+  background: var(--jp-brand-color1);
+  color: var(--jp-ui-inverse-font-color1);
+}
+
+.verknode-walk-run:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.verknode-walk-problems {
+  flex: none;
+  padding: 2px 8px;
+  background: color-mix(in srgb, var(--jp-warn-color1) 15%, transparent);
+  color: var(--jp-ui-font-color1);
+  font-size: 11px;
+}
+
+.verknode-walk-empty {
+  padding: 12px 4px;
+  color: var(--jp-ui-font-color2);
+}
+
+.verknode-walk-contents {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 12px 8px 30px;
+  overflow: auto;
+}
+
+.verknode-walk-contents button {
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  color: var(--jp-ui-font-color1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.verknode-walk-contents button:hover {
+  text-decoration: underline;
+}
+
+.verknode-walk-contents .verknode-walk-here button {
+  font-weight: 600;
+}
+
+.verknode-walk-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.verknode-walk-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 1px solid var(--jp-brand-color1);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.verknode-walk-dot.verknode-walk-here {
+  background: var(--jp-brand-color1);
+}
+
+.verknode-walk-count {
+  color: var(--jp-ui-font-color2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.verknode-walk-ask {
+  font-size: 11px;
+}
+
+.verknode-tb-primary {
+  border-color: var(--jp-brand-color1);
+  color: var(--jp-brand-color1);
+}
+
+/* the editor of the document */
+.verknode-walk-editor-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.verknode-walk-source {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 6px 8px;
+  border: none;
+  border-right: 1px solid var(--verknode-border);
+  background: var(--jp-layout-color0);
+  color: var(--jp-ui-font-color1);
+  font-family: var(--jp-code-font-family);
+  font-size: 12px;
+  line-height: 1.45;
+  resize: none;
+  outline: none;
+}
+
+.verknode-walk-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.verknode-walk-hint {
+  flex: none;
+  padding: 2px 8px;
+  border-top: 1px solid var(--verknode-border);
+  color: var(--jp-ui-font-color2);
+  font-size: 10px;
+}
+
+.verknode-walk-menu-wrap {
+  position: relative;
+}
+
+.verknode-walk-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 4px 0;
+  border: 1px solid var(--verknode-border);
+  border-radius: 4px;
+  background: var(--jp-layout-color1);
+  box-shadow: var(--jp-elevation-z4);
+}
+
+.verknode-walk-menu button {
+  padding: 2px 12px;
+  border: none;
+  background: none;
+  color: var(--jp-ui-font-color1);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.verknode-walk-menu button:hover,
+.verknode-walk-menu button:focus-visible {
+  background: var(--jp-layout-color2);
+  outline: none;
+}
+
+.verknode-walk-menu-head {
+  margin-top: 4px;
+  padding: 2px 8px;
+  color: var(--jp-ui-font-color2);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.verknode-walk-menu-node {
+  display: flex;
+  flex-direction: column;
+}
+
+.verknode-walk-menu-node button {
+  padding-left: 22px;
+}
+
+.verknode-walk-menu-name {
+  padding: 2px 12px;
+  font-weight: 600;
+}
+
+.verknode-walk-menu-id {
+  color: var(--jp-ui-font-color2);
+  font-weight: normal;
+}
+
+.verknode-walk-menu-row {
+  display: flex;
+}
+
+.verknode-walk-menu-row button:first-child {
+  flex: 1;
+}
+
+.verknode-walk-menu-note {
+  padding: 2px 12px;
+  color: var(--jp-ui-font-color2);
+  font-size: 11px;
+}
+
+/* a setting a walkthrough points at (vk:settings/3/path) */
+.verknode-field-pointed {
+  border-radius: 4px;
+  animation: verknode-pointed 0.85s ease-in-out 3;
+}
+
+@keyframes verknode-pointed {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 166, 35, 0);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px rgba(245, 166, 35, 0.85);
+  }
+}

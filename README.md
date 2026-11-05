@@ -39,6 +39,11 @@ standalone Python script that runs without Jupyter.
 - **Widgets on the canvas** - sliders, inputs and editable tables next to
   their nodes; tables and charts that update as you change them, and whose
   selections feed the rest of the workflow ([widgets](docs/widgets.md)).
+- **Walkthroughs** - a document that explains the workflow a section at a
+  time, like a slide show, on the canvas or in a tab beside it. Its links
+  show the nodes, groups, settings, widgets and outputs they name, and its
+  buttons run them. An LLM drafts it, or agents write it over MCP
+  ([walkthroughs](docs/walkthroughs.md)).
 - **See it run** - status lights, time bars with estimates, progress and the
   expected end of every node, loop iteration counters
   ([editor](docs/editor.md)).
@@ -278,7 +283,8 @@ other examples are in folders by topic next to it:
 - `life_science/`;
 - `llm/`;
 - `agents/`;
-- `custom_nodes/`.
+- `custom_nodes/`;
+- `walkthroughs/`.
 
 [`notebooks/examples/README.md`](notebooks/examples/README.md) lists what
 each one shows.
@@ -297,7 +303,7 @@ reverse proxy is in [deployment](docs/deployment.md).
 
 See [docs/](docs/README.md): the [editor](docs/editor.md),
 [nodes](docs/nodes.md), [widgets](docs/widgets.md),
-[custom nodes](docs/custom-nodes.md), [packages](docs/packages.md), [Python API](docs/python-api.md),
+[walkthroughs](docs/walkthroughs.md), [custom nodes](docs/custom-nodes.md), [packages](docs/packages.md), [Python API](docs/python-api.md),
 [installing](docs/install.md), [export](docs/export.md), [agents and MCP](docs/agents.md),
 [chemistry](docs/chemistry.md), [deployment](docs/deployment.md) and
 [development](docs/development.md).
