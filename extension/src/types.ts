@@ -86,6 +86,8 @@ export interface NodeInfo {
   x: number;
   y: number;
   annotation: string;
+  /** what it does and why (Markdown); empty: none */
+  note?: string;
   state: NodeState;
   inactive: boolean;
   inactivePorts: number[];
@@ -263,6 +265,8 @@ export interface GroupInfo {
   id: number;
   nodes: number[];
   text: string;
+  /** what the nodes do (Markdown) */
+  note?: string;
   color: string;
 }
 

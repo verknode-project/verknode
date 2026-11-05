@@ -134,16 +134,27 @@ Create one from the Launcher ("Workflow") or the command palette
   bridged with straight lines. Nested scopes always stay inside their
   parent. Toggle in ≡ Settings.
 - Group annotations: select nodes and press Ctrl+G (or right-click ›
-  Create Group Annotation…) to draw a coloured bubble with a text around
-  them; the first line of the text is shown on the bubble. Double-click the
+  Create Group Annotation…) to draw a coloured bubble with a title and a
+  note around them. Double-click the
   label or a blank part of a bubble, or right-click there, to edit the
-  text, colour and nodes or delete the annotation; Ctrl + double-click
+  title, note, colour and nodes or delete the annotation; Ctrl + double-click
   on a blank part of any bubble (group, loop, try/catch, switch) selects
   its nodes. Nodes and connections inside a bubble keep
   their own clicks. A node
   can belong to several groups: a group around the same (or more) nodes
   wraps the other one, and groups that share only some nodes are offset so
   each outline and label stays visible.
+- Notes: a node or a group can have a note, in Markdown, that says what it
+  does and why. Right-click a node › Add Note… (Edit Note… once it has
+  one); a group's note is in its dialog. A ¶ after the node's label or the
+  group's title marks a note: hover it to read the note, click it to edit.
+  The editor shows the Markdown beside the text as you type. Notes can refer
+  to nodes as `#3` (hover or click the chip to see the node) and use the
+  [walkthrough](walkthroughs.md) links (`[the filter](vk:settings/2/rules)`).
+  Notes are saved in the workflow, copied with their nodes, and read by the
+  agents (`show_workflow`, the workflow agent, walkthrough drafts). Group
+  texts of several lines from older workflows become a title (the first
+  line) and a note (the rest).
 - Metanodes: select nodes and right-click › Collapse into Metanode… to
   put them into a metanode (named after the group annotation when exactly
   a group's nodes are selected), or right-click a blank part of a group

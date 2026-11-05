@@ -150,7 +150,8 @@ def outline(wf, me: int | None = None) -> str:
     text = text.replace("Other nodes (read only: you may connect from their outputs into your nodes):", "Nodes:")
     if wf.groups:
         text += "\nGroups (vk:group/<id>):\n" + "\n".join(
-            f"  group {g['id']} \"{g['text']}\": " + ", ".join(f"#{n}" for n in g["nodes"]) for g in wf.groups)
+            f"  group {g['id']} \"{g['text']}\": " + ", ".join(f"#{n}" for n in g["nodes"])
+            + (f"\n    note: {' '.join(g['note'].split())[:600]}" if g.get("note") else "") for g in wf.groups)
     widgets = [f"#{n} [{nc.name}] \"{nc.annotation}\"" for n, nc in wf.nodes.items()
                if n != me and hasattr(nc.model, "widget")]
     if widgets:
@@ -202,7 +203,12 @@ class Walkthrough(LLMNode, NodeModel):
     category = "Widgets/Documents"
     icon = "▸☰"
     node_type = "Visualizer"
-    sandbox_unsafe = True  # (a draft changes the node's own document)
+
+    @staticmethod
+    def sandbox_unsafe(s: dict) -> bool:
+        """Only a draft changes something (the node's own document); checking a document is safe."""
+        return bool(s.get("draft", True)) and not (s.get("document") or "").strip()
+
     needs_canvas = True  # (not in headless runs)
     documentation = True  # (exports leave it out: it explains the workflow, it makes no data)
     width, height = 420, 340

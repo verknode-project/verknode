@@ -2774,9 +2774,6 @@ pre.verknode-packages-error {
   color: color-mix(in srgb, var(--scope) 85%, var(--vk-node-text, var(--jp-ui-font-color0, #000)));
 }
 
-.verknode-group-dialog {
-  width: 420px;
-}
 
 .verknode-group-field {
   display: flex;
@@ -4710,4 +4707,138 @@ pre.verknode-packages-error {
   50% {
     box-shadow: 0 0 0 4px rgba(245, 166, 35, 0.85);
   }
+}
+
+.verknode-group-dialog {
+  width: min(720px, 92vw);
+}
+
+/* notes of nodes and groups (NoteView.tsx) */
+.verknode-note-mark {
+  margin-left: 3px;
+  padding: 0 2px;
+  border-radius: 3px;
+  color: var(--jp-brand-color1);
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.verknode-note-mark:hover {
+  background: color-mix(in srgb, var(--jp-brand-color1) 18%, transparent);
+}
+
+.verknode-scope-label .verknode-note-mark {
+  color: inherit;
+}
+
+.verknode-note-text {
+  font-size: var(--jp-ui-font-size1);
+  line-height: 1.45;
+  color: var(--jp-ui-font-color1);
+}
+
+.verknode-note-text p,
+.verknode-note-text ul,
+.verknode-note-text ol,
+.verknode-note-text blockquote {
+  margin: 0 0 6px;
+}
+
+.verknode-note-text ul,
+.verknode-note-text ol {
+  padding-left: 18px;
+}
+
+.verknode-note-text > :last-child,
+.verknode-note-text p:last-child {
+  margin-bottom: 0;
+}
+
+.verknode-note-text h1,
+.verknode-note-text h2,
+.verknode-note-text h3,
+.verknode-note-text h4 {
+  margin: 6px 0 4px;
+  font-size: 1.05em;
+}
+
+.verknode-note-peek {
+  position: fixed;
+  z-index: 10000;
+  width: 340px;
+  max-height: 50vh;
+  overflow: auto;
+  padding: 6px 10px 8px;
+  border: 1px solid var(--verknode-border, var(--jp-border-color1));
+  border-radius: 6px;
+  background: var(--jp-layout-color0);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.verknode-note-peek-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--jp-ui-font-color2);
+}
+
+.verknode-note-peek-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.verknode-note-dialog {
+  width: min(820px, 92vw);
+}
+
+
+.verknode-group-field input {
+  font: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--jp-border-color1);
+  background: var(--jp-layout-color0);
+  color: var(--jp-ui-font-color0);
+}
+
+.verknode-note-editor {
+  display: flex;
+  gap: 8px;
+  height: 260px;
+}
+
+.verknode-note-dialog .verknode-note-editor {
+  height: min(420px, 60vh);
+}
+
+.verknode-note-editor textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 6px 8px;
+  border: 1px solid var(--jp-border-color1);
+  background: var(--jp-layout-color0);
+  color: var(--jp-ui-font-color0);
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-code-font-size);
+  line-height: 1.4;
+}
+
+.verknode-note-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 6px 10px;
+  border: 1px dashed var(--jp-border-color2);
+  border-radius: 4px;
+}
+
+.verknode-note-empty {
+  color: var(--jp-ui-font-color3);
+  font-style: italic;
 }

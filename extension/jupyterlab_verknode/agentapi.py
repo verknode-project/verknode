@@ -77,11 +77,14 @@ TOOLS = [
            "settings": {**ANY_OBJECT, "description": "Settings that differ from the defaults (see node_type_help)"},
            "variables": {**ANY_OBJECT, "description": "Settings taken from workflow variables: {setting: variable name}"},
            "after": {**NODE, "description": "Place it to the right of this node"},
-           "group": {"type": "string", "description": "A group annotation to put it in (made if new)"}},
+           "group": {"type": "string", "description": "A group annotation to put it in (made if new)"},
+           "note": {"type": "string", "description": "A note for the user (Markdown): what the node does here and "
+                    "why. Give every node one."}},
           ["workflow", "type"]),
-    _tool("configure_node", "Configure a node", "Change settings (and/or the label) of a node.",
+    _tool("configure_node", "Configure a node", "Change settings (and/or the label or note) of a node.",
           {"workflow": WF, "node": NODE, "settings": ANY_OBJECT, "variables": ANY_OBJECT,
-           "label": {"type": "string"}}, ["workflow", "node"], idempotent=True),
+           "label": {"type": "string"}, "note": {"type": "string", "description": "A note in Markdown: what the node does here and why (shown on the canvas)"}},
+          ["workflow", "node"], idempotent=True),
     _tool("connect", "Connect nodes", "Connect an output port to an input port (ports count from 1). A connection "
           "already into that input is replaced.",
           {"workflow": WF, "from_node": NODE, "to_node": NODE, "from_port": {"type": "integer", "default": 1},
@@ -134,6 +137,14 @@ TOOLS = [
           {"workflow": WF, "path": {"type": "string", "description": "Save as (default: its own file)"}},
           ["workflow"], idempotent=True),
     _tool("undo", "Undo", "Undo the last edit of the workflow.", {"workflow": WF}, ["workflow"]),
+    _tool("write_note", "Write a note", "Attach a note (Markdown) to a node or a group annotation, saying what "
+          "it does and why; the user reads it on the canvas. Notes may refer to nodes as #3. An empty note "
+          "removes it. With group and nodes, a group that is not there yet is made around the nodes.",
+          {"workflow": WF, "note": {"type": "string", "description": "The note (Markdown)"},
+           "node": {**NODE, "description": "The node (give node or group)"},
+           "group": {"type": "string", "description": "The group annotation: its title or id"},
+           "nodes": {"type": "array", "items": NODE, "description": "With a new group: its nodes"}},
+          ["workflow", "note"], idempotent=True),
     _tool("get_walkthrough", "Get a walkthrough", "The walkthrough of a workflow (a Walkthrough node: a document "
           "that explains the workflow section by section, its links pointing at nodes, groups, settings, widgets "
           "and outputs, with run buttons): its document and the references in it that point at nothing - or, "
@@ -153,7 +164,7 @@ TOOLS = [
 SPECIAL = {"create_workflow", "save_workflow", "run_workflow", "export_workflow"}  # (async: they open or save files)
 NEEDS_WORKFLOW = {t["name"] for t in TOOLS if "workflow" in t["inputSchema"]["required"]}
 EDITS = {"add_node", "configure_node", "connect", "disconnect", "remove_node", "set_variables", "undo",
-         "write_walkthrough"}
+         "write_walkthrough", "write_note"}
 
 INSTRUCTIONS = """verknode builds and runs visual data workflows (like KNIME): nodes - readers, filters, \
 joins, group-bys, pivots, formulas, charts, models, ~300 types - connected port to port; tables flow along \
@@ -162,11 +173,14 @@ the connections. Build a workflow when the user wants a data pipeline they can s
 
 How to work: find_node_types -> node_type_help (settings have exact names and formats) -> create_workflow -> \
 add_node / connect (each result shows the node's output columns or what is wrong) -> run -> get_table to check \
-the result -> save_workflow. A node that is wrong: fix it (configure_node, reading the error), or remove_node it - \
+the result -> explain it -> save_workflow. Explain what you build, so the user can follow it: give every node a \
+note as you add it (add_node note: what it does here and why), give each group a note (write_note), and when it \
+works, write a walkthrough of it (get_walkthrough shows the format and the ids, then write_walkthrough; write \
+it again after later changes). A node that is wrong: fix it (configure_node, reading the error), or remove_node it - \
 leave no failing or unconnected nodes behind; when the same fix fails twice, look at node_type_help again. File paths in settings are relative to the workflow's folder (list_files). \
 Workflow variables (set_variables, and settings taken from them) make a workflow a reusable tool: \
-run_workflow runs it with other values without changing it. To explain a workflow to people, write it a \
-walkthrough (get_walkthrough, then write_walkthrough): a document they step through, which points at its parts."""
+run_workflow runs it with other values without changing it. A workflow someone else built is explained the \
+same way: notes (write_note) and a walkthrough, a document the user steps through, which points at its parts."""
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -465,7 +479,9 @@ class AgentAPI:
 
         text = describe(wf, set(wf.nodes), -1).replace("Nodes you may change:", "Nodes:").replace("  * ", "  ")
         if wf.groups:
-            text += "\nGroups:\n" + "\n".join(f"  \"{g['text']}\": {', '.join(f'#{n}' for n in g['nodes'])}" for g in wf.groups)
+            text += "\nGroups:\n" + "\n".join(
+                f"  group {g['id']} \"{g['text']}\": {', '.join(f'#{n}' for n in g['nodes'])}"
+                + (f"\n    note: {g['note']}" if g.get("note") else "") for g in wf.groups)
         if wf.workflow_variables:
             text += "\nWorkflow variables:\n" + "\n".join(f"  {v.name} ({v.type}) = {v.value!r}" for v in wf.workflow_variables)
         if not wf.nodes:
@@ -521,10 +537,30 @@ class AgentAPI:
                 + ". It opens on the canvas as the node's widget (⇱ opens it in a tab)."
                 + (f" The user can open it: {link}" if link else "")), {"node": nid, "sections": len(secs)}
 
+    # -- notes -------------------------------------------------------------------------------------
+    def _t_write_note(self, wf, note="", node=None, group=None, nodes=None):
+        if (node in (None, "")) == (group in (None, "")):
+            raise ToolError("Give either node or group")
+        if node not in (None, ""):
+            nid = self._node(wf, node)
+            wf.set_note(nid, note)
+            return f"{'Wrote' if note.strip() else 'Removed'} the note of #{nid} \"{wf.nodes[nid].annotation}\".", {"node": nid}
+        ref = str(group).strip()
+        g = next((g for g in wf.groups if str(g["id"]) == ref.lstrip("#")
+                  or g["text"].strip().lower() == ref.lower()), None)
+        if g is None:
+            if not nodes:
+                have = ", ".join(f"{g['id']} \"{g['text']}\"" for g in wf.groups) or "none"
+                raise ToolError(f"There is no group {ref!r} (groups: {have}); give nodes to make it")
+            gid = wf.add_group([self._node(wf, n) for n in nodes], ref, None, note)
+            return f"Made group {gid} \"{ref}\" with the note.", {"group": gid}
+        wf.update_group(g["id"], note=note, nodes=[self._node(wf, n) for n in nodes] if nodes else None)
+        return f"{'Wrote' if note.strip() else 'Removed'} the note of group {g['id']} \"{g['text']}\".", {"group": g["id"]}
+
     # -- edit --------------------------------------------------------------------------------------
-    def _t_add_node(self, wf, type="", label="", settings=None, variables=None, after=None, group=None):
+    def _t_add_node(self, wf, type="", label="", settings=None, variables=None, after=None, group=None, note=None):
         ed = self._edit(wf, group)
-        nid = ed.one({"op": "add", "type": type, "label": label, "settings": settings or {},
+        nid = ed.one({"op": "add", "type": type, "label": label, "settings": settings or {}, "note": note,
                       "after": self._node(wf, after) if after not in (None, "") else None})
         try:
             self._bind(wf, nid, variables)
@@ -533,10 +569,10 @@ class AgentAPI:
             raise
         return f"Added #{nid}. {self._status(wf, nid)}", {"id": nid}
 
-    def _t_configure_node(self, wf, node=None, settings=None, variables=None, label=None):
+    def _t_configure_node(self, wf, node=None, settings=None, variables=None, label=None, note=None):
         nid = self._node(wf, node)
         ed = self._edit(wf)
-        ed.one({"op": "configure", "node": nid, "settings": settings or {}, "label": label})
+        ed.one({"op": "configure", "node": nid, "settings": settings or {}, "label": label, "note": note})
         self._bind(wf, nid, variables)
         return f"Configured #{nid}. {self._status(wf, nid)}", {"id": nid}
 

@@ -34,6 +34,7 @@ import { KEY_DIRECTIONS, NavigationGraph, navigationHints, navigationTarget, par
 import { QuickAdd } from './QuickAdd';
 import { bubbleShapes, findScopeBlocks, layoutBlocks, Rect, ScopeBlock } from './scopes';
 import { GroupDialog, groupTitle } from './GroupDialog';
+import { NoteDialog, NotePeek, NotePeekTarget } from './NoteView';
 import { compatibleInput, recordTransition, suggestNodes } from './hinting';
 import { copyText, getFragment, hasFragment, setFragment, trackCopy } from './clipboard';
 import { NodeViewDialog } from './NodeViewDialog';
@@ -1174,6 +1175,35 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
 
   // ------------------------------------------------------------- group annotations
   const [groupDialog, setGroupDialog] = useState<{ id: number | null; nodes: number[] } | null>(null);
+  // notes: the node whose note is edited, the note shown while the mouse is on its mark (¶) or on it
+  const [noteDialog, setNoteDialog] = useState<number | null>(null);
+  const [peek, setPeek] = useState<NotePeekTarget | null>(null);
+  const noteTimer = useRef<number>();
+  const peekLater = (target: NotePeekTarget | null, ms: number) => {
+    window.clearTimeout(noteTimer.current);
+    noteTimer.current = window.setTimeout(() => setPeek(target), ms);
+  };
+  const markTarget = (el: Element | null): NotePeekTarget | null => {
+    const mark = el?.closest<HTMLElement>('[data-note-node],[data-note-group]');
+    if (!mark) {
+      return null;
+    }
+    if (mark.dataset.noteNode) {
+      const n = viewRef.current?.nodes.find(x => x.id === Number(mark.dataset.noteNode));
+      return n?.note ? { kind: 'node', id: n.id, title: n.annotation, note: n.note, rect: mark.getBoundingClientRect() } : null;
+    }
+    const g = (viewRef.current?.groups ?? []).find(x => x.id === Number(mark.dataset.noteGroup));
+    return g?.note ? { kind: 'group', id: g.id, title: groupTitle(g), note: g.note, rect: mark.getBoundingClientRect() } : null;
+  };
+  const editNote = (t: { kind: 'node' | 'group'; id: number }) => {
+    setPeek(null);
+    if (t.kind === 'node') {
+      setNoteDialog(t.id);
+    } else {
+      const g = (viewRef.current?.groups ?? []).find(x => x.id === t.id);
+      g && editGroup(g);
+    }
+  };
   const hitContext = useMemo(() => document.createElement('canvas').getContext('2d'), []);
   /**
    * Innermost bubble under a screen point (its label counts too); `groupsOnly`
@@ -2575,6 +2605,7 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
       ...(n.widget ? ['-' as const, ...widgetMenuItems(n)] : []),
       '-' as const,
       { label: 'Edit Node Label…', action: () => void editLabel(n.id) },
+      { label: n.note ? 'Edit Note…' : 'Add Note…', action: () => setNoteDialog(n.id) },
       {
         label: 'Collapse into Metanode…',
         disabled: busy,
@@ -2897,6 +2928,24 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
           ref={wrapper}
           onMouseMove={e => (pointer.current = { x: e.clientX, y: e.clientY })}
           onMouseLeave={() => (pointer.current = null)}
+          onMouseOver={e => {
+            const t = markTarget(e.target as Element);
+            if (t) {
+              peekLater(t, peek ? 0 : 250);
+            }
+          }}
+          onMouseOut={e => {
+            if (markTarget(e.target as Element) && !markTarget(e.relatedTarget as Element | null)) {
+              peekLater(null, 300);
+            }
+          }}
+          onClickCapture={e => {
+            const t = markTarget(e.target as Element);
+            if (t) {
+              e.stopPropagation();
+              editNote(t);
+            }
+          }}
           onDoubleClickCapture={e => {
             // on the blank canvas inside a bubble (or on its label): Ctrl+double-click selects
             // the nodes of the innermost bubble (loop, try/catch, switch or group), double-click
@@ -3082,6 +3131,11 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
                   >
                     {group ? groupTitle(group) : SCOPE_LABEL[block.kind]}
                     {block.end === null ? ' …' : ''}
+                    {group?.note ? (
+                      <span className="verknode-note-mark" data-note-group={group.id} aria-label="Note (click to edit)">
+                        ¶
+                      </span>
+                    ) : null}
                   </span>
                 );
                 const m = 3;
@@ -3299,6 +3353,23 @@ function EditorCanvas({ controller, settings }: { controller: WorkflowController
           nodeName={id => byId.get(id)?.annotation || byId.get(id)?.name || `Node ${id}`}
           selection={selectedIds}
           onClose={() => setGroupDialog(null)}
+        />
+      )}
+      {noteDialog !== null && byId.get(noteDialog) && (
+        <NoteDialog
+          controller={controller}
+          id={noteDialog}
+          label={byId.get(noteDialog)!.annotation}
+          note={byId.get(noteDialog)!.note ?? ''}
+          onClose={() => setNoteDialog(null)}
+        />
+      )}
+      {peek && (
+        <NotePeek
+          target={peek}
+          onEnter={() => window.clearTimeout(noteTimer.current)}
+          onLeave={() => peekLater(null, 200)}
+          onEdit={() => editNote(peek)}
         />
       )}
     </div>

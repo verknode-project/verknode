@@ -3,15 +3,16 @@ import React, { useState } from 'react';
 import { WorkflowController } from '../controller';
 import { GroupInfo } from '../types';
 import { Modal } from './Modal';
+import { NoteEditor } from './NoteView';
 
-/** Title of a group annotation shown on its bubble: the first line of its text. */
+/** Title of a group annotation shown on its bubble (its text; older ones: its first line). */
 export function groupTitle(g: GroupInfo): string {
   return g.text.split('\n')[0].trim() || 'group';
 }
 
 /**
- * Create or edit a group annotation: its text, colour and nodes; existing
- * annotations can also be deleted here.
+ * Create or edit a group annotation: its title, note (Markdown: what the nodes do), colour and nodes;
+ * existing annotations can also be deleted here.
  */
 export function GroupDialog(props: {
   controller: WorkflowController;
@@ -25,6 +26,7 @@ export function GroupDialog(props: {
 }) {
   const { group } = props;
   const [text, setText] = useState(group?.text ?? '');
+  const [note, setNote] = useState(group?.note ?? '');
   const [color, setColor] = useState(group?.color ?? props.colors[0] ?? '#e6b422');
   const [nodes, setNodes] = useState(props.nodes);
   const [error, setError] = useState<string | null>(null);
@@ -42,12 +44,15 @@ export function GroupDialog(props: {
   };
   const ok = () => {
     if (!group) {
-      return act(() => props.controller.op('add_group', { nodes, text, color }));
+      return act(() => props.controller.op('add_group', { nodes, text, color, ...(note.trim() ? { note } : {}) }));
     }
     // only what changed (keeps the console transcript to the point)
     const changes: Record<string, unknown> = {};
     if (text !== group.text) {
       changes.text = text;
+    }
+    if (note.trim() !== (group.note ?? '').trim()) {
+      changes.note = note;
     }
     if (color !== group.color) {
       changes.color = color;
@@ -86,21 +91,24 @@ export function GroupDialog(props: {
       }
     >
       <label className="verknode-group-field">
-        <span>Text</span>
-        <textarea
+        <span>Title</span>
+        <input
           autoFocus
-          rows={3}
           value={text}
-          placeholder="What these nodes do (the first line is shown on the bubble)"
-          onChange={e => setText(e.target.value)}
+          placeholder="Shown on the bubble, e.g. Load and clean"
+          onChange={e => setText(e.target.value.replace(/\n/g, ' '))}
           onKeyDown={e => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            if (e.key === 'Enter') {
               e.preventDefault();
               void ok();
             }
           }}
         />
       </label>
+      <div className="verknode-group-field">
+        <span>Note (Markdown: what these nodes do and why; ¶ on the bubble shows it)</span>
+        <NoteEditor value={note} onChange={setNote} onSubmit={() => void ok()} />
+      </div>
       <div className="verknode-group-field">
         <span>Colour</span>
         <div className="verknode-group-colors">

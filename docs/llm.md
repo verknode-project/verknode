@@ -319,6 +319,15 @@ The copy runs in a **file sandbox**:
   tested", which is not a failure. The model is told, it goes back for no fix,
   and the chat names them instead of showing an earlier table as the result.
 
+**It explains what it builds** (*Explain what it builds*, on by default):
+- each node it adds gets a note saying what it does there and why, and its
+  group gets one too (hover ¶ to read them);
+- once what it built works, it writes a [walkthrough](walkthroughs.md) of
+  it into a Walkthrough node in its group, and writes it again when it
+  changes the workflow later.
+
+When it leaves something out, verknode reminds it before it answers.
+
 When the model answers, the agent checks its work before anything changes:
 - **It tests what was built.** Failures go back to the model for a few rounds.
 - **It shows the model the result,** if the model has not looked at it, so

@@ -504,7 +504,14 @@ export const WorkflowNode = memo(({ data, selected, positionAbsoluteX, positionA
           onSketch={() => data.onSketch?.(n.id)}
         />
       )}
-      <div className="verknode-node-annotation">{n.annotation}</div>
+      <div className="verknode-node-annotation">
+        {n.annotation}
+        {n.note && (
+          <span className="verknode-note-mark" data-note-node={n.id} aria-label="Note (click to edit)">
+            ¶
+          </span>
+        )}
+      </div>
     </div>
   );
 });

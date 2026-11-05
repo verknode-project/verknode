@@ -22,7 +22,8 @@ from .. import __version__
 from .flowvars import FlowVariable, stack_from_json, stack_to_json
 from .node import FLOWVAR, FLOWVARIABLE, INACTIVE, TABLE, Port, PortObject
 from .types import spec_to_json
-from .workflow import GROUP_COLORS, Connection, MissingNodeModel, NodeContainer, Workflow, clean_widget_layout
+from .workflow import (GROUP_COLORS, Connection, MissingNodeModel, NodeContainer, Workflow, clean_widget_layout,
+                       split_group_text)
 
 FORMAT = "vkf"
 FORMAT_VERSION = "1.0.0"
@@ -220,8 +221,10 @@ def load_workflow(data: bytes, base_dir: str | None = None) -> Workflow:
         for a in workflow.get("annotations", []):
             members = [int(n) for n in a.get("nodes", []) if int(n) in wf.nodes]
             if a.get("type", "group") == "group" and members:
-                wf.groups.append({"id": int(a["id"]), "nodes": members, "text": a.get("text", ""),
-                                  "color": a.get("color") or GROUP_COLORS[0]})
+                title, rest = split_group_text(a.get("text", ""))
+                wf.groups.append({"id": int(a["id"]), "nodes": members, "text": title,
+                                  "color": a.get("color") or GROUP_COLORS[0],
+                                  "note": str(a.get("note") or rest).strip()})
         wf.next_group_id = max([1] + [g["id"] + 1 for g in wf.groups])
         for m in workflow.get("metanodes", []):
             mid = int(m["id"])

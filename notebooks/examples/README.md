@@ -16,7 +16,7 @@ workflows read (`data/`), and they write their results to `output/` there.
 | `llm/` | `llm.vkf`, `llm_connections.vkf`, `chatbot.vkf`, `ollama.vkf` | LLM Prompter, the LLM connectors (Ollama, inference servers, APIs, a local model), chats, managing Ollama |
 | `agents/` | `workflow_agent.vkf`, `data_chat.vkf`, `coding_agent.vkf`, `data_query_agent.vkf`, `agent_improvement.vkf` (+ `.ipynb`), `llm_harness.vkf`, `mcp/` | a chat that builds the workflow, questions about the results, a coding agent, data query agents (LangGraph, Deep Agents), evaluation and improvement, an LLM harness, agents over MCP |
 | `custom_nodes/` | `custom_nodes.vkf` | nodes of your own, in a folder next to the workflow (`vkn_custom_nodes/`) |
-| `walkthroughs/` | `sales_walkthrough.vkf` | a walkthrough: a document beside the workflow, read a section at a time, whose links show its nodes, groups, settings, widgets and outputs and whose buttons run it |
+| `walkthroughs/` | `sales_walkthrough.vkf` | a walkthrough: a document beside the workflow, read a section at a time, whose links show its nodes, groups, settings, widgets and outputs and whose buttons run it; notes on its nodes and groups (hover ¶) |
 
 The LLM and agent examples need a model. Connect an LLM connector node to a
 node's LLM port, set the node's Model settings, or set `VERKNODE_LLM_URL`

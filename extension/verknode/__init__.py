@@ -424,9 +424,10 @@ class Workflow:
         return Metanode(self, found[0]["id"])
 
     # -- group annotations ---------------------------------------------------
-    def add_group(self, *nodes, text: str = "", color: str | None = None) -> "Group":
-        """Group annotation: a bubble around the nodes with a text (color "#rrggbb")."""
-        gid = self._op("add_group", nodes=[self._id(n) for n in nodes], text=text, color=color)["id"]
+    def add_group(self, *nodes, text: str = "", color: str | None = None, note: str | None = None) -> "Group":
+        """Group annotation: a bubble around the nodes with a text (color "#rrggbb") and a note (Markdown:
+        what the nodes do)."""
+        gid = self._op("add_group", nodes=[self._id(n) for n in nodes], text=text, color=color, note=note)["id"]
         return Group(self, gid)
 
     @property
@@ -689,6 +690,15 @@ class Group:
         self.wf._op("update_group", id=self.id, text=text)
 
     @property
+    def note(self) -> str:
+        """What the nodes do (Markdown), shown with the bubble."""
+        return self._info().get("note", "")
+
+    @note.setter
+    def note(self, text: str) -> None:
+        self.wf._op("update_group", id=self.id, note=text)
+
+    @property
     def color(self) -> str:
         return self._info()["color"]
 
@@ -743,6 +753,15 @@ class Node:
     @annotation.setter
     def annotation(self, text: str) -> None:
         self.wf._op("set_annotation", id=self.id, text=text)
+
+    @property
+    def note(self) -> str:
+        """What the node does and why (Markdown), shown on the canvas."""
+        return self._info().get("note", "")
+
+    @note.setter
+    def note(self, text: str) -> None:
+        self.wf._op("set_note", id=self.id, text=text)
 
     @property
     def position(self) -> tuple:

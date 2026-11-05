@@ -202,6 +202,8 @@ class Edit:
             if op.get("ref"):
                 self.refs[str(op["ref"])] = nid
             wf.set_annotation(nid, str(op.get("label") or wf.nodes[nid].name))
+            if op.get("note"):
+                wf.set_note(nid, str(op["note"]))
             if self.group_id is not None and any(g["id"] == self.group_id for g in wf.groups):
                 g = wf.group(self.group_id)
                 wf.update_group(self.group_id, nodes=list(g["nodes"]) + [nid])
@@ -221,8 +223,13 @@ class Edit:
             self._settings(nid, op.get("settings") or {})
             if op.get("label"):
                 wf.set_annotation(nid, str(op["label"]))
+            if op.get("note") is not None:
+                wf.set_note(nid, str(op["note"]))
             self.touched.add(nid)
-            self.log.append(f"configured #{nid} {_short(op.get('settings') or {}, 160)}")
+            if op.get("settings") or op.get("label"):
+                self.log.append(f"configured #{nid} {_short(op.get('settings') or {}, 160)}")
+            if op.get("note"):
+                self.log.append(f"wrote the note of #{nid}")
             return nid
         if kind in ("connect", "disconnect"):
             src = self.node(op.get("from"))
@@ -249,7 +256,43 @@ class Edit:
             nid = self.node(op.get("node"), True)
             wf.set_annotation(nid, str(op.get("text") or ""))
             return nid
+        if kind == "group_note":
+            if self.group_id is None or not any(g["id"] == self.group_id for g in wf.groups):
+                raise ValueError("your group is made with your first node: add a node first")
+            wf.update_group(self.group_id, note=str(op.get("note") or ""))
+            self.log.append("wrote the group's note")
+            return None
+        if kind == "walkthrough":
+            return self._walkthrough(op)
         raise ValueError(f"unknown edit {kind!r}")
+
+    def _walkthrough(self, op) -> int:
+        """Write the walkthrough of the group: into its Walkthrough node, or a new one left of its nodes."""
+        wf = self.wf
+        # (the ids of the test copy, as the nodes got them here)
+        def ids(m):  # (in a vk: address, the node ids - not a group's id, nor an output's port)
+            kind, rest = m.group(1), m.group(2)
+            if kind == "group" or rest.startswith("group/"):
+                return m.group(0)
+            head, _, tail = rest.partition("/")
+            head = ",".join(str(self.idmap.get(int(x), x)) if x.isdigit() else x for x in head.split(","))
+            return f"vk:{kind}/{head}" + (f"/{tail}" if tail else "")
+        doc = re.sub(r"vk:(\w+)/([\w,/.-]+)", ids, str(op.get("document") or ""))
+        doc = re.sub(r"(?<![\w#&/])#(\d+)\b", lambda m: f"#{self.idmap.get(int(m.group(1)), m.group(1))}", doc)
+        settings = {"document": doc, "draft": False, **({"title": op["title"]} if op.get("title") else {})}
+        nid = next((n for n in sorted(self.editable) if n in wf.nodes
+                    and wf.nodes[n].factory == "verknode.docs.Walkthrough"), None)
+        if nid is not None:
+            self._settings(nid, settings)
+            self.touched.add(nid)
+            self.log.append(f"wrote the walkthrough #{nid}")
+            return nid
+        mine = [wf.nodes[n] for n in self.editable if n in wf.nodes]
+        nid = self.one({"op": "add", "type": "Walkthrough", "label": op.get("title") or "Walkthrough",
+                        "settings": settings})
+        if mine:
+            wf.move([{"id": nid, "x": min(n.x for n in mine) - 600, "y": min(n.y for n in mine)}])
+        return nid
 
 
 # ---------------------------------------------------------------------------------------------------
@@ -269,6 +312,8 @@ def node_line(wf, nid, analysis=None, settings=True) -> str:
                     for i, p in enumerate(nc.model.in_ports, 1)) or "-"
     outs = ", ".join(f"{i}:{p.name} ({p.type})" for i, p in enumerate(nc.model.out_ports, 1)) or "-"
     line = f"#{nid} [{nc.name}] \"{nc.annotation}\" in: {ins}; out: {outs}"
+    if nc.custom_description:
+        line += "\n    note: " + " ".join(nc.custom_description.split())[:400]
     if settings:
         line += f"\n    settings: {_short(nc.settings, 500)}"
         bound = {k: b["used"] for k, b in (nc.var_settings or {}).items() if b.get("used")}
@@ -528,11 +573,12 @@ TOOLS = [
         {"type": {"type": "string", "description": "exact node type name"},
          "label": {"type": "string", "description": "a short label saying what it does here"},
          "settings": {"type": "object", "description": "only the settings that differ from the defaults"},
-         "after": {"type": "integer", "description": "place it to the right of this node (optional)"}},
+         "after": {"type": "integer", "description": "place it to the right of this node (optional)"},
+         "note": {"type": "string", "description": "a note for the user (Markdown): what it does here and why"}},
         ["type", "label"]),
-    _fn("configure_node", "Change settings (and/or the label) of one of your nodes.",
+    _fn("configure_node", "Change settings (and/or the label or note) of one of your nodes.",
         {"node": NODE, "settings": {"type": "object", "description": "only the settings that change"},
-         "label": {"type": "string"}}, ["node"]),
+         "label": {"type": "string"}, "note": {"type": "string", "description": "its note (Markdown)"}}, ["node"]),
     _fn("connect", "Connect an output port to an input port of one of your nodes (ports count from 1). "
         "A connection already into that input is replaced.",
         {"from_node": NODE, "from_port": {"type": "integer"}, "to_node": NODE, "to_port": {"type": "integer"}},
@@ -541,6 +587,13 @@ TOOLS = [
         {"from_node": NODE, "from_port": {"type": "integer"}, "to_node": NODE, "to_port": {"type": "integer"}},
         ["from_node", "to_node"]),
     _fn("remove_node", "Remove one of your nodes (with its connections).", {"node": NODE}, ["node"]),
+    _fn("note_group", "Write the note of your group (Markdown): what its nodes do together, for the user.",
+        {"note": {"type": "string"}}, ["note"]),
+    _fn("write_walkthrough", "Write the walkthrough of what you built (Markdown, \"## \" starts a section, vk: links "
+        "point at nodes, groups, settings, widgets and outputs - the format is in your instructions). It goes into "
+        "the Walkthrough node of your group (made the first time; later calls replace its document). References "
+        "to nothing are refused.",
+        {"document": {"type": "string"}, "title": {"type": "string"}}, ["document"]),
     _fn("run", "Run your nodes (on a test copy, in a file sandbox) and get each node's state, rows and errors."),
     _fn("preview", "Run up to a node (on the test copy) and show the first rows of its output table.",
         {"node": NODE, "port": {"type": "integer", "description": "output port (default 1)"},
@@ -577,6 +630,20 @@ the change with the tools - verknode shows changes of what was there before this
 not a failure: keep them, and say in your answer that they were not tested.
 - If the user only asks a question, answer it without changing the workflow. If what they ask is unclear, ask \
 them (briefly) instead of guessing."""
+
+
+EXPLAIN = """Explain what you build, so the user can follow it:
+- Give every node you add a note (the note of add_node): one or two sentences of Markdown on what it does here \
+and why - e.g. which rows it keeps and why, what a column means. Refer to other nodes as #id. When you change \
+what a node does, change its note too (configure_node).
+- Give your group a note (note_group): what its nodes do together, in two or three sentences.
+- When what you built works, write a walkthrough of it (write_walkthrough): a short document the user steps \
+through - a section per step of the workflow (a few nodes), saying what happens and pointing at the nodes, \
+their settings and results with vk: links, with a run button. When you change the workflow later, write it \
+again so that it stays true. Describe only what the test showed: no numbers you have not seen.
+
+The walkthrough format:
+"""
 
 
 ASK_CHANGE = ("\n(This changes a node that was there before this message: it is made in the workflow only when the "
@@ -652,6 +719,11 @@ class AgentSession:
         self.last_run = None  # (report, problems, files) of the last run
         self.partial = False  # (the last run left out some of the nodes)
         guidance = (s.get("guidance") or "").strip()
+        self.explain = bool(s.get("explain", True))
+        self.wrote_walkthrough = False
+        if self.explain:
+            from .walkthrough import FORMAT
+            guidance = (EXPLAIN + FORMAT + ("\n\n" + guidance if guidance else "")).strip()
         system = SYSTEM + ("\n\nMore instructions:\n" + guidance if guidance else "") + \
             f"\n\nNode types (by category):\n{catalog(wf)}"
         state = describe(test, self.edit.editable, self.me, self.hidden, self.group)
@@ -667,7 +739,7 @@ class AgentSession:
         steps, max_steps = 0, max(4, int(s.get("steps") or 40))
         fixes, max_fixes = 0, max(0, int(s.get("rounds") or 3))
         checked = not s.get("check", True)
-        text, nudges, claimed, asked = "", 0, False, False
+        text, nudges, claimed, asked, explained = "", 0, False, False, not self.explain
         seen: dict = {}  # (tool calls so far: repeating one that cannot help is stopped)
         while True:
             self.ctx.check_canceled()
@@ -748,6 +820,13 @@ class AgentSession:
                 if note:
                     messages.append({"role": "user", "content": f"(verknode: before you answer.) {note} Then answer "
                                      f"my message (\"{message}\")."})
+                    continue
+            if not explained and not problems:
+                explained = True
+                todo = self._unexplained()
+                if todo:
+                    messages.append({"role": "user", "content": "(verknode: before you answer, explain what you "
+                                     "built for the user.) " + " ".join(todo) + f" Then answer my message (\"{message}\")."})
                     continue
             break
         reply = text or ("Done." if self.ops else "I have no answer to that.")
@@ -838,6 +917,40 @@ class AgentSession:
         self.dirty = True
         return nid
 
+    def _unexplained(self) -> list[str]:
+        """What the model has not explained of what it built: the nodes it added without a note, its group's
+        note, the walkthrough."""
+        wf, out = self.test, []
+        added = [n for n in self.edit.added if n in wf.nodes and wf.nodes[n].factory != "verknode.docs.Walkthrough"]
+        if not added:
+            return out
+        bare = [n for n in added if not wf.nodes[n].custom_description]
+        if bare:
+            out.append("These nodes have no note yet: " + ", ".join(f"#{n} \"{wf.nodes[n].annotation}\"" for n in bare)
+                       + " - give each one (configure_node with note).")
+        g = next((g for g in wf.groups if g["id"] == self.edit.group_id), None)
+        if g is not None and not g.get("note"):
+            out.append("Your group has no note: write one (note_group).")
+        if not self.wrote_walkthrough and len(added) >= 2:
+            out.append("Write a walkthrough of what you built (write_walkthrough), in the format of your instructions.")
+        return out
+
+    def t_note_group(self, note=""):
+        self._edit({"op": "group_note", "note": note})
+        return "The group's note is written."
+
+    def t_write_walkthrough(self, document="", title=None):
+        from .walkthrough import check, sections
+
+        problems = check(self.test, document)
+        if problems:
+            return "Not written - these references point at nothing; fix them:\n- " + "\n- ".join(problems)
+        nid = self._edit({"op": "walkthrough", "document": document, "title": title})
+        self.wrote_walkthrough = True
+        secs = sections(document)
+        return (f"Written into the Walkthrough #{nid}: {len(secs)} section(s). The user reads it on the canvas "
+                "(its widget) or in a tab.")
+
     def t_find_node_types(self, query=""):
         return search_types(self.test, query)
 
@@ -884,10 +997,11 @@ class AgentSession:
             out += "\nNext: " + node_line(self.test, d, settings=False)
         return out
 
-    def t_add_node(self, type="", label="", settings=None, after=None, **extra):
+    def t_add_node(self, type="", label="", settings=None, after=None, note=None, **extra):
         if extra:
             settings = {**(settings or {}), **extra}  # (settings given as arguments)
-        op = {"op": "add", "type": type, "label": label, "settings": settings or {}, "after": after}
+        op = {"op": "add", "type": type, "label": label, "settings": settings or {}, "after": after,
+              **({"note": note} if note else {})}
         nid = self.edit.one(op)
         op["id"] = nid
         self.ops.append(op)
@@ -896,10 +1010,11 @@ class AgentSession:
         hint = "" if name in self.helped else f"\n(node_type_help {name!r} shows its settings)"
         return f"Added. {self._after_edit(nid)}{hint}"
 
-    def t_configure_node(self, node=None, settings=None, label=None):
-        nid = self._edit({"op": "configure", "node": node, "settings": settings or {}, "label": label})
+    def t_configure_node(self, node=None, settings=None, label=None, note=None):
+        nid = self._edit({"op": "configure", "node": node, "settings": settings or {}, "label": label, "note": note})
         if nid in self.orig_nodes:
-            what = ", ".join(f"{k} = {_short(v, 60)}" for k, v in (settings or {}).items()) or f"label \"{label}\""
+            what = (", ".join(f"{k} = {_short(v, 60)}" for k, v in (settings or {}).items())
+                    or (f"label \"{label}\"" if label else "its note"))
             self.changes.append(f"change {self._name(nid)}: {what}")
             return f"Configured on the copy. {self._after_edit(nid)}" + (ASK_CHANGE if self.guarded else "")
         return f"Configured. {self._after_edit(nid)}"
@@ -1031,6 +1146,9 @@ AGENT_FIELDS = [
     F("allow_unsafe", "bool", "Run script and custom nodes in tests", False, "They can reach files outside the sandbox."),
     F("sandbox_mb", "int", "Sandbox size (MB)", 500),
     F("run_when_done", "bool", "Run what was built when the chat ends", True),
+    F("explain", "bool", "Explain what it builds", True,
+      "Notes on the nodes it adds and on its group, and a walkthrough of what it built (a Walkthrough node in its "
+      "group, kept up to date), so that you can follow what it made."),
 ]
 
 AGENT_DESCRIPTION = (

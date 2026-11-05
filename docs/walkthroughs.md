@@ -99,8 +99,11 @@ Over [MCP](agents.md), two tools let other agents write walkthroughs:
   given one. A document with references to nothing is refused, and nothing is
   written.
 
-The workflow agent in the canvas chat can add a Walkthrough node as well:
-the format is in the node's description, which it reads with
-`node_type_help`.
+Agents that build workflows write walkthroughs as they go. The MCP
+instructions ask for a note on every node and a walkthrough once the
+workflow works. The workflow agent in the canvas chat does the same: it
+writes the walkthrough into a Walkthrough node in its group and keeps it up
+to date (*Explain what it builds*, see [LLM nodes](llm.md)). Read what an
+agent wrote: it can describe its own work wrongly.
 
 Exports leave walkthroughs out: they are read in the editor.

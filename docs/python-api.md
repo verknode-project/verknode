@@ -19,6 +19,7 @@ From a notebook or console in the same JupyterLab:
     meta.expand()
     g = wf.add_group(reader, sorter, text="Load", color="#3d9be9")   # group annotation
     g.text = "Load data"; g.nodes = [reader]; g.remove()
+    reader.note = "Reads **the orders**; see #4"           # notes (Markdown); g.note for a group
     wf.undo(); wf.save()
 
 Changes appear in the open editor immediately (and editor changes are seen

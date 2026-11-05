@@ -124,14 +124,18 @@ class Recorder:
             return [f"{node(p['id'])}.move({round(p['x'])}, {round(p['y'])})" for p in a["positions"]]
         if op == "set_annotation":
             return [f"{node(a['id'])}.annotation = {a['text']!r}"]
+        if op == "set_note":
+            return [f"{node(a['id'])}.note = {a['text']!r}"]
         if op == "add_group":
             return [f"wf.add_group({', '.join(str(int(n)) for n in a['nodes'])}"
-                    f"{_group_kwargs(a.get('text'), a.get('color'))})  # -> group {result['id']}"]
+                    f"{_group_kwargs(a.get('text'), a.get('color'), a.get('note'))})  # -> group {result['id']}"]
         if op == "update_group":
             g = f"wf.group({int(a['id'])})"
             out = []
             if a.get("text") is not None:
                 out.append(f"{g}.text = {a['text']!r}")
+            if a.get("note") is not None:
+                out.append(f"{g}.note = {a['note']!r}")
             if a.get("color") is not None:
                 out.append(f"{g}.color = {a['color']!r}")
             if a.get("nodes") is not None:
@@ -182,7 +186,7 @@ class Recorder:
         for g in wf.groups:
             if set(g["nodes"]) <= chosen and g["id"] not in self.groups_before:
                 lines.append(f"wf.add_group({', '.join(map(str, g['nodes']))}"
-                             f"{_group_kwargs(g['text'], g['color'])})  # -> group {g['id']}")
+                             f"{_group_kwargs(g['text'], g['color'], g.get('note'))})  # -> group {g['id']}")
         return lines
 
 
@@ -206,10 +210,12 @@ def _endpoints(wf: Workflow, s: int, sp: int, d: int, dp: int) -> str:
     return f"{src}, {dst}{_ports(sp, dp)}"
 
 
-def _group_kwargs(text, color) -> str:
+def _group_kwargs(text, color, note=None) -> str:
     out = ""
     if text:
         out += f", text={text!r}"
+    if note:
+        out += f", note={note!r}"
     if color and color.lower() != GROUP_COLORS[0]:
         out += f", color={color!r}"
     return out
@@ -246,6 +252,8 @@ def to_python(wf: Workflow, path: str | None) -> str:
         lines.append(f"{var} = wf.add_node({nc.name!r}, x={round(nc.x)}, y={round(nc.y)}{extra})")
         if nc.annotation and nc.annotation != f"Node {nid}":
             lines.append(f"{var}.annotation = {nc.annotation!r}")
+        if nc.custom_description:
+            lines.append(f"{var}.note = {nc.custom_description!r}")
         lines += _binding_lines(var, {}, nc.var_settings)
     if wf.connections:
         lines.append("")
@@ -276,7 +284,7 @@ def to_python(wf: Workflow, path: str | None) -> str:
     if wf.groups:
         lines.append("")
     for g in wf.groups:
-        lines.append(f"wf.add_group({', '.join(names[n] for n in g['nodes'])}{_group_kwargs(g['text'], g['color'])})")
+        lines.append(f"wf.add_group({', '.join(names[n] for n in g['nodes'])}{_group_kwargs(g['text'], g['color'], g.get('note'))})")
     while lines and not lines[-1]:
         lines.pop()
     body = ["with wf.batch():  # one undo step; fast also for big workflows"] + [f"    {l}" if l else "" for l in lines]

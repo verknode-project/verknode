@@ -42,8 +42,9 @@ standalone Python script that runs without Jupyter.
 - **Walkthroughs** - a document that explains the workflow a section at a
   time, like a slide show, on the canvas or in a tab beside it. Its links
   show the nodes, groups, settings, widgets and outputs they name, and its
-  buttons run them. An LLM drafts it, or agents write it over MCP
-  ([walkthroughs](docs/walkthroughs.md)).
+  buttons run them. Nodes and groups carry notes in Markdown, read by
+  hovering their ¶. Agents write both as they build, so you can follow what
+  they made ([walkthroughs](docs/walkthroughs.md), [notes](docs/editor.md)).
 - **See it run** - status lights, time bars with estimates, progress and the
   expected end of every node, loop iteration counters
   ([editor](docs/editor.md)).
@@ -168,6 +169,32 @@ Anything that undoes earlier work, like removing a node, waits for your
 that takes the conversation as input:
 
 ![A workflow agent chat on the canvas: it built a reader, revenue formula, group-by, sorter and bar chart in its own group, shows the result table, and asks for an OK before removing the chart it built - the chart is highlighted on the canvas](docs/images/workflow-agent-v1.png)
+
+**Explain a workflow with a walkthrough**: a Walkthrough node holds a
+Markdown document that you read a section at a time, like a slide show. It
+sits on the canvas or in a JupyterLab tab beside it. Stepping to a section
+shows what that section is about, and its links act on the workflow:
+- a node or group link selects it and brings it into view;
+- a settings link opens the node's settings at the setting it names;
+- widget, output and view links show the chart or open the table;
+- run buttons run a step, a group or the whole workflow.
+
+![A walkthrough in a JupyterLab tab beside its workflow: the section "Load and clean" with links to the CSV Reader, the filter, the revenue expression and the cleaned table, and a button that runs the three steps; on the canvas, the group "Load and clean" is shown, and hovering the ¶ of "Keep sales" shows its note](docs/images/walkthrough-v2.png)
+
+**Notes on nodes and groups**: a ¶ after a node's label or a group's title
+means it has a note. Hover the ¶ to read the note, or click it to edit,
+with a live preview. Notes are Markdown and can point at other nodes (`#9`)
+or settings, like a walkthrough:
+
+![Notes on the canvas: hovering the ¶ of "Top products" shows its note - it keeps the k products with the most revenue, k coming from the slider #9; the ¶ marks after the other labels and group titles show which have notes; the walkthrough's widget is on the left](docs/images/notes-v1.png)
+
+You don't have to write them yourself:
+- **The workflow agent** gives every node it adds a note, and its group one
+  too. Once what it built works, it writes a walkthrough of it, and keeps
+  the walkthrough up to date as the workflow changes.
+- **Agents over MCP** are asked to do the same (`write_note`,
+  `write_walkthrough`).
+- **A Walkthrough node's own LLM** drafts the document for any workflow.
 
 **Ask about the results**: a Data Q&A Chat answers questions about the
 workflow's tables. The model computes every number it gives with SQL over

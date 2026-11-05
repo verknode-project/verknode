@@ -186,6 +186,13 @@ UNDO_LIMIT = 100
 GROUP_COLORS = ["#e6b422", "#4caf7d", "#3d9be9", "#a46bd6", "#e5534b", "#ef8a3c", "#8c8c8c"]
 
 
+def split_group_text(text) -> tuple[str, str]:
+    """A group's text as (title, note): its first line, and the rest (older files kept the note in the
+    text, below the title)."""
+    lines = str(text or "").strip().split("\n")
+    return lines[0].strip(), "\n".join(lines[1:]).strip()
+
+
 def undoable(method):
     """Record the workflow structure before an edit so it can be undone."""
 
@@ -705,6 +712,15 @@ class Workflow:
         self._changed()
 
     @undoable
+    def set_note(self, nid, text: str):
+        """The node's note: Markdown saying what it does and why."""
+        nc = self.node(nid)
+        text = str(text or "").strip()
+        if text != nc.custom_description:
+            nc.custom_description = text
+            self._changed()
+
+    @undoable
     def set_widget_layout(self, nid, layout: dict | None):
         """Where a widget node's canvas widget sits, its size and whether it is minimized."""
         self.set_widget_layouts([{"id": nid, "layout": layout}])
@@ -954,23 +970,32 @@ class Workflow:
         return color.lower()
 
     @undoable
-    def add_group(self, nodes, text: str = "", color: str | None = None) -> int:
-        """Group annotation around the given nodes; returns its id."""
+    def add_group(self, nodes, text: str = "", color: str | None = None, note: str | None = None) -> int:
+        """Group annotation around the given nodes; returns its id. Its title is `text`; its note,
+        Markdown saying what the nodes do (without one, the lines of a text after its first)."""
         with self._lock:
             gid = self.next_group_id
-            self.groups.append({"id": gid, "nodes": self._group_nodes(nodes), "text": str(text or ""),
-                                "color": self._group_color(color)})
+            title, rest = split_group_text(text)
+            self.groups.append({"id": gid, "nodes": self._group_nodes(nodes), "text": title,
+                                "color": self._group_color(color),
+                                "note": rest if note is None else str(note).strip()})
             self.next_group_id += 1
             self._changed()
             return gid
 
     @undoable
-    def update_group(self, gid, text: str | None = None, color: str | None = None, nodes=None):
+    def update_group(self, gid, text: str | None = None, color: str | None = None, nodes=None,
+                     note: str | None = None):
         with self._lock:
             g = self.group(gid)
             new = dict(g)
             if text is not None:
-                new["text"] = str(text)
+                title, rest = split_group_text(text)
+                new["text"] = title
+                if rest and note is None:
+                    note = rest
+            if note is not None:
+                new["note"] = str(note).strip()
             if color is not None:
                 new["color"] = self._group_color(color)
             if nodes is not None:
@@ -1172,6 +1197,7 @@ class Workflow:
                     "settings": copy.deepcopy(self.nodes[nid].settings),
                     "variables": copy.deepcopy(self.nodes[nid].var_settings),
                     "annotation": self.nodes[nid].annotation,
+                    "note": self.nodes[nid].custom_description,
                     "widget_layout": copy.deepcopy(self.nodes[nid].widget_layout),
                     "x": self.nodes[nid].x,
                     "y": self.nodes[nid].y,
@@ -1221,6 +1247,7 @@ class Workflow:
                 old = int(n["id"])
                 annotation = n.get("annotation", "")
                 nc.annotation = f"Node {nid}" if annotation == f"Node {old}" else annotation
+                nc.custom_description = str(n.get("note") or "")
                 nc.widget_layout = clean_widget_layout(n.get("widget_layout"), (n["x"], n["y"]), (dx, dy))
                 self.refresh_ports(nid)
                 mapping[old] = nid
@@ -1233,7 +1260,7 @@ class Workflow:
             for g in fragment.get("groups", []):
                 members = [mapping[int(n)] for n in g.get("nodes", []) if int(n) in mapping]
                 if members:
-                    self.add_group(members, g.get("text", ""), g.get("color"))
+                    self.add_group(members, g.get("text", ""), g.get("color"), g.get("note"))
             self._changed()
             top = [mapping[int(n["id"])] for n in fragment["nodes"] if self.nodes[mapping[int(n["id"])]].parent == parent]
             return top + [mid for _, mid in new_metas if self.metanodes[mid]["parent"] == parent]
@@ -2177,7 +2204,8 @@ class Workflow:
             ctx.caught_error = caught
             if self.sandbox is not None:
                 ctx.path_mapper = self.sandbox.map
-                if not self.sandbox.allow_unsafe and (m.sandbox_unsafe or getattr(m, "_verknode_custom", False)):
+                unsafe = m.sandbox_unsafe(settings) if callable(m.sandbox_unsafe) else m.sandbox_unsafe
+                if not self.sandbox.allow_unsafe and (unsafe or getattr(m, "_verknode_custom", False)):
                     raise WorkflowError("Not run in the test sandbox: it runs code or changes things outside the "
                                         "workflow (allow it with Run script nodes in the test)")
             ctx.on_progress = lambda f, _nc=nc: setattr(_nc, "progress", f)
@@ -2437,6 +2465,7 @@ class Workflow:
                 "x": nc.x,
                 "y": nc.y,
                 "annotation": nc.annotation,
+                "note": nc.custom_description,
                 "state": self.node_state(nc, a),
                 "inactive": nc.inactive,
                 "message": {"level": message[0], "text": message[1]} if message else None,
