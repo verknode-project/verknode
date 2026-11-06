@@ -179,7 +179,7 @@ shows what that section is about, and its links act on the workflow:
 - widget, output and view links show the chart or open the table;
 - run buttons run a step, a group or the whole workflow.
 
-![A walkthrough in a JupyterLab tab beside its workflow: the section "Load and clean" with links to the CSV Reader, the filter, the revenue expression and the cleaned table, and a button that runs the three steps; on the canvas, the group "Load and clean" is shown, and hovering the ¶ of "Keep sales" shows its note](docs/images/walkthrough-v2.png)
+![A walkthrough in a JupyterLab tab beside its workflow, stepped through: "Load and clean" shows its group on the canvas; its run button runs the three steps; hovering the ¶ of "Keep sales" shows its note; a settings link opens the Column Expression at its expression and an output link opens the cleaned table; the next sections show the bar chart and the line chart; in "The best sellers", moving the slider changes the table of top products](docs/images/walkthrough-v1.gif)
 
 **Notes on nodes and groups**: a ¶ after a node's label or a group's title
 means it has a note. Hover the ¶ to read the note, or click it to edit,
