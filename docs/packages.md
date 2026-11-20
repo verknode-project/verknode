@@ -149,7 +149,7 @@ The policy is that whatever can be updated by itself is. Everyone does as little
 |---|---|
 | A package's checks | Its CI uses verknode's `package-check.yml` (`@main`): the checks change with verknode, and the package's workflow does not. |
 | A package and a new node API | Its weekly Compatibility workflow (`package-compat.yml`) checks it against the newest verknode. When a new major API version is out and the checks pass with it, it widens the range (`bump-api`) and opens a pull request. |
-| The index | A release, that is, a tag `vX.Y.Z` that the Release workflow (`package-release.yml`) turns into a wheel on a GitHub release, is added to `packages/index.json` by the daily `packages-index.yml`, both in the public [verknode-preview](https://github.com/verknode-project/verknode-preview) repository. Its API range comes from the tag's `pyproject.toml`. |
+| The index | A release, that is, a tag `vX.Y.Z` that the Release workflow (`package-release.yml`) turns into a wheel on a GitHub release, is added to `packages/index.json` by the daily `packages-index.yml`. Its API range comes from the tag's `pyproject.toml`. |
 | Installed packages | Updates are offered (*Notify*) or installed at start (*Install compatible updates*), only to versions that fit the installed verknode. |
 | The package environment | It is made again, with its packages, when the server's Python changes. |
 | Saved workflows | Nodes migrate their own settings (`version`, `migrate()`). Results are kept until a package's version changes. |
@@ -181,7 +181,7 @@ follows all of them and makes a good model.
 ## Listing a package in the index
 
 1. Release it: push a tag `vX.Y.Z` matching `[project] version`, with the Release workflow in place.
-2. Open a pull request on [verknode-preview](https://github.com/verknode-project/verknode-preview) that adds an entry to `packages/index.json`: name, dist, title,
+2. Open a pull request on verknode that adds an entry to `packages/index.json`: name, dist, title,
    description, homepage, repository, and `"versions": []`.
 
 From then on, its releases appear in the index by themselves. Other indexes (a company's own, a file)

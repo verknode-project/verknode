@@ -7,7 +7,7 @@
 #       uses: verknode-project/verknode/.github/workflows/package-release.yml@main
 #
 # builds the wheel and the sdist (checking that the tag is the project's version) and puts them on a GitHub
-# release. verknode's package index adds the release by itself (packages-index.yml in verknode-project/verknode-preview, every day).
+# release. verknode's package index adds the release by itself (packages-index.yml, every day).
 name: verknode package release
 
 on:
