@@ -263,7 +263,7 @@ def new(name: str, folder: str | None = None, author: str = "") -> str:
                 python -m jupyterlab_verknode.packages install "{dist} @ git+https://github.com/OWNER/{dist}"
 
             Release: push a tag `vX.Y.Z` (the release workflow builds the wheel); verknode's index picks new
-            releases up by itself once the package is listed in it (packages/index.json, by a pull request).
+            releases up by itself once the package is listed in it (packages/index.json in verknode-project/verknode-preview, by a pull request).
         ''',
         ".github/workflows/ci.yml": '''
             # verknode's checks of a package, against the newest verknode (and kept up to date by verknode)

@@ -26,7 +26,7 @@ Versions:
 Installing: packages go into their own Python environment in ~/.verknode/packages (it sees the Jupyter
 server's packages, so only what is missing is installed; it survives a new container as ~/.verknode does,
 and is rebuilt by itself, with its packages, when the server's Python changes). The index - a JSON list of
-packages and their versions, by default verknode's own (packages/index.json) - offers the versions that fit
+packages and their versions, by default verknode's own (packages/index.json in verknode-project/verknode-preview) - offers the versions that fit
 this verknode's API. Updates: the policy (Settings › Node defaults › Packages) is to notify of updates, or
 to install the compatible ones by themselves when the server starts.
 
@@ -51,7 +51,7 @@ from dataclasses import dataclass, field
 
 API_VERSION = "1.2"  # (1.1: Package.examples; 1.2: path kinds and extensions of fields)
 GROUP = "verknode.packages"
-INDEX_URL = "https://raw.githubusercontent.com/verknode-project/verknode/main/packages/index.json"
+INDEX_URL = "https://raw.githubusercontent.com/verknode-project/verknode-preview/main/packages/index.json"
 WASM = sys.platform == "emscripten"
 
 
