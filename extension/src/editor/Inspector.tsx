@@ -167,13 +167,25 @@ function InspectCard(props: {
   }, [ins.node, ins.port, stamp]);
   // its size (resizable when kept), for the tail
   const card = useRef<HTMLDivElement>(null);
+  const latest = useRef(ins);
+  latest.current = ins;
+  const onChangeRef = useRef(props.onChange);
+  onChangeRef.current = props.onChange;
   const [size, setSize] = useState({ w: ins.w ?? INSPECT_W, h: ins.h ?? INSPECT_H });
   useLayoutEffect(() => {
     const el = card.current;
     if (!el) {
       return;
     }
-    const observer = new ResizeObserver(() => setSize({ w: el.offsetWidth, h: el.offsetHeight }));
+    const observer = new ResizeObserver(() => {
+      const now = { w: el.offsetWidth, h: el.offsetHeight };
+      setSize(now);
+      // a kept one resized by its grip keeps its size (and other widgets are placed around it)
+      const cur = latest.current;
+      if (cur.pinned && (Math.abs((cur.w ?? 0) - now.w) > 1 || Math.abs((cur.h ?? 0) - now.h) > 1)) {
+        onChangeRef.current(cur.key, now);
+      }
+    });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
@@ -207,8 +219,13 @@ function InspectCard(props: {
       <div
         ref={card}
         className={`verknode-inspect nodrag nopan nowheel ${ins.pinned ? 'verknode-inspect-pinned' : 'verknode-inspect-peek'}`}
-        // (as big as what it shows, up to a size - a kept one can be resized)
-        style={{ left: ins.at.x, top: ins.at.y, width: ins.w, height: ins.h, maxWidth: ins.w ? undefined : 1.4 * INSPECT_W, maxHeight: ins.h ? undefined : INSPECT_H }}
+        // (a look is as big as what it shows, up to a size; a kept one has a size of its own, from the size it
+        // had when kept, that its grip changes both ways - no maximum, which would stop the grip)
+        style={
+          ins.pinned
+            ? { left: ins.at.x, top: ins.at.y, width: ins.w ?? size.w, height: ins.h ?? size.h }
+            : { left: ins.at.x, top: ins.at.y, width: ins.w, height: ins.h, maxWidth: ins.w ? undefined : 1.4 * INSPECT_W, maxHeight: ins.h ? undefined : INSPECT_H }
+        }
         onMouseEnter={() => props.onHover(ins.key, true)}
         onMouseLeave={() => props.onHover(ins.key, false)}
         onPointerDown={e => e.stopPropagation()}
