@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://verknode-project.github.io/verknode/lab/index.html?path=examples/demo.vkf"><b>▶ Try the live demo</b></a>
+  <a href="https://verknode-project.github.io/verknode-preview/lab/index.html?path=examples/demo.vkf"><b>▶ Try the live demo</b></a>
   - in your browser, nothing to install (<a href="docs/jupyterlite.md">JupyterLite</a>)
 </p>
 
@@ -280,7 +280,7 @@ listed in verknode's index, it is offered to every verknode it fits. See
 ## Quick start
 
 **Try it in your browser**, with nothing to install:
-[verknode-project.github.io/verknode](https://verknode-project.github.io/verknode/lab/index.html?path=examples/demo.vkf).
+[verknode-project.github.io/verknode-preview](https://verknode-project.github.io/verknode-preview/lab/index.html?path=examples/demo.vkf).
 It's the JupyterLite build. Python and its packages are part of the site
 (no CDN), the first start takes 15 to 30 seconds, and some nodes need a
 full install ([what works there](docs/jupyterlite.md)).

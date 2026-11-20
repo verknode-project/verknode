@@ -1,6 +1,9 @@
-# verknode in the browser on GitHub Pages: builds the JupyterLite site (docker/lite/Dockerfile, docs/jupyterlite.md)
-# and publishes it at https://verknode-project.github.io/verknode/
-name: Try it in the browser (GitHub Pages)
+# The live demo: builds the JupyterLite site (docker/lite/Dockerfile, docs/jupyterlite.md) and publishes it,
+# with the preview's landing page, on the gh-pages branch of the public verknode-project/verknode-preview,
+# at https://verknode-project.github.io/verknode-preview/ (this repository is private, and Pages on a
+# private repository needs a paid plan). Pushing there needs the secret PREVIEW_DEPLOY_KEY: the private
+# half of a deploy key with write access on verknode-preview. Without it, the build runs and nothing is published.
+name: Live demo (verknode-preview Pages)
 
 on:
   push:
@@ -15,31 +18,40 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - name: Build the JupyterLite site
         run: docker buildx build -f docker/lite/Dockerfile --target site --output type=local,dest=_site .
-      - uses: actions/upload-pages-artifact@v3
+      - name: Add the preview's landing page
+        uses: actions/checkout@v4
         with:
-          path: _site
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          repository: verknode-project/verknode-preview
+          path: _preview
+      - run: |
+          cp _preview/site/index.html _site/
+          cp -r _preview/images _preview/assets _site/
+          touch _site/.nojekyll
+      - name: Publish to verknode-preview's gh-pages
+        env:
+          DEPLOY_KEY: ${{ secrets.PREVIEW_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::notice::PREVIEW_DEPLOY_KEY is not set; the demo was built but not published."
+            exit 0
+          fi
+          mkdir -p ~/.ssh && printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          cd _site
+          git init -q -b gh-pages
+          git -c user.name="verknode demo" -c user.email="actions@github.com" add -A
+          git -c user.name="verknode demo" -c user.email="actions@github.com" commit -q -m "Live demo from ${GITHUB_SHA::7}"
+          git push -f git@github.com:verknode-project/verknode-preview.git gh-pages
