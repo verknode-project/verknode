@@ -1,20 +1,18 @@
-"""Database nodes on SQLite.
+"""Database nodes on SQLite, PostgreSQL and Oracle.
 
-DB Session ports carry the connection (database file); DB Data ports carry
+DB Session ports carry the connection (an SQLite file, or a server); DB Data ports carry
 a SQL SELECT query that in-database nodes wrap as a subquery::
 
     SELECT ... FROM (<incoming query>) AS "table_123"
 
-Nothing is read until a DB Reader executes the final query.
+Nothing is read until a DB Reader executes the final query. What differs between the
+databases (connecting, placeholders, types, the catalog) is in engine/db.py.
 """
 from __future__ import annotations
 
 import datetime as dt
-import decimal
 import json
 import os
-import sqlite3
-import urllib.parse
 import zlib
 
 import polars as pl
@@ -30,7 +28,7 @@ from verknode.node import (
     Port,
     TABLE,
 )
-from verknode.node import dtype_kind, json_value
+from verknode.node import db, dtype_kind
 from .io import PATH_HELP
 from .manipulation import selected_columns, substitute_variables
 
@@ -49,9 +47,8 @@ DB_HELP = (
 # ----------------------------------------------------------------------
 # SQL helpers
 # ----------------------------------------------------------------------
-def q(name: str) -> str:
-    """Quote an identifier."""
-    return '"' + str(name).replace('"', '""') + '"'
+q = db.q  # a quoted identifier
+PH = db.PH  # a parameter placeholder
 
 
 def literal(value) -> str:
@@ -68,20 +65,18 @@ def strip_sql(sql: str) -> str:
     return (sql or "").strip().rstrip(";").strip()
 
 
-def subquery(query: str) -> str:
-    return f"({query}) AS {q(f'table_{zlib.crc32(query.encode()) % 10**8}')}"
+def subquery(query: str, d: str = db.SQLITE) -> str:
+    return f"({query}){db.alias(d, f'table_{zlib.crc32(query.encode()) % 10**8}')}"
 
 
-def _ro_connect(session: DBSessionPortObject) -> sqlite3.Connection:
-    """Read-only connection that never creates the database file."""
-    if not os.path.isfile(session.path):
-        raise FileNotFoundError(f"Database file does not exist: {session.path}")
-    return sqlite3.connect(f"file:{urllib.parse.quote(session.path)}?mode=ro", uri=True)
+def _ro_connect(session: DBSessionPortObject) -> db.Connection:
+    """Read-only connection (one that never creates an SQLite file)."""
+    return session.open(read_only=True)
 
 
-def _rw_connect(session: DBSessionPortObject) -> sqlite3.Connection:
-    os.makedirs(os.path.dirname(session.path) or ".", exist_ok=True)
-    return session.connect()
+def _rw_connect(session: DBSessionPortObject) -> db.Connection:
+    """Connection for a with-block: commits at its end (rolls back on an error) and closes."""
+    return session.open()
 
 
 def _decl_dtype(decl: str):
@@ -121,16 +116,8 @@ def _infer_dtype(values):
 
 
 def _columns_and_rows(con, query: str, limit: int | None = None):
-    """Column names, declared types and rows of a query (via a temp view)."""
-    con.execute('DROP VIEW IF EXISTS temp."__verknode_view"')
-    con.execute(f'CREATE TEMP VIEW "__verknode_view" AS {query}')
-    try:
-        info = con.execute('PRAGMA temp.table_info("__verknode_view")').fetchall()
-        sql = 'SELECT * FROM temp."__verknode_view"' + (f" LIMIT {limit}" if limit is not None else "")
-        rows = con.execute(sql).fetchall()
-    finally:
-        con.execute('DROP VIEW IF EXISTS temp."__verknode_view"')
-    return [r[1] for r in info], [r[2] for r in info], rows
+    """Column names, declared types and rows of a query."""
+    return db.describe(con, query, limit)
 
 
 def _schema(names, decls, rows) -> pl.Schema:
@@ -149,12 +136,16 @@ def query_schema(session: DBSessionPortObject, query: str) -> pl.Schema:
 def _convert(value, dtype):
     if value is None:
         return None
+    if isinstance(value, dt.datetime) and value.tzinfo is not None:
+        value = value.astimezone(dt.timezone.utc).replace(tzinfo=None)
     try:
         if dtype == pl.Boolean:
             if isinstance(value, str):
                 return value.strip().lower() in ("1", "true", "t", "yes", "y")
             return bool(value)
         if dtype == pl.Date:
+            if isinstance(value, dt.datetime):
+                return value.date()
             return value if isinstance(value, dt.date) else dt.date.fromisoformat(str(value)[:10])
         if dtype == pl.Datetime("us"):
             return value if isinstance(value, dt.datetime) else dt.datetime.fromisoformat(str(value))
@@ -165,6 +156,8 @@ def _convert(value, dtype):
         if dtype == pl.Float64:
             return float(value)
         if dtype == pl.String:
+            if isinstance(value, (dict, list)):
+                return json.dumps(value, default=str)
             return value if isinstance(value, str) else str(value)
     except (TypeError, ValueError):
         return None
@@ -183,26 +176,16 @@ def read_query(session: DBSessionPortObject, query: str, ctx=None) -> pl.DataFra
     return pl.DataFrame(cols, schema=schema)
 
 
-def sql_type(dtype) -> str:
+def sql_type(dtype, d: str = db.SQLITE) -> str:
     kind = dtype_kind(dtype)
-    return {
+    return db.column_type(d, {
         "integer": "INTEGER", "long": "INTEGER", "double": "REAL", "boolean": "BOOLEAN",
         "date": "DATE", "datetime": "TIMESTAMP", "time": "TIME", "binary": "BLOB",
-    }.get(kind, "TEXT")
+    }.get(kind, "TEXT"))
 
 
-def sql_value(v):
-    if v is None or isinstance(v, (int, float, str, bytes)):
-        return v
-    if isinstance(v, bool):
-        return int(v)
-    if isinstance(v, dt.datetime):
-        return v.isoformat(sep=" ")
-    if isinstance(v, (dt.date, dt.time)):
-        return v.isoformat()
-    if isinstance(v, decimal.Decimal):
-        return float(v)
-    return json.dumps(json_value(v))
+def sql_value(v, d: str = db.SQLITE):
+    return db.value(d, v)
 
 
 def _prepare(df: pl.DataFrame) -> pl.DataFrame:
@@ -215,8 +198,7 @@ def _prepare(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def table_exists(con, table: str) -> bool:
-    return con.execute("SELECT 1 FROM sqlite_master WHERE type IN ('table','view') AND name = ?",
-                       (table,)).fetchone() is not None
+    return db.table_exists(con, table)
 
 
 def require_table(s, key="table") -> str:
@@ -227,7 +209,7 @@ def require_table(s, key="table") -> str:
 
 
 def same_session(a: DBSessionPortObject, b: DBSessionPortObject) -> bool:
-    return os.path.realpath(a.path) == os.path.realpath(b.path)
+    return db.key(a) == db.key(b)
 
 
 def make_data(session, query: str, ctx, upstream_schema_known=True) -> DBDataPortObject:
@@ -238,9 +220,13 @@ def make_data(session, query: str, ctx, upstream_schema_known=True) -> DBDataPor
         if ctx.dry:
             return DBDataPortObject(session, query, None)
         raise
-    except sqlite3.Error as e:
+    except db.DBConnectError as e:
+        if ctx.dry:
+            return DBDataPortObject(session, query, None)
+        raise InvalidSettingsError(str(e)) from None
+    except db.errors() as e:
         # tables may be created by upstream nodes that have not been executed yet
-        if ctx.dry and (not upstream_schema_known or "no such table" in str(e)):
+        if ctx.dry and (not upstream_schema_known or db.missing_table(e)):
             return DBDataPortObject(session, query, None)
         raise InvalidSettingsError(f"Invalid SQL query: {e}") from None
     return DBDataPortObject(session, query, schema)
@@ -297,6 +283,114 @@ class SQLiteConnector(NodeModel):
         return [session]
 
 
+PASSWORD_HELP = ("The name of the Jupyter server's environment variable that holds the password, or of a "
+                 "<code>NAME=password</code> line in <code>~/.verknode/db.env</code>. Passwords are never "
+                 "stored in the workflow.")
+
+
+class _ServerConnector(NodeModel):
+    """A connector to a database server: the session names it, connecting checks it."""
+
+    category = "DB/Connection"
+    node_type = "Source"
+
+    def _session(self, s, ctx) -> DBSessionPortObject:
+        raise NotImplementedError
+
+    def configure(self, in_specs, s, ctx):
+        return [self._session(s, ctx)]
+
+    def _check(self, session, ctx, sql):
+        try:
+            with _ro_connect(session) as con:
+                version = con.execute(sql).fetchone()[0]
+        except db.DBConnectError as e:
+            raise InvalidSettingsError(str(e)) from None
+        where = db.summary(session)
+        ctx.log(f"Connected to {where.get('Server') or where.get('Connect string')}: {str(version).splitlines()[0]}")
+        return [session]
+
+
+class PostgreSQLConnector(_ServerConnector):
+    factory = "verknode.db.PostgreSQLConnector"
+    name = "PostgreSQL Connector"
+    icon = "PG"
+    short_description = "Creates a connection to a PostgreSQL database."
+    description = (
+        "Opens a DB session on a PostgreSQL database (with psycopg). Connect DB nodes (Table Selector, "
+        "Writer, Query Reader, ...) to its DB Connection port; the port view lists the tables. Name a table "
+        "of another schema as <code>schema.table</code>. Each node connects when it runs, and the "
+        "Reader reads its rows at once."
+    )
+    out_ports = [Port(DB_SESSION, "DB Connection", "PostgreSQL database session")]
+    fields = [
+        F("host", "string", "Host", "localhost"),
+        F("port", "int", "Port", 5432),
+        F("database", "string", "Database", "postgres"),
+        F("user", "string", "User", "postgres"),
+        F("password_env", "string", "Password variable", "PGPASSWORD", PASSWORD_HELP),
+        F("options", "string", "Other connection parameters", "",
+          "libpq parameters, e.g. <code>sslmode=require</code>, or a whole connection URI "
+          "(<code>postgresql://user@host/db</code>; the fields above override its parts). It is saved "
+          "with the workflow: put no password in it."),
+    ]
+
+    def _session(self, s, ctx):
+        host = (s["host"] or "").strip()
+        if not host and not (s["options"] or "").strip():
+            raise InvalidSettingsError("No host")
+        return DBSessionPortObject(dialect=db.POSTGRES, host=host, port=int(s["port"] or 5432),
+                                   database=(s["database"] or "").strip(), user=(s["user"] or "").strip(),
+                                   password_env=(s["password_env"] or "").strip(), options=(s["options"] or "").strip())
+
+    def execute(self, inputs, s, ctx):
+        import psycopg  # noqa: F401 - the driver (engine/db.py connects with it)
+
+        return self._check(self._session(s, ctx), ctx, "SELECT version()")
+
+
+class OracleConnector(_ServerConnector):
+    factory = "verknode.db.OracleConnector"
+    name = "Oracle Connector"
+    icon = "ORA"
+    short_description = "Creates a connection to an Oracle database."
+    description = (
+        "Opens a DB session on an Oracle database (with python-oracledb, which needs no Oracle Client). "
+        "Connect DB nodes (Table Selector, Writer, Query Reader, ...) to its DB Connection port; the port "
+        "view lists the user's tables. Table and column names are case sensitive as verknode quotes them: "
+        "a table created without quotes is <code>EMPLOYEES</code>; one of another user is "
+        "<code>HR.EMPLOYEES</code>. Tables the Writer creates have NUMBER(19), BINARY_DOUBLE, "
+        "VARCHAR2(4000) and DATE / TIMESTAMP columns, and NUMBER(1) for booleans."
+    )
+    out_ports = [Port(DB_SESSION, "DB Connection", "Oracle database session")]
+    fields = [
+        F("host", "string", "Host", "localhost"),
+        F("port", "int", "Port", 1521),
+        F("database", "string", "Service name", "", "The service of the database, e.g. ORCLPDB1 or FREEPDB1."),
+        F("user", "string", "User", ""),
+        F("password_env", "string", "Password variable", "ORACLE_PASSWORD", PASSWORD_HELP),
+        F("options", "string", "Connect string", "",
+          "Instead of host, port and service: an Easy Connect string (<code>dbhost:1521/ORCLPDB1</code>), "
+          "a TNS alias or a (DESCRIPTION=...) descriptor."),
+    ]
+
+    def _session(self, s, ctx):
+        options = (s["options"] or "").strip()
+        host, service = (s["host"] or "").strip(), (s["database"] or "").strip()
+        if not options and not (host and service):
+            raise InvalidSettingsError("Set the host and service name, or a connect string")
+        if not (s["user"] or "").strip():
+            raise InvalidSettingsError("No user")
+        return DBSessionPortObject(dialect=db.ORACLE, host=host, port=int(s["port"] or 1521), database=service,
+                                   user=(s["user"] or "").strip(), password_env=(s["password_env"] or "").strip(),
+                                   options=options)
+
+    def execute(self, inputs, s, ctx):
+        import oracledb  # noqa: F401 - the driver (engine/db.py connects with it)
+
+        return self._check(self._session(s, ctx), ctx, "SELECT banner FROM v$version")
+
+
 # ----------------------------------------------------------------------
 # Query (in-database processing)
 # ----------------------------------------------------------------------
@@ -322,7 +416,7 @@ class DBTableSelector(NodeModel):
     def execute(self, inputs, s, ctx):
         session = _need(inputs[0], "DB connection")
         if s["mode"] == "Table":
-            query = f"SELECT * FROM {q(require_table(s))}"
+            query = f"SELECT * FROM {db.qt(session.dialect, require_table(s))}"
         else:
             query = strip_sql(substitute_variables(s["query"] or "", ctx.variables()))
             if not query:
@@ -362,7 +456,7 @@ class DBQuery(_DBDataNode):
         sql = strip_sql(substitute_variables(s["query"] or "", ctx.variables()))
         if "#table#" not in sql:
             raise InvalidSettingsError("The SQL statement must reference #table#")
-        return sql.replace("#table#", subquery(data.query))
+        return sql.replace("#table#", subquery(data.query, data.session.dialect))
 
 
 ROW_OPS = ["=", "!=", "<", "<=", ">", ">=", "LIKE", "NOT LIKE", "IN", "IS NULL", "IS NOT NULL"]
@@ -390,12 +484,14 @@ class DBRowFilter(_DBDataNode):
         dtype = data.schema.get(column) if data.schema is not None else None
         kind = dtype_kind(dtype) if dtype is not None else None
         text = (text or "").strip()
+        if kind in ("integer", "long", "double") and text.lower() in ("true", "false"):
+            return "1" if text.lower() == "true" else "0"  # (booleans stored as numbers, e.g. Oracle's NUMBER(1))
         if kind in ("integer", "long", "double") or (kind is None and _is_number(text)):
             if not _is_number(text):
                 raise InvalidSettingsError(f'Value {text!r} for column "{column}" is not a number')
             return text
         if kind == "boolean":
-            return "1" if text.lower() in ("1", "true", "yes", "t") else "0"
+            return db.bool_literal(data.session.dialect, text.lower() in ("1", "true", "yes", "t"))
         return literal(text)
 
     def build(self, data, s, ctx):
@@ -420,7 +516,7 @@ class DBRowFilter(_DBDataNode):
         if not conds:
             raise InvalidSettingsError("No filter conditions defined")
         where = f" {s['combine']} ".join(f"({c})" for c in conds)
-        return f"SELECT * FROM {subquery(data.query)} WHERE {where}"
+        return f"SELECT * FROM {subquery(data.query, data.session.dialect)} WHERE {where}"
 
 
 def _is_number(text: str) -> bool:
@@ -446,7 +542,7 @@ class DBColumnFilter(_DBDataNode):
             cols = selected_columns(s["columns"], data.schema)
         if not cols:
             raise InvalidSettingsError("No columns selected")
-        return f"SELECT {', '.join(q(c) for c in cols)} FROM {subquery(data.query)}"
+        return f"SELECT {', '.join(q(c) for c in cols)} FROM {subquery(data.query, data.session.dialect)}"
 
 
 class DBColumnRename(_DBDataNode):
@@ -468,7 +564,7 @@ class DBColumnRename(_DBDataNode):
         if data.schema is None:
             raise InvalidSettingsError("Input columns unknown")
         cols = [f"{q(c)} AS {q(mapping[c])}" if c in mapping else q(c) for c in data.schema]
-        return f"SELECT {', '.join(cols)} FROM {subquery(data.query)}"
+        return f"SELECT {', '.join(cols)} FROM {subquery(data.query, data.session.dialect)}"
 
 
 DB_AGGREGATIONS = {
@@ -510,13 +606,17 @@ class DBGroupBy(_DBDataNode):
                 continue
             _check_columns(data, [a["column"]])
             name = a.get("name") or f"{a['method']}({a['column']})"
-            parts.append(f"{DB_AGGREGATIONS[a['method']].format(q(a['column']))} AS {q(name)}")
+            if a["method"] == "GROUP_CONCAT":
+                expr = db.group_concat(data.session.dialect, q(a["column"]))
+            else:
+                expr = DB_AGGREGATIONS[a["method"]].format(q(a["column"]))
+            parts.append(f"{expr} AS {q(name)}")
         if s["count_rows"]:
             parts.append(f'COUNT(*) AS {q("COUNT(*)")}')
         if len(parts) == len(groups):
             if not groups:
                 raise InvalidSettingsError("Select group columns or aggregations")
-        sql = f"SELECT {', '.join(parts)} FROM {subquery(data.query)}"
+        sql = f"SELECT {', '.join(parts)} FROM {subquery(data.query, data.session.dialect)}"
         if groups:
             sql += " GROUP BY " + ", ".join(q(g) for g in groups)
         return sql
@@ -527,7 +627,8 @@ class DBSorter(_DBDataNode):
     name = "DB Sorter"
     icon = "↓A"
     short_description = "Sorts rows in the database."
-    description = "Adds ORDER BY. Missing values are sorted first (ascending) as in SQLite." + DB_HELP
+    description = ("Adds ORDER BY. Where missing values go is the database's: first when ascending in SQLite, "
+                   "last in PostgreSQL and Oracle." + DB_HELP)
     fields = [
         F("keys", "records", "Sort by", [{"column": None, "order": "Ascending"}], fields=[
             F("column", "column", "Column"),
@@ -541,7 +642,7 @@ class DBSorter(_DBDataNode):
             raise InvalidSettingsError("No sort column selected")
         _check_columns(data, [k["column"] for k in keys])
         order = ", ".join(f"{q(k['column'])} {'DESC' if k['order'] == 'Descending' else 'ASC'}" for k in keys)
-        return f"SELECT * FROM {subquery(data.query)} ORDER BY {order}"
+        return f"SELECT * FROM {subquery(data.query, data.session.dialect)} ORDER BY {order}"
 
 
 class DBRowSampling(_DBDataNode):
@@ -558,14 +659,15 @@ class DBRowSampling(_DBDataNode):
     ]
 
     def build(self, data, s, ctx):
-        sub = subquery(data.query)
+        d = data.session.dialect
+        sql = f"SELECT * FROM {subquery(data.query, d)}" + (f" ORDER BY {db.random_order(d)}" if s["random"] else "")
         if s["mode"] == "Absolute":
-            limit = str(max(0, s["count"]))
-        else:
-            frac = min(max(0.0, s["fraction"]), 1.0)
-            limit = f"(SELECT CAST(COUNT(*) * {frac!r} AS INTEGER) FROM {subquery(data.query)})"
-        order = " ORDER BY RANDOM()" if s["random"] else ""
-        return f"SELECT * FROM {sub}{order} LIMIT {limit}"
+            return db.limit(d, sql, max(0, s["count"]))
+        frac = min(max(0.0, s["fraction"]), 1.0)
+        if d == db.ORACLE:
+            return f"{sql} FETCH FIRST {frac * 100!r} PERCENT ROWS ONLY"
+        count = "FLOOR(COUNT(*) * {})".format(repr(frac)) if d == db.POSTGRES else f"COUNT(*) * {frac!r}"
+        return db.limit(d, sql, f"(SELECT CAST({count} AS INTEGER) FROM {subquery(data.query, d)})")
 
 
 JOIN_MODES = {
@@ -617,8 +719,9 @@ class DBJoiner(NodeModel):
             out = c if c not in left.schema else f"{c}{s['suffix'] or ' (Right)'}"
             cols.append(f'"r".{q(c)} AS {q(out)}')
         on = " AND ".join(f'"l".{q(k["left"])} = "r".{q(k["right"])}' for k in keys)
-        query = (f'SELECT {", ".join(cols)} FROM ({left.query}) AS "l" '
-                 f'{JOIN_MODES[s["mode"]]} ({right.query}) AS "r" ON {on}')
+        d = left.session.dialect
+        query = (f'SELECT {", ".join(cols)} FROM ({left.query}){db.alias(d, "l")} '
+                 f'{JOIN_MODES[s["mode"]]} ({right.query}){db.alias(d, "r")} ON {on}')
         return [make_data(left.session, query, ctx)]
 
 
@@ -647,8 +750,9 @@ class DBConcatenate(NodeModel):
         def select(d):
             return ", ".join(f"{q(c)}" if c in d.schema else f"NULL AS {q(c)}" for c in cols)
 
-        query = (f"SELECT {select(a)} FROM {subquery(a.query)} {s['mode']} "
-                 f"SELECT {select(b)} FROM {subquery(b.query)}")
+        d = a.session.dialect
+        query = (f"SELECT {select(a)} FROM {subquery(a.query, d)} {s['mode']} "
+                 f"SELECT {select(b)} FROM {subquery(b.query, d)}")
         return [make_data(a.session, query, ctx)]
 
 
@@ -703,13 +807,13 @@ class DBQueryReader(NodeModel):
     def execute(self, inputs, s, ctx):
         try:
             return [read_query(_need(inputs[0], "DB connection"), self._query(s, ctx), ctx)]
-        except sqlite3.Error as e:
+        except db.errors() as e:
             raise InvalidSettingsError(f"Query failed: {e}") from None
 
 
-def _create_table_sql(table: str, schema, if_not_exists=False) -> str:
-    cols = ", ".join(f"{q(c)} {sql_type(t)}" for c, t in schema.items())
-    return f"CREATE TABLE {'IF NOT EXISTS ' if if_not_exists else ''}{q(table)} ({cols})"
+def _create_table_sql(table: str, schema, if_not_exists=False, d: str = db.SQLITE) -> str:
+    cols = ", ".join(f"{q(c)} {sql_type(t, d)}" for c, t in schema.items())
+    return f"CREATE TABLE {'IF NOT EXISTS ' if if_not_exists else ''}{db.qt(d, table)} ({cols})"
 
 
 class DBWriter(NodeModel):
@@ -721,7 +825,9 @@ class DBWriter(NodeModel):
     short_description = "Writes a table into a database table."
     description = (
         "Creates the database table from the input columns (types: INTEGER, REAL, TEXT, BOOLEAN, DATE, "
-        "TIMESTAMP, ...) and inserts all rows. Molecules are written as SMILES, collections as JSON."
+        "TIMESTAMP, ...; in PostgreSQL BIGINT, DOUBLE PRECISION, ...; in Oracle NUMBER(19), BINARY_DOUBLE, "
+        "VARCHAR2(4000), NUMBER(1) for booleans, ...) and inserts all rows. Molecules are written as SMILES, "
+        "collections as JSON."
     )
     in_ports = [Port(TABLE, "Data table"), SESSION_IN]
     out_ports = [SESSION_OUT]
@@ -740,20 +846,22 @@ class DBWriter(NodeModel):
         df, session = inputs[0], _need(inputs[1], "DB connection")
         table = require_table(s)
         df = _prepare(df)
+        d = session.dialect
         with _rw_connect(session) as con:
             exists = table_exists(con, table)
             if exists and s["if_exists"] == "Fail":
                 raise InvalidSettingsError(f'Table "{table}" already exists')
             if exists and s["if_exists"] == "Replace":
-                con.execute(f"DROP TABLE {q(table)}")
+                con.execute(f"DROP TABLE {db.qt(d, table)}")
                 exists = False
             if not exists:
-                con.execute(_create_table_sql(table, df.schema))
-            sql = f"INSERT INTO {q(table)} ({', '.join(q(c) for c in df.columns)}) VALUES ({', '.join('?' * df.width)})"
+                con.execute(_create_table_sql(table, df.schema, d=d))
+            sql = (f"INSERT INTO {db.qt(d, table)} ({', '.join(q(c) for c in df.columns)}) "
+                   f"VALUES ({', '.join([PH] * df.width)})")
             batch = max(1, s["batch_size"])
             for start in range(0, df.height, batch):
                 ctx.check_canceled()
-                rows = [tuple(sql_value(v) for v in r) for r in df.slice(start, batch).iter_rows()]
+                rows = [tuple(sql_value(v, d) for v in r) for r in df.slice(start, batch).iter_rows()]
                 con.executemany(sql, rows)
         ctx.log(f'Wrote {df.height} rows to table "{table}"')
         return [session]
@@ -772,29 +880,31 @@ class _RowWiseDML(NodeModel):
         cls.out_ports = [Port(TABLE, "Data table with status", f'Input table with "{cls.status_column}" column'),
                          SESSION_OUT]
 
-    def statement(self, df, s):
+    def statement(self, df, s, d=db.SQLITE):
         """Return (sql, parameter columns)."""
         raise NotImplementedError
 
     def configure(self, in_specs, s, ctx):
         require_table(s)
         schema = in_specs[0]
-        self.statement(pl.DataFrame(schema=schema), s)
+        session = _need(in_specs[1], "DB connection")
+        self.statement(pl.DataFrame(schema=schema), s, session.dialect)
         out = dict(schema)
         out[self.status_column] = pl.Int32
-        return [pl.Schema(out), _need(in_specs[1], "DB connection")]
+        return [pl.Schema(out), session]
 
     def execute(self, inputs, s, ctx):
         df, session = _prepare(inputs[0]), _need(inputs[1], "DB connection")
         table = require_table(s)
-        sql, params = self.statement(df, s)
+        d = session.dialect
+        sql, params = self.statement(df, s, d)
         counts = []
         with _rw_connect(session) as con:
             if not table_exists(con, table):
                 raise InvalidSettingsError(f'Table "{table}" does not exist')
             for row in df.select(params).iter_rows():
                 ctx.check_canceled()
-                counts.append(con.execute(sql, tuple(sql_value(v) for v in row)).rowcount)
+                counts.append(con.execute(sql, tuple(sql_value(v, d) for v in row)).rowcount)
         ctx.log(f"{self.name}: {sum(counts)} row(s) affected")
         return [df.with_columns(pl.Series(self.status_column, counts, dtype=pl.Int32)), session]
 
@@ -818,10 +928,10 @@ class DBInsert(_RowWiseDML):
         F("columns", "columns", "Columns to insert", {"include": [], "exclude": [], "enforce": "exclusion"}),
     ]
 
-    def statement(self, df, s):
+    def statement(self, df, s, d=db.SQLITE):
         cols = _cols(s, "columns", df.schema, "columns to insert")
-        table = q(require_table(s))
-        return f"INSERT INTO {table} ({', '.join(q(c) for c in cols)}) VALUES ({', '.join('?' * len(cols))})", cols
+        table = db.qt(d, require_table(s))
+        return f"INSERT INTO {table} ({', '.join(q(c) for c in cols)}) VALUES ({', '.join([PH] * len(cols))})", cols
 
 
 class DBUpdate(_RowWiseDML):
@@ -840,11 +950,11 @@ class DBUpdate(_RowWiseDML):
         F("where_columns", "columns", "Identification columns (WHERE)", {"include": [], "exclude": [], "enforce": "inclusion"}),
     ]
 
-    def statement(self, df, s):
+    def statement(self, df, s, d=db.SQLITE):
         sets = _cols(s, "set_columns", df.schema, "columns to update")
         where = _cols(s, "where_columns", df.schema, "identification columns")
-        sql = (f"UPDATE {q(require_table(s))} SET {', '.join(f'{q(c)} = ?' for c in sets)} "
-               f"WHERE {' AND '.join(f'{q(c)} = ?' for c in where)}")
+        sql = (f"UPDATE {db.qt(d, require_table(s))} SET {', '.join(f'{q(c)} = {PH}' for c in sets)} "
+               f"WHERE {' AND '.join(f'{q(c)} = {PH}' for c in where)}")
         return sql, sets + where
 
 
@@ -860,9 +970,10 @@ class DBDelete(_RowWiseDML):
         F("where_columns", "columns", "Identification columns (WHERE)", {"include": [], "exclude": [], "enforce": "inclusion"}),
     ]
 
-    def statement(self, df, s):
+    def statement(self, df, s, d=db.SQLITE):
         where = _cols(s, "where_columns", df.schema, "identification columns")
-        return f"DELETE FROM {q(require_table(s))} WHERE {' AND '.join(f'{q(c)} = ?' for c in where)}", where
+        return (f"DELETE FROM {db.qt(d, require_table(s))} WHERE {' AND '.join(f'{q(c)} = {PH}' for c in where)}",
+                where)
 
 
 class DBTableCreator(NodeModel):
@@ -890,31 +1001,39 @@ class DBTableCreator(NodeModel):
         F("if_not_exists", "bool", "Do not fail if the table exists", False),
     ]
 
-    def _sql(self, s, spec):
+    def _sql(self, s, spec, d=db.SQLITE):
         table = require_table(s)
         cols = [c for c in s["columns"] if (c.get("name") or "").strip()]
         if not cols and spec is not None:
-            defs = [f"{q(c)} {sql_type(t)}" for c, t in spec.items()]
+            defs = [f"{q(c)} {sql_type(t, d)}" for c, t in spec.items()]
         else:
             if not cols:
                 raise InvalidSettingsError("No columns defined")
-            defs = [f"{q(c['name'])} {c['type']}{' NOT NULL' if c.get('not_null') else ''}" for c in cols]
+            defs = [f"{q(c['name'])} {db.column_type(d, c['type'])}{' NOT NULL' if c.get('not_null') else ''}"
+                    for c in cols]
             pk = [q(c["name"]) for c in cols if c.get("primary_key")]
             if pk:
                 defs.append(f"PRIMARY KEY ({', '.join(pk)})")
-        return f"CREATE TABLE {'IF NOT EXISTS ' if s['if_not_exists'] else ''}{q(table)} ({', '.join(defs)})"
+        return f"CREATE TABLE {'IF NOT EXISTS ' if s['if_not_exists'] else ''}{db.qt(d, table)} ({', '.join(defs)})"
 
     def configure(self, in_specs, s, ctx):
-        self._sql(s, in_specs[1])
-        return [_need(in_specs[0], "DB connection")]
+        session = _need(in_specs[0], "DB connection")
+        self._sql(s, in_specs[1], session.dialect)
+        return [session]
 
     def execute(self, inputs, s, ctx):
         session = _need(inputs[0], "DB connection")
-        sql = self._sql(s, inputs[1].schema if inputs[1] is not None else None)
+        if s["if_not_exists"] and session.dialect == db.ORACLE:
+            # (Oracle has no CREATE TABLE IF NOT EXISTS before 23ai)
+            with _ro_connect(session) as con:
+                if table_exists(con, require_table(s)):
+                    return [session]
+            s = {**s, "if_not_exists": False}
+        sql = self._sql(s, inputs[1].schema if inputs[1] is not None else None, session.dialect)
         try:
             with _rw_connect(session) as con:
                 con.execute(sql)
-        except sqlite3.Error as e:
+        except db.errors() as e:
             raise InvalidSettingsError(f"Create table failed: {e}") from None
         return [session]
 
@@ -947,8 +1066,8 @@ class DBSQLExecutor(NodeModel):
         sql = substitute_variables(s["sql"] or "", ctx.variables())
         try:
             with _rw_connect(session) as con:
-                con.executescript(f"BEGIN; {sql.strip().rstrip(';')}; COMMIT;")
-        except sqlite3.Error as e:
+                con.script(sql)
+        except db.errors() as e:
             raise InvalidSettingsError(f"SQL failed: {e}") from None
         return [session]
 
@@ -981,7 +1100,7 @@ class DBTableRemover(NodeModel):
                     raise InvalidSettingsError(f'Table "{table}" does not exist')
                 ctx.warn(f'Table "{table}" does not exist')
                 return [session]
-            con.execute(f"DROP TABLE {q(table)}")
+            con.execute(f"DROP TABLE {db.qt(session.dialect, table)}")
         ctx.log(f'Removed table "{table}"')
         return [session]
 
@@ -1005,11 +1124,6 @@ class DBTableList(NodeModel):
 
     def execute(self, inputs, s, ctx):
         session = _need(inputs[0], "DB connection")
-        rows = []
         with _ro_connect(session) as con:
-            for name, kind in con.execute(
-                    "SELECT name, type FROM sqlite_master WHERE type IN ('table','view') "
-                    "AND name NOT LIKE 'sqlite_%' ORDER BY name"):
-                n = len(con.execute(f"PRAGMA table_info({q(name)})").fetchall())
-                rows.append((name, kind.upper(), n))
+            rows = db.list_tables(con)
         return [pl.DataFrame(rows, schema=self.SCHEMA, orient="row")]

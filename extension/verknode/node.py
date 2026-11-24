@@ -87,6 +87,7 @@ from jupyterlab_verknode.engine.node import (  # noqa: F401
     require_column,
     spec_of,
 )
+from jupyterlab_verknode.engine import db  # noqa: F401 - database connections and SQL dialects (DB nodes)
 from jupyterlab_verknode.engine.widgets import InputWidget, OutputWidget  # noqa: F401 - canvas widget nodes
 from jupyterlab_verknode.engine.rules import (  # noqa: F401
     RuleSyntaxError,

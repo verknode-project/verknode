@@ -45,6 +45,7 @@ home folder. Set `VERKNODE_HOME` to use another folder.
 | In it | What |
 |---|---|
 | `llm.env` | LLM settings as `KEY=VALUE` lines: `VERKNODE_LLM_URL`, `VERKNODE_LLM_MODEL`, API keys ([LLM nodes](llm.md#the-server)) |
+| `db.env` | database passwords as `NAME=password` lines, for the PostgreSQL and Oracle connectors' *Password variable* (an environment variable of the server is read first) |
 | `defaults.json` | the node defaults of ≡ Settings › Node defaults, such as your [saved LLM servers](llm.md#saved-llm-servers) |
 | `nodes/` | your node folder: custom nodes that every workflow you open can use ([custom nodes](custom-nodes.md)) |
 | `models/` | model files that the Local Model (llama.cpp) connector downloads |
@@ -86,6 +87,7 @@ The rest come with extras (`pip install "jupyterlab_verknode[chem,ml]"`,
 | `formats` | fastexcel, xlsxwriter, openpyxl, lxml, jsonpath-ng | Excel Reader / Writer, Read Excel Sheet Names, XML Reader, XPath, JSON Reader, JSON Path |
 | `notebooks` | nbclient, nbformat, ipykernel | Jupyter Notebook (runs a notebook as a node, on a kernel) |
 | `agents` | langgraph, deepagents | LangGraph Agent, Deep Agent |
+| `databases` | psycopg, oracledb | PostgreSQL Connector, Oracle Connector (the other DB nodes work with them, and with SQLite in the core) |
 | `local-llm` | llama-cpp-python (builds llama.cpp: needs a C++ compiler; not in `all`) | Local Model (llama.cpp) |
 | `all` | all of the above but `local-llm` | |
 

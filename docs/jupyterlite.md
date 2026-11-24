@@ -111,7 +111,8 @@ with the Jupyter server. In JupyterLite there is no server. Instead:
 | The Molecule Sketcher, with Ketcher or the built-in sketcher | yes |
 | 3D structures: NGL and Mol* views of proteins and of ligands with 3D coordinates | yes |
 | 3D coordinates from 2D (Generate Coordinates, 3D for ligands from SMILES) | no: the WebAssembly build cannot embed in 3D |
-| SQLite database nodes on files | no: SQLite cannot work on the browser's files |
+| SQLite database nodes on files | yes, on files in the browser's storage |
+| PostgreSQL and Oracle connectors | no: a page cannot open connections to database servers |
 | Python Code Runner, the Jupyter Notebook node, export folders | no: they need processes |
 | The MCP server and agent API | no: they are server endpoints |
 | Showing progress while a run is going, Cancel | no: the editor hears back when the run is done |
@@ -179,7 +180,7 @@ as the server's.
 | `chemistry.vkf` | 14 of 17: every RDKit node but Generate Coordinates (3D), and the SDF writer and reader after it |
 | `structures.vkf` | 9 of 10: the poses from the SD file in Mol*, and the protein; not the SMILES ligands that need 3D coordinates |
 | `web_services.vkf` | 15 of 20: Overpass and a podcast feed don't allow other origins |
-| `analytics.vkf` | runs, scikit-learn loaded; the database writer fails (SQLite) |
+| `analytics.vkf` | runs, scikit-learn loaded; the SQLite database nodes too |
 | `data_chat.vkf` | the LLM Summarizer runs with the Ollama of `llm.env`; the Data Q&A Chat stops (it waits for messages) |
 
 Saving and reopening `gis.vkf` kept its results (13 of 13 executed, the

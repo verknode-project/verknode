@@ -228,29 +228,54 @@ class AgentPortObject(PortObject):
 
 
 class DBSessionPortObject(PortObject):
-    """Connection to a database (SQLite file)."""
+    """Connection to a database: an SQLite file (path), or a PostgreSQL or Oracle server (host, port,
+    database: the PostgreSQL database or Oracle service, user, options: PostgreSQL connection parameters
+    or an Oracle connect string). No password: password_env names the environment variable that has it
+    (engine/db.py)."""
 
     port_type = DB_SESSION
+    # (sessions saved before the server databases have only dialect and path)
+    host = ""
+    port = 0
+    database = ""
+    user = ""
+    password_env = ""
+    options = ""
 
-    def __init__(self, path: str, dialect: str = "sqlite"):
+    def __init__(self, path: str = "", dialect: str = "sqlite", host: str = "", port: int = 0, database: str = "",
+                 user: str = "", password_env: str = "", options: str = ""):
         self.dialect = dialect
         self.path = path
+        self.host, self.port, self.database, self.user = host, port, database, user
+        self.password_env, self.options = password_env, options
 
     def connect(self):
-        import sqlite3
+        """The driver's connection (sqlite3, psycopg or oracledb)."""
+        from . import db
 
-        return sqlite3.connect(self.path)
+        return db.connect_raw(self)
+
+    def open(self, read_only: bool = False):
+        """A connection for a with-block (engine/db.py Connection): commits at its end and closes."""
+        from . import db
+
+        return db.open_session(self, read_only)
 
     def tables(self) -> list:
+        from . import db
+
         try:
-            with self.connect() as con:
-                return [r[0] for r in con.execute(
-                    "SELECT name FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name")]
+            with self.open(read_only=True) as con:
+                return [t[0] for t in db.list_tables(con)]
         except Exception:  # noqa: BLE001
             return []
 
     def summary(self) -> dict:
-        return {"Database": self.dialect, "Path": self.path, "Tables": ", ".join(self.tables())}
+        from . import db
+
+        out = db.summary(self)
+        out["Tables"] = ", ".join(self.tables())
+        return out
 
 
 class DBDataPortObject(PortObject):

@@ -319,7 +319,7 @@ each one shows.
 **In the browser, with no server:** `cd docker && make lite && make lite-serve`
 builds a JupyterLite site of static files. The workflow engine runs in a
 Pyodide kernel in the page, and your files stay in the browser. Most nodes
-work there; chats, RDKit, SQLite files and nodes that need processes do
+work there; chats, database servers and nodes that need processes do
 not ([in the browser](docs/jupyterlite.md)).
 
 Other setups: pip into your own JupyterLab, the image's variants and what

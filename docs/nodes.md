@@ -21,9 +21,11 @@ About 300 nodes, by category:
   scikit-learn learner/predictor pairs (decision tree, random forest,
   gradient boosting, naive Bayes, linear/polynomial/logistic regression,
   SVM, MLP, kNN), k-Means, DBSCAN, hierarchical clustering, PCA.
-- **DB** – an in-database framework on SQLite: connector, table
-  selector, in-database row filter/GroupBy/joiner/sorter/query, reader,
-  writer, insert/update/delete, SQL executor.
+- **DB** – an in-database framework on SQLite, PostgreSQL and Oracle:
+  connectors, table selector, in-database row filter/GroupBy/joiner/sorter/
+  query, reader, writer, insert/update/delete, SQL executor. The server
+  connectors take the password from an environment variable or
+  `~/.verknode/db.env`, never from the workflow.
 - **Flow Control** – counting, chunk, group, interval, column list, window,
   generic and recursive loops; loops in time (Every Interval Loop Start: an
   iteration every X seconds; Timed Loop Start: one after another; both stop

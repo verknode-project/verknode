@@ -41,7 +41,9 @@ RUN pip install --no-cache-dir \
         "hatch-nodejs-version>=0.3.2" \
         "hatch-jupyter-builder>=0.5" \
         langgraph \
-        deepagents
+        deepagents \
+        "psycopg[binary]" \
+        oracledb
 # models in the server's process (Local Model (llama.cpp)): builds llama.cpp, for any CPU
 RUN CMAKE_ARGS="-DGGML_NATIVE=OFF" pip install --no-cache-dir llama-cpp-python
 
